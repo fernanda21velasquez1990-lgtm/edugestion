@@ -1,0 +1,69 @@
+/* ==========================================================================
+   ESTILOS PERSONALIZADOS Y AJUSTES DE DISEÑO
+   ========================================================================== */
+
+/* 1. Suavizar transiciones globales */
+* {
+  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+}
+
+/* 2. Personalizar la barra de desplazamiento (Scrollbar) para que luzca moderna */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7d2fe; /* Color indigo claro */
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #818cf8; /* Color indigo más oscuro al pasar el cursor */
+}
+
+/* 3. Animación de carga para que los iconos giratorios se vean fluidos */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* 4. Efecto de "Presionado" en los botones principales */
+button:active {
+  transform: scale(0.98);
+}
+
+/* 5. Transición suave para las pestañas de navegación */
+nav button {
+  position: relative;
+  overflow: hidden;
+}
+
+nav button::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background-color: #4f46e5; /* Color Indigo-600 */
+  transition: width 0.3s ease, left 0.3s ease;
+}
+
+nav button:hover::after {
+  width: 80%;
+  left: 10%;
+}
