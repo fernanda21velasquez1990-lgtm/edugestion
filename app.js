@@ -167,23 +167,42 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     function sessionGet() {
-      try {
-        const valor = window.sessionStorage.getItem(SESSION_KEY);
-        return valor ? JSON.parse(valor) : null;
-      } catch (error) {
-        return null;
+      // localStorage conserva la sesión al actualizar la página o cerrar y volver a abrir
+      // el navegador. sessionStorage se mantiene como respaldo para instalaciones previas.
+      const almacenes = [window.localStorage, window.sessionStorage];
+      for (const almacen of almacenes) {
+        try {
+          const valor = almacen.getItem(SESSION_KEY);
+          if (!valor) continue;
+          const datos = JSON.parse(valor);
+          if (datos?.token) return datos;
+        } catch (error) {
+          console.warn('No se pudo recuperar la sesión guardada:', error);
+        }
       }
+      return null;
     }
 
     function sessionSet(datos) {
+      const valor = JSON.stringify({ ...datos, guardadaEn: Date.now() });
+      let guardada = false;
       try {
-        window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(datos));
+        window.localStorage.setItem(SESSION_KEY, valor);
+        guardada = true;
+      } catch (error) {
+        console.warn('No fue posible conservar la sesión en el navegador:', error);
+      }
+      try {
+        window.sessionStorage.setItem(SESSION_KEY, valor);
+        guardada = true;
       } catch (error) {
         console.warn('No fue posible conservar la sesión en esta pestaña:', error);
       }
+      return guardada;
     }
 
     function sessionClear() {
+      try { window.localStorage.removeItem(SESSION_KEY); } catch (error) {}
       try { window.sessionStorage.removeItem(SESSION_KEY); } catch (error) {}
     }
 
@@ -268,7 +287,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         detectarClaseAutomatica();
 
         const inputInst = document.getElementById('input-institucion');
-        if (inputInst && datos.institucion && !inputInst.value.trim()) {
+        if (inputInst && datos.institucion) {
           inputInst.value = datos.institucion;
           storageSet('nombreInstitucion', datos.institucion);
         }
