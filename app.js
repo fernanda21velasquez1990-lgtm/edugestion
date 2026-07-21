@@ -11,8 +11,6 @@ const SESSION_KEY = 'edugestion_session_v2';
     let actaTipoActual = 'incidencia';
     let planesProfesor = [];
     let seccionPlanViendo = null;
-    let agendaClasesEstado = [];
-    let claseAgendaSeleccionada = '';
 
     // --- DOM Elements ---
     const loginScreen = document.getElementById('login-screen');
@@ -60,16 +58,6 @@ const SESSION_KEY = 'edugestion_session_v2';
     const contadorAsistencia = document.getElementById('contador-asistencia');
     const listaAlumnosAsistencia = document.getElementById('lista-alumnos-asistencia');
     const fechaAsistencia = document.getElementById('fecha-asistencia');
-    const fechaAgendaClases = document.getElementById('fecha-agenda-clases');
-    const btnAgendaHoy = document.getElementById('btn-agenda-hoy');
-    const agendaClasesDia = document.getElementById('agenda-clases-dia');
-    const agendaTotalClases = document.getElementById('agenda-total-clases');
-    const agendaClasesCompletadas = document.getElementById('agenda-clases-completadas');
-    const agendaClasesPendientes = document.getElementById('agenda-clases-pendientes');
-    const nombreDiaAgenda = document.getElementById('nombre-dia-agenda');
-    const buscarAlumnoAsistencia = document.getElementById('buscar-alumno-asistencia');
-    const btnTodosPresentes = document.getElementById('btn-todos-presentes');
-    const btnTodosAusentes = document.getElementById('btn-todos-ausentes');
    
     // Stats
     const statPresentes = document.getElementById('stat-presentes');
@@ -180,7 +168,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     function sessionGet() {
       try {
-        const valor = window.localStorage.getItem(SESSION_KEY) || window.sessionStorage.getItem(SESSION_KEY);
+        const valor = window.sessionStorage.getItem(SESSION_KEY);
         return valor ? JSON.parse(valor) : null;
       } catch (error) {
         return null;
@@ -188,13 +176,14 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     function sessionSet(datos) {
-      const serializado = JSON.stringify(datos);
-      try { window.localStorage.setItem(SESSION_KEY, serializado); } catch (error) {}
-      try { window.sessionStorage.setItem(SESSION_KEY, serializado); } catch (error) {}
+      try {
+        window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(datos));
+      } catch (error) {
+        console.warn('No fue posible conservar la sesión en esta pestaña:', error);
+      }
     }
 
     function sessionClear() {
-      try { window.localStorage.removeItem(SESSION_KEY); } catch (error) {}
       try { window.sessionStorage.removeItem(SESSION_KEY); } catch (error) {}
     }
 
@@ -277,7 +266,6 @@ const SESSION_KEY = 'edugestion_session_v2';
         actualizarUIPlanificacion();
         actualizarUIHorario();
         detectarClaseAutomatica();
-        await renderAgendaDiaria();
 
         const inputInst = document.getElementById('input-institucion');
         if (inputInst && datos.institucion) {
@@ -314,28 +302,18 @@ const SESSION_KEY = 'edugestion_session_v2';
       const guardada = sessionGet();
       if (!guardada?.token || !apiConfigurada()) return;
       sessionToken = guardada.token;
-      if (guardada.profesor) aplicarPerfilDocente(guardada.profesor);
       try {
         const datos = await apiRequest('validarSesion');
         await iniciarSesion({ token: sessionToken, profesor: datos.profesor }, false);
       } catch (error) {
-        const invalida = ['SESSION_EXPIRED', 'SESSION_REQUIRED', 'UNAUTHORIZED'].includes(error.code);
-        if (invalida) {
-          cerrarSesionLocal(false);
-          loginError.textContent = error.message || 'La sesión venció. Ingresa nuevamente.';
-          loginError.classList.remove('hidden');
-        } else {
-          console.warn('No se pudo validar la sesión durante la recarga. Se conserva localmente:', error);
-          mostrarToast('No se pudo contactar al servidor. Tu sesión permanece abierta y se reintentará en la próxima operación.', 'warning', 'Conexión temporal');
-        }
+        sessionToken = '';
+        sessionClear();
       }
     }
 
     window.addEventListener('DOMContentLoaded', async () => {
       const hoy = new Date();
-      const fechaHoyISO = hoy.toISOString().split('T')[0];
-      fechaAsistencia.value = fechaHoyISO;
-      if (fechaAgendaClases) fechaAgendaClases.value = fechaHoyISO;
+      fechaAsistencia.value = hoy.toISOString().split('T')[0];
       if (currentDate) {
         currentDate.textContent = new Intl.DateTimeFormat('es-ES', {
           weekday: 'short', day: '2-digit', month: 'short'
@@ -467,166 +445,6 @@ const SESSION_KEY = 'edugestion_session_v2';
       cerrarSesionLocal(true);
     };
 
-    // ====== AGENDA DIARIA DE CLASES Y ASISTENCIA ======
-    function normalizarDia(valor = '') {
-      return String(valor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-    }
-
-    function diaSemanaDesdeFecha(fechaISO) {
-      if (!fechaISO) return { clave: '', nombre: '—' };
-      const fecha = new Date(`${fechaISO}T12:00:00`);
-      if (Number.isNaN(fecha.getTime())) return { clave: '', nombre: '—' };
-      const nombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      const nombre = nombres[fecha.getDay()];
-      return { clave: normalizarDia(nombre), nombre };
-    }
-
-    function claveClaseAgenda(clase) {
-      return [clase.dia, clase.horaInicio, clase.horaFin, clase.ano, clase.seccion, clase.turno].map(v => String(v || '')).join('|');
-    }
-
-    function mostrarAgendaVacia(titulo, texto, icono = 'fa-calendar-check') {
-      if (!agendaClasesDia) return;
-      agendaClasesDia.innerHTML = `<div class="attendance-agenda-empty"><i class="fa-solid ${icono}"></i><div><strong>${escaparHTML(titulo)}</strong><p>${escaparHTML(texto)}</p></div></div>`;
-    }
-
-    function renderAgendaCargando(clases) {
-      if (!agendaClasesDia) return;
-      agendaClasesDia.innerHTML = clases.map(() => `
-        <article class="attendance-class-card is-loading" aria-hidden="true">
-          <span class="attendance-card-skeleton attendance-card-skeleton--small"></span>
-          <span class="attendance-card-skeleton attendance-card-skeleton--medium"></span>
-          <span class="attendance-card-skeleton"></span>
-          <span class="attendance-card-skeleton attendance-card-skeleton--medium"></span>
-        </article>`).join('');
-    }
-
-    async function obtenerResumenClaseAgenda(clase, fecha) {
-      try {
-        const [alumnosResp, asistenciaResp] = await Promise.all([
-          apiRequest('obtenerAlumnos', { ano: clase.ano, seccion: clase.seccion, turno: clase.turno }),
-          apiRequest('obtenerAsistencia', {
-            ano: clase.ano,
-            seccion: clase.seccion,
-            turno: clase.turno,
-            fecha,
-            materia: profesorActual?.materia || ''
-          })
-        ]);
-        const alumnos = Array.isArray(alumnosResp.alumnos) ? alumnosResp.alumnos : [];
-        const registro = asistenciaResp.asistencia && typeof asistenciaResp.asistencia === 'object' ? asistenciaResp.asistencia : {};
-        let presentes = 0;
-        let ausentes = 0;
-        alumnos.forEach(al => {
-          if (registro[al.id] === 'Ausente') ausentes += 1;
-          else if (registro[al.id] === 'Presente') presentes += 1;
-        });
-        const registrados = presentes + ausentes;
-        let estado = 'pending';
-        let etiqueta = 'Pendiente';
-        if (!alumnos.length) { estado = 'empty'; etiqueta = 'Sin alumnos'; }
-        else if (registrados === alumnos.length) { estado = 'complete'; etiqueta = 'Registrada'; }
-        else if (registrados > 0) { estado = 'partial'; etiqueta = 'Parcial'; }
-        return { ...clase, total: alumnos.length, presentes, ausentes, registrados, existe: Boolean(asistenciaResp.existe), estado, etiqueta };
-      } catch (error) {
-        console.warn('No se pudo resumir una clase de la agenda:', error);
-        return { ...clase, total: 0, presentes: 0, ausentes: 0, registrados: 0, estado: 'error', etiqueta: 'No disponible' };
-      }
-    }
-
-    function renderTarjetasAgenda() {
-      if (!agendaClasesDia) return;
-      if (!agendaClasesEstado.length) {
-        mostrarAgendaVacia('No hay clases programadas', 'Agrega bloques en el módulo Horario para este día.', 'fa-calendar-xmark');
-        return;
-      }
-      agendaClasesDia.innerHTML = '';
-      agendaClasesEstado.forEach(clase => {
-        const clave = claveClaseAgenda(clase);
-        const tarjeta = document.createElement('button');
-        tarjeta.type = 'button';
-        tarjeta.className = `attendance-class-card is-${clase.estado}${claseAgendaSeleccionada === clave ? ' is-selected' : ''}`;
-        tarjeta.setAttribute('aria-label', `Abrir asistencia de ${clase.ano} sección ${clase.seccion}`);
-        tarjeta.innerHTML = `
-          <span class="attendance-class-card__topline">
-            <span class="attendance-class-card__time"><i class="fa-regular fa-clock"></i>${escaparHTML(formatearHoraLimpia(clase.horaInicio))} - ${escaparHTML(formatearHoraLimpia(clase.horaFin))}</span>
-            <span class="attendance-class-card__status">${escaparHTML(clase.etiqueta)}</span>
-          </span>
-          <strong class="attendance-class-card__course">${escaparHTML(clase.ano)} · Sección “${escaparHTML(clase.seccion)}”</strong>
-          <span class="attendance-class-card__meta"><i class="fa-solid fa-sun"></i>${escaparHTML(clase.turno === 'Manana' ? 'Mañana' : clase.turno)}</span>
-          <span class="attendance-class-card__numbers">
-            <span><b>${clase.total}</b><small>Estudiantes</small></span>
-            <span><b>${clase.presentes}</b><small>Presentes</small></span>
-            <span><b>${clase.ausentes}</b><small>Ausentes</small></span>
-          </span>
-          <span class="attendance-class-card__action"><span>${clase.estado === 'complete' ? 'Consultar asistencia' : 'Tomar asistencia'}</span><i class="fa-solid fa-arrow-right"></i></span>`;
-        tarjeta.addEventListener('click', async () => {
-          claseAgendaSeleccionada = clave;
-          renderTarjetasAgenda();
-          selectFiltroAno.value = clase.ano;
-          selectFiltroSeccion.value = clase.seccion;
-          selectFiltroTurno.value = clase.turno === 'Mañana' ? 'Manana' : clase.turno;
-          fechaAsistencia.value = fechaAgendaClases?.value || fechaAsistencia.value;
-          await cargarAlumnosDeSeccion();
-          document.querySelector('.attendance-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-        agendaClasesDia.appendChild(tarjeta);
-      });
-    }
-
-    async function renderAgendaDiaria() {
-      if (!fechaAgendaClases || !agendaClasesDia || !profesorActual) return;
-      const fecha = fechaAgendaClases.value || new Date().toISOString().split('T')[0];
-      const dia = diaSemanaDesdeFecha(fecha);
-      if (nombreDiaAgenda) nombreDiaAgenda.textContent = dia.nombre;
-      const clases = horariosProfesor
-        .filter(h => normalizarDia(h.dia) === dia.clave)
-        .sort((a, b) => String(a.horaInicio || '').localeCompare(String(b.horaInicio || '')));
-      if (agendaTotalClases) agendaTotalClases.textContent = String(clases.length);
-      if (agendaClasesCompletadas) agendaClasesCompletadas.textContent = '0';
-      if (agendaClasesPendientes) agendaClasesPendientes.textContent = String(clases.length);
-      agendaClasesEstado = [];
-      claseAgendaSeleccionada = '';
-      if (!clases.length) {
-        mostrarAgendaVacia('No hay clases programadas', `No se encontraron bloques para ${dia.nombre.toLowerCase()}.`, 'fa-calendar-xmark');
-        return;
-      }
-      renderAgendaCargando(clases);
-      agendaClasesEstado = await Promise.all(clases.map(clase => obtenerResumenClaseAgenda(clase, fecha)));
-      const completadas = agendaClasesEstado.filter(c => c.estado === 'complete').length;
-      if (agendaClasesCompletadas) agendaClasesCompletadas.textContent = String(completadas);
-      if (agendaClasesPendientes) agendaClasesPendientes.textContent = String(Math.max(0, clases.length - completadas));
-      renderTarjetasAgenda();
-    }
-
-    fechaAgendaClases?.addEventListener('change', renderAgendaDiaria);
-    btnAgendaHoy?.addEventListener('click', () => {
-      fechaAgendaClases.value = new Date().toISOString().split('T')[0];
-      renderAgendaDiaria();
-    });
-
-    buscarAlumnoAsistencia?.addEventListener('input', () => {
-      const termino = normalizarTextoBusqueda(buscarAlumnoAsistencia.value);
-      listaAlumnosAsistencia.querySelectorAll('.attendance-student-row').forEach(fila => {
-        fila.hidden = Boolean(termino) && !String(fila.dataset.search || '').includes(termino);
-      });
-    });
-
-    function normalizarTextoBusqueda(valor = '') {
-      return String(valor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-    }
-
-    function marcarTodosAsistencia(estado) {
-      if (!alumnosSeccion.length) return mostrarToast('Primero carga una lista de estudiantes.', 'warning', 'Sin lista');
-      alumnosSeccion.forEach(al => { asistenciaTemporal[al.id] = estado; });
-      renderAsistencia();
-      actualizarStatsSeccion();
-      mostrarToast(`Todos los estudiantes fueron marcados como ${estado.toLowerCase()}.`, 'info', 'Marcación masiva');
-    }
-
-    btnTodosPresentes?.addEventListener('click', () => marcarTodosAsistencia('Presente'));
-    btnTodosAusentes?.addEventListener('click', () => marcarTodosAsistencia('Ausente'));
-
     // ====== LÓGICA DE ASISTENCIA DASHBOARD ======
     btnCargarListaFiltrada.onclick = cargarAlumnosDeSeccion;
    
@@ -649,7 +467,6 @@ const SESSION_KEY = 'edugestion_session_v2';
           })
         ]);
         alumnosSeccion = Array.isArray(d.alumnos) ? d.alumnos : [];
-        if (buscarAlumnoAsistencia) buscarAlumnoAsistencia.value = '';
         asistenciaTemporal = registro.asistencia && typeof registro.asistencia === 'object' ? { ...registro.asistencia } : {};
         estadisticasAlumnos = {};
         contadorAsistencia.textContent = `${alumnosSeccion.length} Alumnos`;
@@ -693,8 +510,7 @@ const SESSION_KEY = 'edugestion_session_v2';
           ? 'w-20 py-2 rounded-xl bg-red-500 text-white font-black text-xs shadow-sm transition'
           : 'w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition';
         const d = document.createElement('div');
-        d.className = 'attendance-student-row py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:bg-gray-50 px-2 rounded-xl transition';
-        d.dataset.search = normalizarTextoBusqueda(`${al.nombre || ''} ${al.cedula || ''}`);
+        d.className = 'py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:bg-gray-50 px-2 rounded-xl transition';
         d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-bold"><i class="fa-regular fa-calendar-check mr-1"></i>Registro del día</span></div></div></div><div class="flex gap-2 self-end sm:self-auto"><button id="p-${idDom}" type="button" class="${clasePresente}" aria-label="Marcar presente a ${nombre}"><i class="fa-solid fa-check mr-1"></i> PRES</button><button id="i-${idDom}" type="button" class="${claseAusente}" aria-label="Marcar ausente a ${nombre}"><i class="fa-solid fa-xmark mr-1"></i> AUS</button></div>`;
         d.querySelector(`#p-${idDom}`).addEventListener('click', () => setA(al.id, 'Presente', idDom));
         d.querySelector(`#i-${idDom}`).addEventListener('click', () => setA(al.id, 'Ausente', idDom));
@@ -769,8 +585,6 @@ const SESSION_KEY = 'edugestion_session_v2';
           const payload = { materia: profesorActual.materia, ano: selectFiltroAno.value, seccion: selectFiltroSeccion.value, turno: selectFiltroTurno.value, fecha: fechaAsistencia.value, asistencia: asistenciaTemporal };
           await apiRequest('guardarAsistencia', payload);
           mostrarToast('La asistencia del día quedó registrada correctamente.', 'success', 'Asistencia guardada');
-          if (fechaAgendaClases) fechaAgendaClases.value = fechaAsistencia.value;
-          await renderAgendaDiaria();
         } catch(e) {
           console.error('Error al guardar asistencia:', e);
           mostrarToast('Verifica tu conexión e inténtalo nuevamente.', 'error', 'No se guardó la asistencia');
@@ -793,70 +607,306 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     // ====== LÓGICA DE PLANIFICACIÓN ======
-    window.mostrarFormularioPlan = function() {
-      panelListaPlan.classList.add('hidden'); accionesPlan.classList.add('hidden'); panelFormPlan.classList.remove('hidden'); seccionPlanViendo = null;
+    function fechaLocalDesdeISO(valor) {
+      const partes = String(valor || '').split('-').map(Number);
+      if (partes.length !== 3 || partes.some(n => !Number.isFinite(n))) return null;
+      return new Date(partes[0], partes[1] - 1, partes[2]);
     }
+
+    function fechaISODesdeLocal(fecha) {
+      return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+    }
+
+    function getColorSeccion(seccion) {
+      const clave = String(seccion || 'A').trim().toUpperCase();
+      const colores = {
+        A: { key: 'a', label: 'Sección A', solid: '#2563eb', soft: '#dbeafe', ink: '#1d4ed8' },
+        B: { key: 'b', label: 'Sección B', solid: '#10b981', soft: '#d1fae5', ink: '#047857' },
+        C: { key: 'c', label: 'Sección C', solid: '#a855f7', soft: '#f3e8ff', ink: '#7e22ce' }
+      };
+      return colores[clave] || { key: 'otro', label: `Sección ${clave}`, solid: '#f59e0b', soft: '#fef3c7', ink: '#b45309' };
+    }
+
+    let calendarioPlanFecha = new Date();
+    let calendarioDiaSeleccionado = null;
+
+    const gridCalendarioAmpliado = document.getElementById('grid-calendario-ampliado');
+    const mesCalendarioAmpliado = document.getElementById('mes-calendario-ampliado');
+    const modalCalendarioPlan = document.getElementById('modal-calendario-planificacion');
+    const detalleDiaCalendario = document.getElementById('detalle-dia-calendario');
+    const detalleDiaEtiqueta = document.getElementById('detalle-dia-etiqueta');
+    const detalleDiaFecha = document.getElementById('detalle-dia-fecha');
+    const proximasEvaluaciones = document.getElementById('proximas-evaluaciones');
+    const statPlanTotal = document.getElementById('stat-plan-total');
+    const statPlanSecciones = document.getElementById('stat-plan-secciones');
+    const statPlanProxima = document.getElementById('stat-plan-proxima');
+
+    window.mostrarFormularioPlan = function(fechaSugerida = '') {
+      panelListaPlan.classList.add('hidden');
+      accionesPlan.classList.add('hidden');
+      panelFormPlan.classList.remove('hidden');
+      seccionPlanViendo = null;
+      if (fechaSugerida) document.getElementById('plan-fecha').value = fechaSugerida;
+      setTimeout(() => document.getElementById('plan-actividad')?.focus(), 40);
+    };
+
     function renderMenuPlanificacion() {
       menuSeccionesPlan.innerHTML = '';
-      if(planesProfesor.length === 0) { menuSeccionesPlan.innerHTML = '<p class="text-xs text-center text-gray-400 mt-4">Sin planes registrados.</p>'; return; }
-      const secUnicas = []; planesProfesor.forEach(p => { const key = `${p.ano}-${p.seccion}`; if(!secUnicas.find(s => s.key === key)) secUnicas.push({ key, ano: p.ano, seccion: p.seccion }); });
-      secUnicas.sort((a,b) => a.key.localeCompare(b.key));
-      secUnicas.forEach(sec => {
-        const color = getColorAno(sec.ano);
-        const btn = document.createElement('button'); btn.type = "button"; btn.className = `w-full text-left px-4 py-3 rounded-xl mb-2 font-bold text-sm border-l-4 shadow-sm transition hover:opacity-80 bg-white border border-gray-100 ${color.border} text-gray-700 flex justify-between items-center`;
-        btn.innerHTML = `<span>${escaparHTML(sec.ano)} - Secc "${escaparHTML(sec.seccion)}"</span> <i class="fa-solid fa-chevron-right text-xs text-gray-400"></i>`;
-        btn.onclick = () => mostrarListaPlan(sec.ano, sec.seccion); menuSeccionesPlan.appendChild(btn);
+      if (planesProfesor.length === 0) {
+        menuSeccionesPlan.innerHTML = '<div class="planning-empty-mini"><i class="fa-regular fa-calendar-xmark"></i><p>Aún no hay secciones planificadas.</p></div>';
+        return;
+      }
+      const mapa = new Map();
+      planesProfesor.forEach(p => {
+        const key = `${p.ano}-${p.seccion}`;
+        if (!mapa.has(key)) mapa.set(key, { key, ano: p.ano, seccion: p.seccion, cantidad: 0, puntos: 0 });
+        const item = mapa.get(key);
+        item.cantidad += 1;
+        item.puntos += Number(p.puntos || 0);
+      });
+      [...mapa.values()].sort((a, b) => a.key.localeCompare(b.key)).forEach(sec => {
+        const color = getColorSeccion(sec.seccion);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `planning-section-button planning-section-button--${color.key}`;
+        btn.innerHTML = `<span class="planning-section-button__mark">${escaparHTML(sec.seccion)}</span><span class="planning-section-button__copy"><strong>${escaparHTML(sec.ano)} - Sección “${escaparHTML(sec.seccion)}”</strong><small>${sec.cantidad} evaluación${sec.cantidad === 1 ? '' : 'es'} · ${sec.puntos} pts</small></span><i class="fa-solid fa-chevron-right"></i>`;
+        btn.addEventListener('click', () => mostrarListaPlan(sec.ano, sec.seccion));
+        menuSeccionesPlan.appendChild(btn);
       });
     }
+
     window.mostrarListaPlan = function(ano, seccion) {
-      panelFormPlan.classList.add('hidden'); panelListaPlan.classList.remove('hidden'); accionesPlan.classList.remove('hidden'); seccionPlanViendo = { ano, seccion };
-      tituloPlan.textContent = `Plan de Evaluación`; subtituloPlan.textContent = `${ano} - Sección "${seccion}"`; tablaBodyPlan.innerHTML = '';
-      const filtrados = planesProfesor.filter(p => p.ano === ano && p.seccion === seccion).sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+      panelFormPlan.classList.add('hidden');
+      panelListaPlan.classList.remove('hidden');
+      accionesPlan.classList.remove('hidden');
+      seccionPlanViendo = { ano, seccion };
+      tituloPlan.textContent = 'Plan de Evaluación';
+      subtituloPlan.textContent = `${ano} - Sección “${seccion}”`;
+      tablaBodyPlan.innerHTML = '';
+      const filtrados = planesProfesor.filter(p => p.ano === ano && p.seccion === seccion).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
       let suma = 0;
-      if(filtrados.length === 0){ tablaBodyPlan.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400 text-xs">No hay evaluaciones cargadas.</td></tr>'; }
-      else { filtrados.forEach((p, index) => {
-          suma += parseInt(p.puntos); const [y, m, d] = p.fecha.split('-'); const fechaStr = `${d}/${m}/${y}`;
-          const actividadSegura = escaparHTML(p.actividad || 'Evaluación');
-          const puntosSeguros = escaparHTML(p.puntos || 0);
+      if (filtrados.length === 0) {
+        tablaBodyPlan.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-400 text-xs">No hay evaluaciones cargadas.</td></tr>';
+      } else {
+        filtrados.forEach((p, index) => {
+          suma += Number(p.puntos || 0);
+          const fecha = fechaLocalDesdeISO(p.fecha);
+          const fechaStr = fecha ? fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : escaparHTML(p.fecha);
+          const color = getColorSeccion(p.seccion);
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="px-4 py-3 font-semibold text-gray-800">${fechaStr}</td><td class="px-4 py-3 text-gray-600">${actividadSegura}</td><td class="px-4 py-3 text-center font-black text-indigo-600">${puntosSeguros}</td><td class="px-4 py-3 text-center no-pdf"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar evaluación"><i class="fa-solid fa-trash-can"></i></button></td>`;
+          tr.innerHTML = `<td class="px-4 py-3 font-semibold text-gray-800"><span class="planning-table-date">${fechaStr}</span></td><td class="px-4 py-3 text-gray-600"><span class="planning-table-section planning-table-section--${color.key}">${escaparHTML(p.seccion)}</span>${escaparHTML(p.actividad || 'Evaluación')}</td><td class="px-4 py-3 text-center font-black text-indigo-600">${escaparHTML(p.puntos || 0)}</td><td class="px-4 py-3 text-center no-pdf"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar evaluación"><i class="fa-solid fa-trash-can"></i></button></td>`;
           tr.querySelector('button').addEventListener('click', () => eliminarPlanLocal(index, ano, seccion));
           tablaBodyPlan.appendChild(tr);
-        }); }
+        });
+      }
       badgeTotalPlan.textContent = `Total: ${suma} pts`;
-      if(suma > 100) badgeTotalPlan.className = "bg-red-100 text-red-800 px-3 py-1.5 rounded-lg font-black text-sm border border-red-200";
-      else badgeTotalPlan.className = "bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200";
-    }
+      badgeTotalPlan.className = suma > 100
+        ? 'bg-red-100 text-red-800 px-3 py-1.5 rounded-lg font-black text-sm border border-red-200'
+        : 'bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200';
+    };
+
     window.eliminarPlanLocal = async function(indexReal, ano, seccion) {
       if (!confirm('¿Eliminar esta evaluación?')) return;
-      const filtrado = planesProfesor.filter(p => p.ano === ano && p.seccion === seccion).sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+      const filtrado = planesProfesor.filter(p => p.ano === ano && p.seccion === seccion).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
       const plan = filtrado[indexReal];
       if (!plan?.id) return mostrarToast('No se encontró el identificador de la evaluación.', 'error');
       try {
         await apiRequest('eliminarPlanificacion', { id: plan.id });
         planesProfesor = planesProfesor.filter(p => p.id !== plan.id);
         actualizarUIPlanificacion();
-        mostrarListaPlan(ano, seccion);
+        const quedan = planesProfesor.some(p => p.ano === ano && p.seccion === seccion);
+        if (quedan) mostrarListaPlan(ano, seccion); else mostrarFormularioPlan();
         mostrarToast('La evaluación fue eliminada del registro del docente.', 'success', 'Evaluación eliminada');
       } catch (error) {
         mostrarToast(error.message, 'error', 'No se eliminó la evaluación');
       }
+    };
+
+    function evaluacionesDelDia(fechaISO) {
+      return planesProfesor.filter(p => String(p.fecha) === fechaISO).sort((a, b) => String(a.seccion).localeCompare(String(b.seccion)) || String(a.actividad).localeCompare(String(b.actividad), 'es'));
     }
-    function renderCalendario() {
-      const hoy = new Date(); const año = hoy.getFullYear(); const mes = hoy.getMonth();
-      const nombresMeses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-      mesCalendario.textContent = `${nombresMeses[mes]} ${año}`; gridCalendario.innerHTML = '';
-      const primerDia = new Date(año, mes, 1).getDay(); const diasEnMes = new Date(año, mes + 1, 0).getDate();
-      for (let i = 0; i < primerDia; i++) { const div = document.createElement('div'); div.className = "calendar-day bg-gray-50 rounded-lg border border-transparent"; gridCalendario.appendChild(div); }
-      for (let dia = 1; dia <= diasEnMes; dia++) {
-        const div = document.createElement('div'); const esHoy = (dia === hoy.getDate()); div.className = `calendar-day rounded-lg border p-1 relative ${esHoy ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-gray-100'}`;
-        let htmlDia = `<span class="text-xs font-bold ${esHoy ? 'text-indigo-600' : 'text-gray-500'}">${dia}</span><div class="mt-1 flex flex-col gap-1">`;
-        const fStr = `${año}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-        planesProfesor.filter(p => p.fecha === fStr).forEach(p => { const color = getColorAno(p.ano); htmlDia += `<span class="eval-badge ${color.hex}" title="${escaparHTML(p.actividad || 'Evaluación')}">${escaparHTML(p.ano)} "${escaparHTML(p.seccion)}"</span>`; });
-        div.innerHTML = htmlDia + `</div>`; gridCalendario.appendChild(div);
+
+    function nombresMes(fecha) {
+      return new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(fecha);
+    }
+
+    function construirCeldaCalendario(fecha, mesVisible, ampliado = false) {
+      const iso = fechaISODesdeLocal(fecha);
+      const eventos = evaluacionesDelDia(iso);
+      const hoyISO = fechaISODesdeLocal(new Date());
+      const fueraMes = fecha.getMonth() !== mesVisible;
+      const seleccionada = calendarioDiaSeleccionado === iso;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `planning-calendar-day${ampliado ? ' planning-calendar-day--full' : ''}${fueraMes ? ' is-outside' : ''}${iso === hoyISO ? ' is-today' : ''}${seleccionada ? ' is-selected' : ''}${eventos.length ? ' has-events' : ''}`;
+      btn.dataset.fecha = iso;
+      btn.setAttribute('aria-label', `${fecha.toLocaleDateString('es-ES')} · ${eventos.length} evaluaciones`);
+      const limite = ampliado ? 4 : 2;
+      const badges = eventos.slice(0, limite).map(p => {
+        const color = getColorSeccion(p.seccion);
+        return `<span class="planning-eval-chip planning-eval-chip--${color.key}" title="${escaparHTML(p.actividad || 'Evaluación')}"><b>${escaparHTML(p.seccion)}</b><em>${escaparHTML(p.actividad || 'Evaluación')}</em></span>`;
+      }).join('');
+      const restantes = eventos.length > limite ? `<span class="planning-eval-more">+${eventos.length - limite} más</span>` : '';
+      btn.innerHTML = `<span class="planning-calendar-day__number">${fecha.getDate()}</span><span class="planning-calendar-day__events">${badges}${restantes}</span>`;
+      btn.addEventListener('click', () => seleccionarDiaCalendario(iso, !ampliado));
+      return btn;
+    }
+
+    function renderUnaCuadriculaCalendario(contenedor, fechaBase, ampliado = false) {
+      if (!contenedor) return;
+      contenedor.innerHTML = '';
+      const primerDia = new Date(fechaBase.getFullYear(), fechaBase.getMonth(), 1);
+      const inicio = new Date(primerDia);
+      inicio.setDate(1 - primerDia.getDay());
+      for (let i = 0; i < 42; i += 1) {
+        const fecha = new Date(inicio);
+        fecha.setDate(inicio.getDate() + i);
+        contenedor.appendChild(construirCeldaCalendario(fecha, fechaBase.getMonth(), ampliado));
       }
     }
-    function actualizarUIPlanificacion() { renderMenuPlanificacion(); renderCalendario(); }
+
+    function renderDetalleDia(fechaISO) {
+      if (!detalleDiaCalendario || !detalleDiaEtiqueta || !detalleDiaFecha) return;
+      const fecha = fechaLocalDesdeISO(fechaISO);
+      if (!fecha) return;
+      const eventos = evaluacionesDelDia(fechaISO);
+      detalleDiaEtiqueta.textContent = fecha.toLocaleDateString('es-ES', { weekday: 'long' });
+      detalleDiaFecha.textContent = fecha.toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+      detalleDiaCalendario.innerHTML = '';
+      if (!eventos.length) {
+        detalleDiaCalendario.innerHTML = `<div class="planning-calendar-empty"><i class="fa-regular fa-calendar-plus"></i><p>No hay evaluaciones programadas para este día.</p><button type="button" id="btn-nueva-evaluacion-dia">Programar evaluación</button></div>`;
+        detalleDiaCalendario.querySelector('#btn-nueva-evaluacion-dia').addEventListener('click', () => {
+          cerrarCalendarioPlanificacion();
+          mostrarFormularioPlan(fechaISO);
+        });
+        return;
+      }
+      eventos.forEach(p => {
+        const color = getColorSeccion(p.seccion);
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = `planning-calendar-detail-item planning-calendar-detail-item--${color.key}`;
+        item.innerHTML = `<span class="planning-calendar-detail-item__section">${escaparHTML(p.seccion)}</span><span><strong>${escaparHTML(p.actividad || 'Evaluación')}</strong><small>${escaparHTML(p.ano)} · ${escaparHTML(p.puntos || 0)} puntos</small></span><i class="fa-solid fa-arrow-right"></i>`;
+        item.addEventListener('click', () => {
+          cerrarCalendarioPlanificacion();
+          mostrarListaPlan(p.ano, p.seccion);
+        });
+        detalleDiaCalendario.appendChild(item);
+      });
+      const nuevo = document.createElement('button');
+      nuevo.type = 'button';
+      nuevo.className = 'planning-calendar-add-day';
+      nuevo.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar otra evaluación este día';
+      nuevo.addEventListener('click', () => {
+        cerrarCalendarioPlanificacion();
+        mostrarFormularioPlan(fechaISO);
+      });
+      detalleDiaCalendario.appendChild(nuevo);
+    }
+
+    function seleccionarDiaCalendario(fechaISO, abrirModal = false) {
+      calendarioDiaSeleccionado = fechaISO;
+      const fecha = fechaLocalDesdeISO(fechaISO);
+      if (fecha) calendarioPlanFecha = new Date(fecha.getFullYear(), fecha.getMonth(), 1);
+      renderCalendario();
+      renderDetalleDia(fechaISO);
+      if (abrirModal) abrirCalendarioPlanificacion();
+    }
+
+    function renderProximasEvaluaciones() {
+      if (!proximasEvaluaciones) return;
+      const hoyISO = fechaISODesdeLocal(new Date());
+      const proximas = [...planesProfesor].filter(p => String(p.fecha) >= hoyISO).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha))).slice(0, 5);
+      proximasEvaluaciones.innerHTML = '';
+      if (!proximas.length) {
+        proximasEvaluaciones.innerHTML = '<div class="planning-upcoming-empty"><i class="fa-regular fa-calendar-check"></i><span>No hay evaluaciones próximas.</span></div>';
+        return;
+      }
+      proximas.forEach(p => {
+        const fecha = fechaLocalDesdeISO(p.fecha);
+        const color = getColorSeccion(p.seccion);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `planning-upcoming-item planning-upcoming-item--${color.key}`;
+        btn.innerHTML = `<span class="planning-upcoming-item__date"><b>${fecha ? fecha.getDate() : '--'}</b><small>${fecha ? fecha.toLocaleDateString('es-ES', { month: 'short' }).replace('.', '') : ''}</small></span><span class="planning-upcoming-item__copy"><strong>${escaparHTML(p.actividad || 'Evaluación')}</strong><small>${escaparHTML(p.ano)} · Sección ${escaparHTML(p.seccion)} · ${escaparHTML(p.puntos || 0)} pts</small></span>`;
+        btn.addEventListener('click', () => seleccionarDiaCalendario(p.fecha, true));
+        proximasEvaluaciones.appendChild(btn);
+      });
+    }
+
+    function actualizarStatsPlanificacion() {
+      if (statPlanTotal) statPlanTotal.textContent = String(planesProfesor.length);
+      const secciones = new Set(planesProfesor.map(p => `${p.ano}-${p.seccion}`));
+      if (statPlanSecciones) statPlanSecciones.textContent = String(secciones.size);
+      if (statPlanProxima) {
+        const hoyISO = fechaISODesdeLocal(new Date());
+        const siguiente = [...planesProfesor].filter(p => String(p.fecha) >= hoyISO).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))[0];
+        if (!siguiente) statPlanProxima.textContent = 'Sin fecha';
+        else {
+          const fecha = fechaLocalDesdeISO(siguiente.fecha);
+          statPlanProxima.textContent = fecha ? fecha.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }).replace('.', '') : siguiente.fecha;
+        }
+      }
+    }
+
+    function renderCalendario() {
+      const nombre = nombresMes(calendarioPlanFecha);
+      if (mesCalendario) mesCalendario.textContent = nombre;
+      if (mesCalendarioAmpliado) mesCalendarioAmpliado.textContent = nombre;
+      renderUnaCuadriculaCalendario(gridCalendario, calendarioPlanFecha, false);
+      renderUnaCuadriculaCalendario(gridCalendarioAmpliado, calendarioPlanFecha, true);
+      if (calendarioDiaSeleccionado) renderDetalleDia(calendarioDiaSeleccionado);
+    }
+
+    function moverMesCalendario(delta) {
+      calendarioPlanFecha = new Date(calendarioPlanFecha.getFullYear(), calendarioPlanFecha.getMonth() + delta, 1);
+      renderCalendario();
+    }
+
+    function irAHoyCalendario() {
+      const hoy = new Date();
+      calendarioPlanFecha = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      calendarioDiaSeleccionado = fechaISODesdeLocal(hoy);
+      renderCalendario();
+      renderDetalleDia(calendarioDiaSeleccionado);
+    }
+
+    function abrirCalendarioPlanificacion() {
+      if (!modalCalendarioPlan) return;
+      modalCalendarioPlan.classList.remove('hidden');
+      modalCalendarioPlan.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modal-open');
+      if (!calendarioDiaSeleccionado) calendarioDiaSeleccionado = fechaISODesdeLocal(new Date());
+      renderCalendario();
+      renderDetalleDia(calendarioDiaSeleccionado);
+    }
+
+    function cerrarCalendarioPlanificacion() {
+      if (!modalCalendarioPlan) return;
+      modalCalendarioPlan.classList.add('hidden');
+      modalCalendarioPlan.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('modal-open');
+    }
+
+    document.getElementById('btn-cal-prev')?.addEventListener('click', () => moverMesCalendario(-1));
+    document.getElementById('btn-cal-next')?.addEventListener('click', () => moverMesCalendario(1));
+    document.getElementById('btn-cal-hoy')?.addEventListener('click', irAHoyCalendario);
+    document.getElementById('btn-cal-ampliar')?.addEventListener('click', abrirCalendarioPlanificacion);
+    document.getElementById('btn-cal-modal-prev')?.addEventListener('click', () => moverMesCalendario(-1));
+    document.getElementById('btn-cal-modal-next')?.addEventListener('click', () => moverMesCalendario(1));
+    document.getElementById('btn-cal-modal-hoy')?.addEventListener('click', irAHoyCalendario);
+    modalCalendarioPlan?.querySelectorAll('[data-close-calendar="true"]').forEach(el => el.addEventListener('click', cerrarCalendarioPlanificacion));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && modalCalendarioPlan && !modalCalendarioPlan.classList.contains('hidden')) cerrarCalendarioPlanificacion();
+    });
+
+    function actualizarUIPlanificacion() {
+      renderMenuPlanificacion();
+      renderCalendario();
+      renderProximasEvaluaciones();
+      actualizarStatsPlanificacion();
+    }
+
     formPlanificacion.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btnPlan = document.getElementById('btn-guardar-plan');
@@ -867,20 +917,20 @@ const SESSION_KEY = 'edugestion_session_v2';
         puntos: document.getElementById('plan-puntos').value,
         fecha: document.getElementById('plan-fecha').value
       };
-      const acumulado = planesProfesor
-        .filter(p => p.ano === objPlan.ano && p.seccion === objPlan.seccion)
-        .reduce((total, p) => total + Number(p.puntos || 0), 0) + Number(objPlan.puntos || 0);
+      const acumulado = planesProfesor.filter(p => p.ano === objPlan.ano && p.seccion === objPlan.seccion).reduce((total, p) => total + Number(p.puntos || 0), 0) + Number(objPlan.puntos || 0);
       if (acumulado > 100 && !confirm(`La planificación sumará ${acumulado} puntos. ¿Deseas continuar?`)) return;
-
       btnPlan.disabled = true;
       btnPlan.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin"></i> Guardando...';
       try {
         const resultado = await apiRequest('guardarPlanificacion', objPlan);
         planesProfesor.push(resultado.plan || objPlan);
+        const fechaNueva = fechaLocalDesdeISO(objPlan.fecha);
+        if (fechaNueva) calendarioPlanFecha = new Date(fechaNueva.getFullYear(), fechaNueva.getMonth(), 1);
+        calendarioDiaSeleccionado = objPlan.fecha;
         formPlanificacion.reset();
         actualizarUIPlanificacion();
         mostrarListaPlan(objPlan.ano, objPlan.seccion);
-        mostrarToast('La evaluación quedó guardada en la cuenta del docente.', 'success', 'Evaluación guardada');
+        mostrarToast('La evaluación quedó guardada y ya aparece en el calendario.', 'success', 'Evaluación programada');
       } catch (error) {
         console.error('No se guardó la planificación:', error);
         mostrarToast(error.message, 'error', 'No se guardó la evaluación');
@@ -964,7 +1014,6 @@ const SESSION_KEY = 'edugestion_session_v2';
         actualizarUIHorario();
         mostrarListaHorario(ano, seccion);
         detectarClaseAutomatica();
-        await renderAgendaDiaria();
         mostrarToast('El bloque fue eliminado del horario del docente.', 'success', 'Horario actualizado');
       } catch (error) {
         mostrarToast(error.message, 'error', 'No se eliminó el bloque');
@@ -1020,7 +1069,6 @@ const SESSION_KEY = 'edugestion_session_v2';
         actualizarUIHorario();
         mostrarListaHorario(obj.ano, obj.seccion);
         detectarClaseAutomatica();
-        await renderAgendaDiaria();
         mostrarToast('El bloque quedó guardado en la cuenta del docente.', 'success', 'Horario guardado');
       } catch (error) {
         console.error('No se guardó el horario:', error);

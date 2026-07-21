@@ -560,236 +560,120 @@
        </div>
       </div>
      </section>
-     <section class="hidden max-w-[1400px] mx-auto space-y-6" id="section-planificacion">
-      <div class="flex flex-col lg:flex-row gap-6">
-       <div class="w-full lg:w-1/4 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 h-fit">
+     <section class="hidden max-w-[1480px] mx-auto space-y-6" id="section-planificacion">
+      <div class="planning-hero">
+       <div class="planning-hero__copy">
+        <span class="planning-hero__eyebrow"><i class="fa-solid fa-wand-magic-sparkles"></i> Planificaci&oacute;n inteligente</span>
+        <h2>Organiza el mes completo de evaluaciones</h2>
+        <p>Consulta todas tus secciones, evita cruces de fechas y abre cada evaluaci&oacute;n directamente desde el calendario.</p>
+       </div>
+       <div class="planning-hero__stats">
+        <article><span id="stat-plan-total">0</span><small>Evaluaciones</small></article>
+        <article><span id="stat-plan-secciones">0</span><small>Secciones activas</small></article>
+        <article><span id="stat-plan-proxima">Sin fecha</span><small>Pr&oacute;xima evaluaci&oacute;n</small></article>
+       </div>
+      </div>
+
+      <div class="planning-layout">
+       <aside class="planning-sidebar bg-white p-4 rounded-3xl shadow-sm border border-gray-100 h-fit">
         <div class="text-center mb-6 border-b border-gray-100 pb-4">
-         <div class="bg-blue-50 text-blue-600 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl">
-          <i class="fa-solid fa-book-open">
-          </i>
-         </div>
-         <h3 class="font-black text-gray-800 text-sm uppercase tracking-widest">
-          Mis Planes
-         </h3>
+         <div class="bg-blue-50 text-blue-600 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl"><i class="fa-solid fa-book-open"></i></div>
+         <h3 class="font-black text-gray-800 text-sm uppercase tracking-widest">Mis planes</h3>
+         <p class="text-xs text-gray-400 mt-1">Filtra por secci&oacute;n</p>
         </div>
         <button class="w-full mb-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-md transition text-sm flex items-center justify-center gap-2" onclick="mostrarFormularioPlan()" type="button">
-         <i class="fa-solid fa-plus">
-         </i>
-         Nueva Evaluaci&oacute;n
+         <i class="fa-solid fa-plus"></i> Nueva Evaluaci&oacute;n
         </button>
-        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
-         Secciones Planificadas
-        </h4>
-        <div class="space-y-2 flex flex-col" id="menu-secciones-planificacion">
-        </div>
-       </div>
-       <div class="w-full lg:w-2/4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Secciones planificadas</h4>
+        <div class="space-y-2 flex flex-col" id="menu-secciones-planificacion"></div>
+       </aside>
+
+       <div class="planning-center bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
         <div id="panel-form-planificacion">
-         <div class="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
-          <i class="fa-solid fa-calendar-plus text-indigo-500 text-xl">
-          </i>
-          <h3 class="font-black text-gray-800 text-lg">
-           Cargar Nueva Evaluaci&oacute;n
-          </h3>
+         <div class="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
+          <span class="planning-panel-icon"><i class="fa-solid fa-calendar-plus"></i></span>
+          <div><h3 class="font-black text-gray-800 text-lg">Cargar nueva evaluaci&oacute;n</h3><p class="text-xs text-gray-400 mt-1">La evaluaci&oacute;n aparecer&aacute; autom&aacute;ticamente en el calendario.</p></div>
          </div>
          <form class="space-y-4" id="form-planificacion">
           <div class="grid grid-cols-2 gap-4">
-           <div>
-            <label class="block text-xs font-bold text-gray-700 mb-1">
-             A&ntilde;o
-            </label>
+           <div><label class="block text-xs font-bold text-gray-700 mb-1">A&ntilde;o</label>
             <select class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 font-semibold" id="plan-ano">
-             <option value="1ero">
-              1er A&ntilde;o
-             </option>
-             <option value="2do">
-              2do A&ntilde;o
-             </option>
-             <option value="3ero">
-              3er A&ntilde;o
-             </option>
-             <option value="4to">
-              4to A&ntilde;o
-             </option>
-             <option value="5to">
-              5to A&ntilde;o
-             </option>
+             <option value="1ero">1er A&ntilde;o</option><option value="2do">2do A&ntilde;o</option><option value="3ero">3er A&ntilde;o</option><option value="4to">4to A&ntilde;o</option><option value="5to">5to A&ntilde;o</option>
             </select>
            </div>
-           <div>
-            <label class="block text-xs font-bold text-gray-700 mb-1">
-             Secci&oacute;n
-            </label>
-            <select class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 font-semibold" id="plan-seccion">
-             <option value="A">
-              A
-             </option>
-             <option value="B">
-              B
-             </option>
-             <option value="C">
-              C
-             </option>
-            </select>
+           <div><label class="block text-xs font-bold text-gray-700 mb-1">Secci&oacute;n</label>
+            <select class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 font-semibold" id="plan-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
            </div>
           </div>
-          <div>
-           <label class="block text-sm font-bold text-gray-700 mb-1">
-            Actividad / Tema
-           </label>
-           <input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-actividad" placeholder="Ej: Taller sobre el ecosistema..." required type="text">
-          </div>
+          <div><label class="block text-sm font-bold text-gray-700 mb-1">Actividad / Tema</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-actividad" placeholder="Ej: Taller sobre el ecosistema..." required type="text"></div>
           <div class="grid grid-cols-2 gap-4">
-           <div>
-            <label class="block text-sm font-bold text-gray-700 mb-1">
-             Puntos / Ponderaci&oacute;n
-            </label>
-            <input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-puntos" max="100" min="1" placeholder="Ej: 20" required type="number">
-           </div>
-           <div>
-            <label class="block text-sm font-bold text-gray-700 mb-1">
-             Fecha Programada
-            </label>
-            <input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-gray-700" id="plan-fecha" required type="date">
-           </div>
+           <div><label class="block text-sm font-bold text-gray-700 mb-1">Puntos / Ponderaci&oacute;n</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-puntos" max="100" min="1" placeholder="Ej: 20" required type="number"></div>
+           <div><label class="block text-sm font-bold text-gray-700 mb-1">Fecha programada</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-gray-700" id="plan-fecha" required type="date"></div>
           </div>
-          <div class="pt-4">
-           <button class="w-full bg-indigo-600 hover:bg-indigo-700 transition text-white py-3.5 rounded-xl font-bold flex justify-center items-center gap-2" id="btn-guardar-plan" type="submit">
-            <i class="fa-solid fa-floppy-disk">
-            </i>
-            Guardar Evaluaci&oacute;n
-           </button>
-          </div>
+          <div class="planning-form-hint"><i class="fa-solid fa-circle-info"></i><span>Los colores del calendario representan las secciones: A, B y C.</span></div>
+          <div class="pt-2"><button class="w-full bg-indigo-600 hover:bg-indigo-700 transition text-white py-3.5 rounded-xl font-bold flex justify-center items-center gap-2" id="btn-guardar-plan" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar Evaluaci&oacute;n</button></div>
          </form>
         </div>
+
         <div class="hidden" id="panel-lista-planificacion">
          <div class="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
-          <div>
-           <h3 class="font-black text-gray-800 text-lg" id="titulo-plan-seccion">
-            Plan de Evaluaci&oacute;n
-           </h3>
-           <p class="text-xs font-bold text-gray-400" id="subtitulo-plan-seccion">
-            1er A&ntilde;o - Secci&oacute;n A
-           </p>
-          </div>
-          <div class="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200" id="badge-total-puntos">
-           Total: 0 pts
-          </div>
+          <div><h3 class="font-black text-gray-800 text-lg" id="titulo-plan-seccion">Plan de Evaluaci&oacute;n</h3><p class="text-xs font-bold text-gray-400" id="subtitulo-plan-seccion">1er A&ntilde;o - Secci&oacute;n A</p></div>
+          <div class="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200" id="badge-total-puntos">Total: 0 pts</div>
          </div>
          <div class="w-full" id="contenido-pdf-plan">
-          <div class="overflow-x-auto rounded-xl border border-gray-200">
-           <table class="min-w-full text-sm divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-             <tr>
-              <th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">
-               Fecha
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">
-               Actividad
-              </th>
-              <th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">
-               Pts
-              </th>
-              <th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider no-pdf">
-               Acci&oacute;n
-              </th>
-             </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100 bg-white" id="tabla-body-planificacion">
-            </tbody>
-           </table>
-          </div>
+          <div class="overflow-x-auto rounded-xl border border-gray-200"><table class="min-w-full text-sm divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Fecha</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Actividad</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">Pts</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider no-pdf">Acci&oacute;n</th></tr></thead><tbody class="divide-y divide-gray-100 bg-white" id="tabla-body-planificacion"></tbody></table></div>
          </div>
         </div>
        </div>
-       <div class="w-full lg:w-1/4 space-y-6">
+
+       <aside class="planning-calendar-column space-y-5">
         <div class="hidden bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex-col gap-3" id="acciones-planificacion">
-         <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-100 pb-2">
-          Acciones del Plan
-         </h4>
-         <button class="w-full px-4 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-sm transition uppercase tracking-wide border border-blue-200 text-center flex items-center justify-center gap-2" id="btn-plan-pdf" type="button">
-          <i class="fa-solid fa-file-pdf text-lg">
-          </i>
-          Guardar en PDF
-         </button>
-         <button class="w-full px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition shadow-md uppercase tracking-wide text-center flex items-center justify-center gap-2" id="btn-plan-whatsapp" type="button">
-          <i class="fa-brands fa-whatsapp text-lg">
-          </i>
-          Alerta WhatsApp
-         </button>
+         <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-100 pb-2">Acciones del plan</h4>
+         <button class="w-full px-4 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-sm transition uppercase tracking-wide border border-blue-200 text-center flex items-center justify-center gap-2" id="btn-plan-pdf" type="button"><i class="fa-solid fa-file-pdf text-lg"></i> Guardar en PDF</button>
+         <button class="w-full px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition shadow-md uppercase tracking-wide text-center flex items-center justify-center gap-2" id="btn-plan-whatsapp" type="button"><i class="fa-brands fa-whatsapp text-lg"></i> Alerta WhatsApp</button>
         </div>
-        <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
-         <div class="flex justify-between items-center mb-4">
-          <h4 class="text-sm font-black text-gray-800">
-           <i class="fa-regular fa-calendar text-indigo-500 mr-1">
-           </i>
-           Calendario
-          </h4>
-          <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-md uppercase" id="mes-calendario">
-          </span>
+
+        <div class="planning-calendar-card bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
+         <div class="planning-calendar-card__top">
+          <div><span class="planning-calendar-card__eyebrow">Vista mensual</span><h4><i class="fa-regular fa-calendar"></i> Calendario</h4></div>
+          <button id="btn-cal-ampliar" class="planning-calendar-expand" type="button" title="Abrir calendario completo"><i class="fa-solid fa-expand"></i></button>
          </div>
-         <div class="grid grid-cols-7 gap-1 text-center mb-2">
-          <div class="text-[10px] font-black text-gray-400 uppercase">
-           Do
-          </div>
-          <div class="text-[10px] font-black text-gray-400 uppercase">
-           Lu
-          </div>
-          <div class="text-[10px] font-black text-gray-400 uppercase">
-           Ma
-          </div>
-          <div class="text-[10px] font-black text-gray-400 uppercase">
-           Mi
-          </div>
-          <div class="text-[10px] font-black text-gray-400 uppercase">
-           Ju
-          </div>
-          <div class="text-[10px] font-black text-gray-400 uppercase">
-           Vi
-          </div>
-          <div class="text-[10px] font-black text-gray-400 uppercase">
-           Sa
-          </div>
+         <div class="planning-calendar-controls">
+          <button id="btn-cal-prev" type="button" aria-label="Mes anterior"><i class="fa-solid fa-chevron-left"></i></button>
+          <strong id="mes-calendario"></strong>
+          <button id="btn-cal-next" type="button" aria-label="Mes siguiente"><i class="fa-solid fa-chevron-right"></i></button>
          </div>
-         <div class="grid grid-cols-7 gap-1" id="grid-calendario">
+         <button class="planning-calendar-today" id="btn-cal-hoy" type="button"><i class="fa-solid fa-location-crosshairs"></i> Ir a hoy</button>
+         <div class="planning-weekdays"><span>Do</span><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sa</span></div>
+         <div class="planning-calendar-grid" id="grid-calendario"></div>
+         <div class="planning-section-legend"><span><i class="section-dot section-a"></i>Secci&oacute;n A</span><span><i class="section-dot section-b"></i>Secci&oacute;n B</span><span><i class="section-dot section-c"></i>Secci&oacute;n C</span></div>
+        </div>
+
+        <div class="planning-upcoming bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
+         <div class="planning-upcoming__header"><div><span>Pr&oacute;ximas fechas</span><h4>Evaluaciones cercanas</h4></div><i class="fa-solid fa-clock-rotate-left"></i></div>
+         <div id="proximas-evaluaciones" class="planning-upcoming__list"></div>
+        </div>
+       </aside>
+      </div>
+
+      <div class="planning-calendar-modal hidden" id="modal-calendario-planificacion" aria-hidden="true">
+       <div class="planning-calendar-modal__backdrop" data-close-calendar="true"></div>
+       <div class="planning-calendar-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="titulo-calendario-ampliado">
+        <div class="planning-calendar-modal__header">
+         <div><span>Calendario acad&eacute;mico</span><h3 id="titulo-calendario-ampliado">Mes completo</h3></div>
+         <div class="planning-calendar-modal__actions"><button id="btn-cal-modal-hoy" type="button"><i class="fa-solid fa-location-crosshairs"></i> Hoy</button><button class="planning-calendar-modal__close" data-close-calendar="true" type="button" aria-label="Cerrar calendario"><i class="fa-solid fa-xmark"></i></button></div>
+        </div>
+        <div class="planning-calendar-modal__body">
+         <div class="planning-calendar-full">
+          <div class="planning-calendar-full__controls"><button id="btn-cal-modal-prev" type="button"><i class="fa-solid fa-chevron-left"></i></button><strong id="mes-calendario-ampliado"></strong><button id="btn-cal-modal-next" type="button"><i class="fa-solid fa-chevron-right"></i></button></div>
+          <div class="planning-weekdays planning-weekdays--full"><span>Domingo</span><span>Lunes</span><span>Martes</span><span>Mi&eacute;rcoles</span><span>Jueves</span><span>Viernes</span><span>S&aacute;bado</span></div>
+          <div class="planning-calendar-grid planning-calendar-grid--full" id="grid-calendario-ampliado"></div>
          </div>
-         <div class="mt-4 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2">
-          <div class="flex items-center gap-1">
-           <span class="w-3 h-3 rounded-full bg-blue-500">
-           </span>
-           <span class="text-[10px] font-bold text-gray-500">
-            1er
-           </span>
-          </div>
-          <div class="flex items-center gap-1">
-           <span class="w-3 h-3 rounded-full bg-emerald-500">
-           </span>
-           <span class="text-[10px] font-bold text-gray-500">
-            2do
-           </span>
-          </div>
-          <div class="flex items-center gap-1">
-           <span class="w-3 h-3 rounded-full bg-purple-500">
-           </span>
-           <span class="text-[10px] font-bold text-gray-500">
-            3er
-           </span>
-          </div>
-          <div class="flex items-center gap-1">
-           <span class="w-3 h-3 rounded-full bg-orange-500">
-           </span>
-           <span class="text-[10px] font-bold text-gray-500">
-            4to
-           </span>
-          </div>
-          <div class="flex items-center gap-1">
-           <span class="w-3 h-3 rounded-full bg-rose-500">
-           </span>
-           <span class="text-[10px] font-bold text-gray-500">
-            5to
-           </span>
-          </div>
-         </div>
+         <aside class="planning-calendar-detail">
+          <div class="planning-calendar-detail__head"><span id="detalle-dia-etiqueta">Selecciona un d&iacute;a</span><strong id="detalle-dia-fecha">Sin fecha</strong></div>
+          <div id="detalle-dia-calendario" class="planning-calendar-detail__list"><div class="planning-calendar-empty"><i class="fa-regular fa-hand-pointer"></i><p>Haz clic en cualquier d&iacute;a para consultar sus evaluaciones.</p></div></div>
+          <div class="planning-section-legend planning-section-legend--modal"><span><i class="section-dot section-a"></i>Secci&oacute;n A</span><span><i class="section-dot section-b"></i>Secci&oacute;n B</span><span><i class="section-dot section-c"></i>Secci&oacute;n C</span></div>
+         </aside>
         </div>
        </div>
       </div>
