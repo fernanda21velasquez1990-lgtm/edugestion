@@ -2883,3 +2883,167 @@ body.modal-open {
 
 
 }
+/* =====================================================
+   FIX CALENDARIO PLANIFICACION V2
+   Compactar calendario y liberar panel derecho
+===================================================== */
+
+
+/* Contenedor general de planificación */
+
+.planning-layout,
+.planning-container,
+.planificacion-container {
+
+    display:flex !important;
+    gap:18px !important;
+    width:100% !important;
+    overflow:hidden !important;
+
+}
+
+
+/* Zona central calendario */
+
+.planning-calendar-container,
+.planning-calendar-full {
+
+    flex:1 !important;
+    width:auto !important;
+    max-width:780px !important;
+    min-width:0 !important;
+
+}
+
+
+/* Grid del calendario */
+
+.planning-calendar-grid-full {
+
+    width:100% !important;
+    min-width:0 !important;
+
+    gap:6px !important;
+
+}
+
+
+
+/* Cada día */
+
+.planning-calendar-day-full {
+
+
+    min-height:65px !important;
+    height:65px !important;
+
+    padding:6px !important;
+
+    border-radius:10px !important;
+
+    font-size:12px !important;
+
+
+}
+
+
+/* Eventos */
+
+.planning-calendar-day-full .event,
+.planning-calendar-day-full span {
+
+
+    font-size:10px !important;
+
+}
+
+
+/* Panel derecho */
+
+.actions-panel,
+.planning-actions,
+.plan-actions {
+
+
+    width:240px !important;
+    flex-shrink:0 !important;
+
+
+}
+
+
+
+/* ==================================
+   TABLET
+================================== */
+
+
+@media(max-width:1000px){
+
+
+.planning-layout,
+.planning-container,
+.planificacion-container{
+
+
+    flex-direction:column !important;
+
+
+}
+
+
+.planning-calendar-full{
+
+
+    max-width:none !important;
+
+}
+
+
+.actions-panel,
+.planning-actions,
+.plan-actions{
+
+
+    width:100% !important;
+
+}
+
+
+}
+
+
+
+/* ==================================
+   CELULAR
+================================== */
+
+
+@media(max-width:600px){
+
+
+.planning-calendar-day-full{
+
+
+    min-height:42px !important;
+
+    height:42px !important;
+
+    padding:3px !important;
+
+    font-size:9px !important;
+
+
+}
+
+
+
+.planning-calendar-grid-full{
+
+
+    gap:3px !important;
+
+}
+
+
+}
