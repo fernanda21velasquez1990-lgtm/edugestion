@@ -320,7 +320,47 @@
     </header>
     <main class="app-main" id="app-main">
      <section class="space-y-6 max-w-[1400px] mx-auto" id="section-asistencia">
-      <div class="flex flex-col lg:flex-row gap-6">
+      <section aria-labelledby="attendance-agenda-title" class="attendance-agenda">
+       <div class="attendance-agenda__header">
+        <div>
+         <span class="attendance-agenda__eyebrow"><i class="fa-solid fa-calendar-day"></i> Agenda diaria</span>
+         <h2 id="attendance-agenda-title">Clases y asistencia del día</h2>
+         <p>Selecciona una fecha y abre cualquier clase para registrar o consultar su asistencia.</p>
+        </div>
+        <div class="attendance-agenda__date-control">
+         <label for="fecha-agenda-clases">Fecha de trabajo</label>
+         <div>
+          <input id="fecha-agenda-clases" type="date">
+          <button id="btn-agenda-hoy" type="button"><i class="fa-solid fa-location-crosshairs"></i> Hoy</button>
+         </div>
+        </div>
+       </div>
+       <div class="attendance-agenda__summary">
+        <article>
+         <span class="attendance-summary-icon attendance-summary-icon--blue"><i class="fa-solid fa-chalkboard-user"></i></span>
+         <div><strong id="agenda-total-clases">0</strong><small>Clases programadas</small></div>
+        </article>
+        <article>
+         <span class="attendance-summary-icon attendance-summary-icon--green"><i class="fa-solid fa-circle-check"></i></span>
+         <div><strong id="agenda-clases-completadas">0</strong><small>Asistencias registradas</small></div>
+        </article>
+        <article>
+         <span class="attendance-summary-icon attendance-summary-icon--amber"><i class="fa-solid fa-clock"></i></span>
+         <div><strong id="agenda-clases-pendientes">0</strong><small>Clases pendientes</small></div>
+        </article>
+        <div class="attendance-agenda__day">
+         <span>Día seleccionado</span>
+         <strong id="nombre-dia-agenda">—</strong>
+        </div>
+       </div>
+       <div aria-live="polite" class="attendance-class-grid" id="agenda-clases-dia">
+        <div class="attendance-agenda-empty">
+         <i class="fa-solid fa-calendar-check"></i>
+         <p>Tu horario diario aparecerá aquí.</p>
+        </div>
+       </div>
+      </section>
+      <div class="flex flex-col lg:flex-row gap-6 attendance-workspace">
        <div class="w-full lg:w-1/4 bg-white p-5 rounded-3xl shadow-sm border border-gray-100 h-fit">
         <div class="text-center mb-6 border-b border-gray-100 pb-4">
          <div class="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl">
@@ -328,7 +368,7 @@
           </i>
          </div>
          <h3 class="font-black text-gray-800 text-sm uppercase tracking-widest">
-          Mis Clases
+          Filtro manual
          </h3>
         </div>
         <div class="mb-6 hidden" id="box-clases-hoy">
@@ -420,7 +460,17 @@
           </span>
          </div>
         </div>
-        <div class="divide-y divide-gray-100" id="lista-alumnos-asistencia">
+        <div class="attendance-list-toolbar">
+         <label class="attendance-search" for="buscar-alumno-asistencia">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="buscar-alumno-asistencia" placeholder="Buscar estudiante por nombre o cédula" type="search">
+         </label>
+         <div class="attendance-bulk-actions">
+          <button id="btn-todos-presentes" type="button"><i class="fa-solid fa-check-double"></i> Todos presentes</button>
+          <button id="btn-todos-ausentes" type="button"><i class="fa-solid fa-user-xmark"></i> Todos ausentes</button>
+         </div>
+        </div>
+        <div class="divide-y divide-gray-100 attendance-student-list" id="lista-alumnos-asistencia">
          <div class="py-8 text-center text-gray-400">
           <i class="fa-solid fa-clipboard-list text-4xl mb-3 text-gray-200">
           </i>

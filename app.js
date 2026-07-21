@@ -11,6 +11,8 @@ const SESSION_KEY = 'edugestion_session_v2';
     let actaTipoActual = 'incidencia';
     let planesProfesor = [];
     let seccionPlanViendo = null;
+    let agendaClasesEstado = [];
+    let claseAgendaSeleccionada = '';
 
     // --- DOM Elements ---
     const loginScreen = document.getElementById('login-screen');
@@ -58,6 +60,16 @@ const SESSION_KEY = 'edugestion_session_v2';
     const contadorAsistencia = document.getElementById('contador-asistencia');
     const listaAlumnosAsistencia = document.getElementById('lista-alumnos-asistencia');
     const fechaAsistencia = document.getElementById('fecha-asistencia');
+    const fechaAgendaClases = document.getElementById('fecha-agenda-clases');
+    const btnAgendaHoy = document.getElementById('btn-agenda-hoy');
+    const agendaClasesDia = document.getElementById('agenda-clases-dia');
+    const agendaTotalClases = document.getElementById('agenda-total-clases');
+    const agendaClasesCompletadas = document.getElementById('agenda-clases-completadas');
+    const agendaClasesPendientes = document.getElementById('agenda-clases-pendientes');
+    const nombreDiaAgenda = document.getElementById('nombre-dia-agenda');
+    const buscarAlumnoAsistencia = document.getElementById('buscar-alumno-asistencia');
+    const btnTodosPresentes = document.getElementById('btn-todos-presentes');
+    const btnTodosAusentes = document.getElementById('btn-todos-ausentes');
    
     // Stats
     const statPresentes = document.getElementById('stat-presentes');
@@ -167,38 +179,18 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     function sessionGet() {
-      // localStorage conserva la sesión al actualizar la página o cerrar y volver a abrir
-      // el navegador. sessionStorage se mantiene como respaldo para instalaciones previas.
-      const almacenes = [window.localStorage, window.sessionStorage];
-      for (const almacen of almacenes) {
-        try {
-          const valor = almacen.getItem(SESSION_KEY);
-          if (!valor) continue;
-          const datos = JSON.parse(valor);
-          if (datos?.token) return datos;
-        } catch (error) {
-          console.warn('No se pudo recuperar la sesión guardada:', error);
-        }
+      try {
+        const valor = window.localStorage.getItem(SESSION_KEY) || window.sessionStorage.getItem(SESSION_KEY);
+        return valor ? JSON.parse(valor) : null;
+      } catch (error) {
+        return null;
       }
-      return null;
     }
 
     function sessionSet(datos) {
-      const valor = JSON.stringify({ ...datos, guardadaEn: Date.now() });
-      let guardada = false;
-      try {
-        window.localStorage.setItem(SESSION_KEY, valor);
-        guardada = true;
-      } catch (error) {
-        console.warn('No fue posible conservar la sesión en el navegador:', error);
-      }
-      try {
-        window.sessionStorage.setItem(SESSION_KEY, valor);
-        guardada = true;
-      } catch (error) {
-        console.warn('No fue posible conservar la sesión en esta pestaña:', error);
-      }
-      return guardada;
+      const serializado = JSON.stringify(datos);
+      try { window.localStorage.setItem(SESSION_KEY, serializado); } catch (error) {}
+      try { window.sessionStorage.setItem(SESSION_KEY, serializado); } catch (error) {}
     }
 
     function sessionClear() {
@@ -285,6 +277,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         actualizarUIPlanificacion();
         actualizarUIHorario();
         detectarClaseAutomatica();
+        await renderAgendaDiaria();
 
         const inputInst = document.getElementById('input-institucion');
         if (inputInst && datos.institucion) {
@@ -321,18 +314,28 @@ const SESSION_KEY = 'edugestion_session_v2';
       const guardada = sessionGet();
       if (!guardada?.token || !apiConfigurada()) return;
       sessionToken = guardada.token;
+      if (guardada.profesor) aplicarPerfilDocente(guardada.profesor);
       try {
         const datos = await apiRequest('validarSesion');
         await iniciarSesion({ token: sessionToken, profesor: datos.profesor }, false);
       } catch (error) {
-        sessionToken = '';
-        sessionClear();
+        const invalida = ['SESSION_EXPIRED', 'SESSION_REQUIRED', 'UNAUTHORIZED'].includes(error.code);
+        if (invalida) {
+          cerrarSesionLocal(false);
+          loginError.textContent = error.message || 'La sesión venció. Ingresa nuevamente.';
+          loginError.classList.remove('hidden');
+        } else {
+          console.warn('No se pudo validar la sesión durante la recarga. Se conserva localmente:', error);
+          mostrarToast('No se pudo contactar al servidor. Tu sesión permanece abierta y se reintentará en la próxima operación.', 'warning', 'Conexión temporal');
+        }
       }
     }
 
     window.addEventListener('DOMContentLoaded', async () => {
       const hoy = new Date();
-      fechaAsistencia.value = hoy.toISOString().split('T')[0];
+      const fechaHoyISO = hoy.toISOString().split('T')[0];
+      fechaAsistencia.value = fechaHoyISO;
+      if (fechaAgendaClases) fechaAgendaClases.value = fechaHoyISO;
       if (currentDate) {
         currentDate.textContent = new Intl.DateTimeFormat('es-ES', {
           weekday: 'short', day: '2-digit', month: 'short'
@@ -464,6 +467,166 @@ const SESSION_KEY = 'edugestion_session_v2';
       cerrarSesionLocal(true);
     };
 
+    // ====== AGENDA DIARIA DE CLASES Y ASISTENCIA ======
+    function normalizarDia(valor = '') {
+      return String(valor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    }
+
+    function diaSemanaDesdeFecha(fechaISO) {
+      if (!fechaISO) return { clave: '', nombre: '—' };
+      const fecha = new Date(`${fechaISO}T12:00:00`);
+      if (Number.isNaN(fecha.getTime())) return { clave: '', nombre: '—' };
+      const nombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const nombre = nombres[fecha.getDay()];
+      return { clave: normalizarDia(nombre), nombre };
+    }
+
+    function claveClaseAgenda(clase) {
+      return [clase.dia, clase.horaInicio, clase.horaFin, clase.ano, clase.seccion, clase.turno].map(v => String(v || '')).join('|');
+    }
+
+    function mostrarAgendaVacia(titulo, texto, icono = 'fa-calendar-check') {
+      if (!agendaClasesDia) return;
+      agendaClasesDia.innerHTML = `<div class="attendance-agenda-empty"><i class="fa-solid ${icono}"></i><div><strong>${escaparHTML(titulo)}</strong><p>${escaparHTML(texto)}</p></div></div>`;
+    }
+
+    function renderAgendaCargando(clases) {
+      if (!agendaClasesDia) return;
+      agendaClasesDia.innerHTML = clases.map(() => `
+        <article class="attendance-class-card is-loading" aria-hidden="true">
+          <span class="attendance-card-skeleton attendance-card-skeleton--small"></span>
+          <span class="attendance-card-skeleton attendance-card-skeleton--medium"></span>
+          <span class="attendance-card-skeleton"></span>
+          <span class="attendance-card-skeleton attendance-card-skeleton--medium"></span>
+        </article>`).join('');
+    }
+
+    async function obtenerResumenClaseAgenda(clase, fecha) {
+      try {
+        const [alumnosResp, asistenciaResp] = await Promise.all([
+          apiRequest('obtenerAlumnos', { ano: clase.ano, seccion: clase.seccion, turno: clase.turno }),
+          apiRequest('obtenerAsistencia', {
+            ano: clase.ano,
+            seccion: clase.seccion,
+            turno: clase.turno,
+            fecha,
+            materia: profesorActual?.materia || ''
+          })
+        ]);
+        const alumnos = Array.isArray(alumnosResp.alumnos) ? alumnosResp.alumnos : [];
+        const registro = asistenciaResp.asistencia && typeof asistenciaResp.asistencia === 'object' ? asistenciaResp.asistencia : {};
+        let presentes = 0;
+        let ausentes = 0;
+        alumnos.forEach(al => {
+          if (registro[al.id] === 'Ausente') ausentes += 1;
+          else if (registro[al.id] === 'Presente') presentes += 1;
+        });
+        const registrados = presentes + ausentes;
+        let estado = 'pending';
+        let etiqueta = 'Pendiente';
+        if (!alumnos.length) { estado = 'empty'; etiqueta = 'Sin alumnos'; }
+        else if (registrados === alumnos.length) { estado = 'complete'; etiqueta = 'Registrada'; }
+        else if (registrados > 0) { estado = 'partial'; etiqueta = 'Parcial'; }
+        return { ...clase, total: alumnos.length, presentes, ausentes, registrados, existe: Boolean(asistenciaResp.existe), estado, etiqueta };
+      } catch (error) {
+        console.warn('No se pudo resumir una clase de la agenda:', error);
+        return { ...clase, total: 0, presentes: 0, ausentes: 0, registrados: 0, estado: 'error', etiqueta: 'No disponible' };
+      }
+    }
+
+    function renderTarjetasAgenda() {
+      if (!agendaClasesDia) return;
+      if (!agendaClasesEstado.length) {
+        mostrarAgendaVacia('No hay clases programadas', 'Agrega bloques en el módulo Horario para este día.', 'fa-calendar-xmark');
+        return;
+      }
+      agendaClasesDia.innerHTML = '';
+      agendaClasesEstado.forEach(clase => {
+        const clave = claveClaseAgenda(clase);
+        const tarjeta = document.createElement('button');
+        tarjeta.type = 'button';
+        tarjeta.className = `attendance-class-card is-${clase.estado}${claseAgendaSeleccionada === clave ? ' is-selected' : ''}`;
+        tarjeta.setAttribute('aria-label', `Abrir asistencia de ${clase.ano} sección ${clase.seccion}`);
+        tarjeta.innerHTML = `
+          <span class="attendance-class-card__topline">
+            <span class="attendance-class-card__time"><i class="fa-regular fa-clock"></i>${escaparHTML(formatearHoraLimpia(clase.horaInicio))} - ${escaparHTML(formatearHoraLimpia(clase.horaFin))}</span>
+            <span class="attendance-class-card__status">${escaparHTML(clase.etiqueta)}</span>
+          </span>
+          <strong class="attendance-class-card__course">${escaparHTML(clase.ano)} · Sección “${escaparHTML(clase.seccion)}”</strong>
+          <span class="attendance-class-card__meta"><i class="fa-solid fa-sun"></i>${escaparHTML(clase.turno === 'Manana' ? 'Mañana' : clase.turno)}</span>
+          <span class="attendance-class-card__numbers">
+            <span><b>${clase.total}</b><small>Estudiantes</small></span>
+            <span><b>${clase.presentes}</b><small>Presentes</small></span>
+            <span><b>${clase.ausentes}</b><small>Ausentes</small></span>
+          </span>
+          <span class="attendance-class-card__action"><span>${clase.estado === 'complete' ? 'Consultar asistencia' : 'Tomar asistencia'}</span><i class="fa-solid fa-arrow-right"></i></span>`;
+        tarjeta.addEventListener('click', async () => {
+          claseAgendaSeleccionada = clave;
+          renderTarjetasAgenda();
+          selectFiltroAno.value = clase.ano;
+          selectFiltroSeccion.value = clase.seccion;
+          selectFiltroTurno.value = clase.turno === 'Mañana' ? 'Manana' : clase.turno;
+          fechaAsistencia.value = fechaAgendaClases?.value || fechaAsistencia.value;
+          await cargarAlumnosDeSeccion();
+          document.querySelector('.attendance-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        agendaClasesDia.appendChild(tarjeta);
+      });
+    }
+
+    async function renderAgendaDiaria() {
+      if (!fechaAgendaClases || !agendaClasesDia || !profesorActual) return;
+      const fecha = fechaAgendaClases.value || new Date().toISOString().split('T')[0];
+      const dia = diaSemanaDesdeFecha(fecha);
+      if (nombreDiaAgenda) nombreDiaAgenda.textContent = dia.nombre;
+      const clases = horariosProfesor
+        .filter(h => normalizarDia(h.dia) === dia.clave)
+        .sort((a, b) => String(a.horaInicio || '').localeCompare(String(b.horaInicio || '')));
+      if (agendaTotalClases) agendaTotalClases.textContent = String(clases.length);
+      if (agendaClasesCompletadas) agendaClasesCompletadas.textContent = '0';
+      if (agendaClasesPendientes) agendaClasesPendientes.textContent = String(clases.length);
+      agendaClasesEstado = [];
+      claseAgendaSeleccionada = '';
+      if (!clases.length) {
+        mostrarAgendaVacia('No hay clases programadas', `No se encontraron bloques para ${dia.nombre.toLowerCase()}.`, 'fa-calendar-xmark');
+        return;
+      }
+      renderAgendaCargando(clases);
+      agendaClasesEstado = await Promise.all(clases.map(clase => obtenerResumenClaseAgenda(clase, fecha)));
+      const completadas = agendaClasesEstado.filter(c => c.estado === 'complete').length;
+      if (agendaClasesCompletadas) agendaClasesCompletadas.textContent = String(completadas);
+      if (agendaClasesPendientes) agendaClasesPendientes.textContent = String(Math.max(0, clases.length - completadas));
+      renderTarjetasAgenda();
+    }
+
+    fechaAgendaClases?.addEventListener('change', renderAgendaDiaria);
+    btnAgendaHoy?.addEventListener('click', () => {
+      fechaAgendaClases.value = new Date().toISOString().split('T')[0];
+      renderAgendaDiaria();
+    });
+
+    buscarAlumnoAsistencia?.addEventListener('input', () => {
+      const termino = normalizarTextoBusqueda(buscarAlumnoAsistencia.value);
+      listaAlumnosAsistencia.querySelectorAll('.attendance-student-row').forEach(fila => {
+        fila.hidden = Boolean(termino) && !String(fila.dataset.search || '').includes(termino);
+      });
+    });
+
+    function normalizarTextoBusqueda(valor = '') {
+      return String(valor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    }
+
+    function marcarTodosAsistencia(estado) {
+      if (!alumnosSeccion.length) return mostrarToast('Primero carga una lista de estudiantes.', 'warning', 'Sin lista');
+      alumnosSeccion.forEach(al => { asistenciaTemporal[al.id] = estado; });
+      renderAsistencia();
+      actualizarStatsSeccion();
+      mostrarToast(`Todos los estudiantes fueron marcados como ${estado.toLowerCase()}.`, 'info', 'Marcación masiva');
+    }
+
+    btnTodosPresentes?.addEventListener('click', () => marcarTodosAsistencia('Presente'));
+    btnTodosAusentes?.addEventListener('click', () => marcarTodosAsistencia('Ausente'));
+
     // ====== LÓGICA DE ASISTENCIA DASHBOARD ======
     btnCargarListaFiltrada.onclick = cargarAlumnosDeSeccion;
    
@@ -486,6 +649,7 @@ const SESSION_KEY = 'edugestion_session_v2';
           })
         ]);
         alumnosSeccion = Array.isArray(d.alumnos) ? d.alumnos : [];
+        if (buscarAlumnoAsistencia) buscarAlumnoAsistencia.value = '';
         asistenciaTemporal = registro.asistencia && typeof registro.asistencia === 'object' ? { ...registro.asistencia } : {};
         estadisticasAlumnos = {};
         contadorAsistencia.textContent = `${alumnosSeccion.length} Alumnos`;
@@ -529,7 +693,8 @@ const SESSION_KEY = 'edugestion_session_v2';
           ? 'w-20 py-2 rounded-xl bg-red-500 text-white font-black text-xs shadow-sm transition'
           : 'w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition';
         const d = document.createElement('div');
-        d.className = 'py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:bg-gray-50 px-2 rounded-xl transition';
+        d.className = 'attendance-student-row py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:bg-gray-50 px-2 rounded-xl transition';
+        d.dataset.search = normalizarTextoBusqueda(`${al.nombre || ''} ${al.cedula || ''}`);
         d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-bold"><i class="fa-regular fa-calendar-check mr-1"></i>Registro del día</span></div></div></div><div class="flex gap-2 self-end sm:self-auto"><button id="p-${idDom}" type="button" class="${clasePresente}" aria-label="Marcar presente a ${nombre}"><i class="fa-solid fa-check mr-1"></i> PRES</button><button id="i-${idDom}" type="button" class="${claseAusente}" aria-label="Marcar ausente a ${nombre}"><i class="fa-solid fa-xmark mr-1"></i> AUS</button></div>`;
         d.querySelector(`#p-${idDom}`).addEventListener('click', () => setA(al.id, 'Presente', idDom));
         d.querySelector(`#i-${idDom}`).addEventListener('click', () => setA(al.id, 'Ausente', idDom));
@@ -604,6 +769,8 @@ const SESSION_KEY = 'edugestion_session_v2';
           const payload = { materia: profesorActual.materia, ano: selectFiltroAno.value, seccion: selectFiltroSeccion.value, turno: selectFiltroTurno.value, fecha: fechaAsistencia.value, asistencia: asistenciaTemporal };
           await apiRequest('guardarAsistencia', payload);
           mostrarToast('La asistencia del día quedó registrada correctamente.', 'success', 'Asistencia guardada');
+          if (fechaAgendaClases) fechaAgendaClases.value = fechaAsistencia.value;
+          await renderAgendaDiaria();
         } catch(e) {
           console.error('Error al guardar asistencia:', e);
           mostrarToast('Verifica tu conexión e inténtalo nuevamente.', 'error', 'No se guardó la asistencia');
@@ -797,6 +964,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         actualizarUIHorario();
         mostrarListaHorario(ano, seccion);
         detectarClaseAutomatica();
+        await renderAgendaDiaria();
         mostrarToast('El bloque fue eliminado del horario del docente.', 'success', 'Horario actualizado');
       } catch (error) {
         mostrarToast(error.message, 'error', 'No se eliminó el bloque');
@@ -852,6 +1020,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         actualizarUIHorario();
         mostrarListaHorario(obj.ano, obj.seccion);
         detectarClaseAutomatica();
+        await renderAgendaDiaria();
         mostrarToast('El bloque quedó guardado en la cuenta del docente.', 'success', 'Horario guardado');
       } catch (error) {
         console.error('No se guardó el horario:', error);
