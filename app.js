@@ -2666,3 +2666,380 @@ const SESSION_KEY = 'edugestion_session_v2';
   else crearInterfazAuditoria();
 })();
 /* EDUGESTION_AUDIT_PANEL_V1_END */
+
+/* EDUGESTION_STATS_PANEL_V1_START */
+(() => {
+  const IDS = Object.freeze({
+    tab: 'tab-estadisticas',
+    section: 'section-estadisticas',
+    from: 'estadisticas-desde',
+    to: 'estadisticas-hasta',
+    classFilter: 'estadisticas-seccion',
+    search: 'estadisticas-buscar',
+    apply: 'estadisticas-aplicar',
+    clear: 'estadisticas-limpiar',
+    refresh: 'estadisticas-actualizar',
+    export: 'estadisticas-exportar',
+    print: 'estadisticas-imprimir',
+    studentsBody: 'estadisticas-alumnos-body',
+    studentsCards: 'estadisticas-alumnos-cards',
+    sectionsBody: 'estadisticas-secciones-body',
+    dates: 'estadisticas-fechas',
+    loading: 'estadisticas-cargando',
+    empty: 'estadisticas-vacio',
+    studentCount: 'estadisticas-conteo-alumnos'
+  });
+
+  let estadisticasData = null;
+  let cargando = false;
+  let catalogoSecciones = [];
+
+  const seguro = (valor = '') => {
+    if (typeof escaparHTML === 'function') return escaparHTML(valor);
+    return String(valor).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+  };
+
+  const numero = valor => Number.isFinite(Number(valor)) ? Number(valor) : 0;
+  const porcentaje = valor => `${numero(valor).toLocaleString('es-ES', { maximumFractionDigits: 2 })}%`;
+  const clasePorcentaje = valor => numero(valor) >= 90 ? 'is-high' : numero(valor) >= 70 ? 'is-medium' : 'is-low';
+
+  function hoyIso() {
+    const ahora = new Date();
+    const local = new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function primerDiaMesIso() {
+    const ahora = new Date();
+    const local = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    const ajustada = new Date(local.getTime() - local.getTimezoneOffset() * 60000);
+    return ajustada.toISOString().slice(0, 10);
+  }
+
+  function fechaLegible(valor) {
+    const partes = String(valor || '').split('-');
+    return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : String(valor || '—');
+  }
+
+  function crearInterfazEstadisticas() {
+    if (document.getElementById(IDS.tab) || document.getElementById(IDS.section)) return;
+    const tabAuditoria = document.getElementById('tab-auditoria');
+    const tabHorario = document.getElementById('tab-horario');
+    const referencia = tabAuditoria || tabHorario;
+    const navegacion = referencia?.parentElement;
+    const principal = document.getElementById('app-main');
+    if (!navegacion || !principal) return;
+
+    const tab = document.createElement('button');
+    tab.id = IDS.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item';
+    tab.setAttribute('aria-selected', 'false');
+    tab.dataset.title = 'Estadísticas de asistencia';
+    tab.dataset.description = 'Analiza asistencia, tardanzas, ausencias y justificaciones por periodo.';
+    tab.innerHTML = '<i class="fa-solid fa-chart-column"></i><span>Estadísticas</span>';
+    referencia.insertAdjacentElement('afterend', tab);
+
+    const section = document.createElement('section');
+    section.id = IDS.section;
+    section.className = 'hidden max-w-[1400px] mx-auto space-y-6 stats-panel';
+    section.innerHTML = `
+      <section class="stats-hero">
+        <div>
+          <span class="stats-eyebrow"><i class="fa-solid fa-chart-line"></i> Informe de asistencia</span>
+          <h2>Estadísticas e informes</h2>
+          <p>Consulta indicadores por periodo, estudiante y sección con datos sincronizados de EduGestión.</p>
+        </div>
+        <div class="stats-hero__actions">
+          <button id="${IDS.export}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
+          <button id="${IDS.print}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-print"></i> Imprimir</button>
+          <button id="${IDS.refresh}" type="button" class="stats-button stats-button--primary"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        </div>
+      </section>
+
+      <section class="stats-filter-card">
+        <div class="stats-filter-card__title">
+          <div><span><i class="fa-solid fa-sliders"></i></span><div><strong>Periodo y filtros</strong><small>Selecciona el rango que deseas analizar.</small></div></div>
+          <button id="${IDS.clear}" type="button"><i class="fa-solid fa-eraser"></i> Restablecer</button>
+        </div>
+        <div class="stats-filters">
+          <label class="stats-field"><span>Desde</span><input id="${IDS.from}" type="date"></label>
+          <label class="stats-field"><span>Hasta</span><input id="${IDS.to}" type="date"></label>
+          <label class="stats-field stats-field--wide"><span>Sección</span><select id="${IDS.classFilter}"><option value="">Todas las secciones</option></select></label>
+          <label class="stats-search stats-field--wide"><span>Buscar estudiante</span><div><i class="fa-solid fa-magnifying-glass"></i><input id="${IDS.search}" type="search" placeholder="Nombre del estudiante"></div></label>
+          <button id="${IDS.apply}" type="button" class="stats-apply"><i class="fa-solid fa-filter-circle-dollar"></i> Aplicar filtros</button>
+        </div>
+      </section>
+
+      <section id="${IDS.loading}" class="stats-status hidden"><i class="fa-solid fa-circle-notch fa-spin"></i><strong>Calculando estadísticas…</strong><span>Estamos procesando los registros de asistencia.</span></section>
+      <section id="${IDS.empty}" class="stats-status hidden"><i class="fa-solid fa-chart-simple"></i><strong>No hay registros en este periodo</strong><span>Prueba otro rango de fechas o una sección diferente.</span></section>
+
+      <section class="stats-metrics" aria-label="Indicadores principales">
+        <article class="stats-metric stats-metric--total"><span><i class="fa-solid fa-clipboard-list"></i></span><div><strong id="stats-total">0</strong><small>Registros</small></div></article>
+        <article class="stats-metric stats-metric--present"><span><i class="fa-solid fa-user-check"></i></span><div><strong id="stats-presentes">0</strong><small>Presentes</small></div></article>
+        <article class="stats-metric stats-metric--absent"><span><i class="fa-solid fa-user-xmark"></i></span><div><strong id="stats-ausentes">0</strong><small>Ausentes</small></div></article>
+        <article class="stats-metric stats-metric--late"><span><i class="fa-solid fa-clock"></i></span><div><strong id="stats-tardanzas">0</strong><small>Tardanzas</small></div></article>
+        <article class="stats-metric stats-metric--justified"><span><i class="fa-solid fa-file-circle-check"></i></span><div><strong id="stats-justificadas">0</strong><small>Justificadas</small></div></article>
+        <article class="stats-metric stats-metric--rate"><span><i class="fa-solid fa-percent"></i></span><div><strong id="stats-porcentaje">0%</strong><small>Asistencia efectiva</small></div></article>
+      </section>
+
+      <section class="stats-overview-grid">
+        <article class="stats-score-card">
+          <div class="stats-card-title"><span><i class="fa-solid fa-gauge-high"></i></span><div><h3>Indicadores del periodo</h3><p>La asistencia efectiva suma presentes y tardanzas.</p></div></div>
+          <div class="stats-score-row"><div><strong>Asistencia efectiva</strong><small>Presentes + tardanzas</small></div><span id="stats-score-asistencia">0%</span></div>
+          <div class="stats-progress"><span id="stats-bar-asistencia"></span></div>
+          <div class="stats-score-row"><div><strong>Cumplimiento registrado</strong><small>Incluye ausencias justificadas</small></div><span id="stats-score-cumplimiento">0%</span></div>
+          <div class="stats-progress stats-progress--violet"><span id="stats-bar-cumplimiento"></span></div>
+          <div class="stats-breakdown" id="stats-breakdown"></div>
+        </article>
+
+        <article class="stats-daily-card">
+          <div class="stats-card-title"><span><i class="fa-regular fa-calendar-days"></i></span><div><h3>Evolución por fecha</h3><p>Distribución diaria de los estados registrados.</p></div></div>
+          <div id="${IDS.dates}" class="stats-daily-list"></div>
+        </article>
+      </section>
+
+      <section class="stats-table-card">
+        <div class="stats-table-card__header"><div><span><i class="fa-solid fa-graduation-cap"></i></span><div><h3>Rendimiento por estudiante</h3><p>Ordenado alfabéticamente.</p></div></div><span id="${IDS.studentCount}" class="stats-count">0 estudiantes</span></div>
+        <div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>Estudiante</th><th>Clase</th><th>P</th><th>A</th><th>T</th><th>J</th><th>Asistencia</th><th>Cumplimiento</th></tr></thead><tbody id="${IDS.studentsBody}"></tbody></table></div>
+        <div id="${IDS.studentsCards}" class="stats-mobile-list"></div>
+      </section>
+
+      <section class="stats-table-card">
+        <div class="stats-table-card__header"><div><span><i class="fa-solid fa-people-roof"></i></span><div><h3>Resumen por sección</h3><p>Comparación de cursos y turnos.</p></div></div></div>
+        <div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>Sección</th><th>Registros</th><th>Presentes</th><th>Ausentes</th><th>Tardanzas</th><th>Justificadas</th><th>Asistencia</th></tr></thead><tbody id="${IDS.sectionsBody}"></tbody></table></div>
+      </section>`;
+    principal.appendChild(section);
+
+    document.getElementById(IDS.from).value = primerDiaMesIso();
+    document.getElementById(IDS.to).value = hoyIso();
+
+    tab.addEventListener('click', abrirEstadisticas);
+    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario', 'tab-auditoria'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', cerrarEstadisticas, { capture: true });
+    });
+    document.getElementById(IDS.apply)?.addEventListener('click', () => cargarEstadisticas(true));
+    document.getElementById(IDS.refresh)?.addEventListener('click', () => cargarEstadisticas(true, true));
+    document.getElementById(IDS.clear)?.addEventListener('click', restablecerFiltros);
+    document.getElementById(IDS.export)?.addEventListener('click', exportarCsv);
+    document.getElementById(IDS.print)?.addEventListener('click', imprimirInforme);
+    document.getElementById(IDS.search)?.addEventListener('input', renderEstadisticas);
+  }
+
+  function cerrarEstadisticas() {
+    document.getElementById(IDS.tab)?.classList.remove('is-active');
+    document.getElementById(IDS.tab)?.setAttribute('aria-selected', 'false');
+    document.getElementById(IDS.section)?.classList.add('hidden');
+  }
+
+  async function abrirEstadisticas() {
+    document.querySelectorAll('.nav-item').forEach(item => { item.classList.remove('is-active'); item.setAttribute('aria-selected', 'false'); });
+    document.querySelectorAll('#app-main > section').forEach(item => item.classList.add('hidden'));
+    document.getElementById(IDS.tab)?.classList.add('is-active');
+    document.getElementById(IDS.tab)?.setAttribute('aria-selected', 'true');
+    document.getElementById(IDS.section)?.classList.remove('hidden');
+    if (typeof pageTitle !== 'undefined' && pageTitle) pageTitle.textContent = 'Estadísticas de asistencia';
+    if (typeof pageDescription !== 'undefined' && pageDescription) pageDescription.textContent = 'Analiza asistencia, tardanzas, ausencias y justificaciones por periodo.';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await cargarEstadisticas(false);
+  }
+
+  function estadoVista(tipo) {
+    document.getElementById(IDS.loading)?.classList.toggle('hidden', tipo !== 'loading');
+    document.getElementById(IDS.empty)?.classList.toggle('hidden', tipo !== 'empty');
+  }
+
+  function filtrosServidor() {
+    const valorSeccion = String(document.getElementById(IDS.classFilter)?.value || '');
+    const [ano = '', seccion = '', turno = ''] = valorSeccion.split('|');
+    return {
+      fechaDesde: String(document.getElementById(IDS.from)?.value || ''),
+      fechaHasta: String(document.getElementById(IDS.to)?.value || ''),
+      ano,
+      seccion,
+      turno
+    };
+  }
+
+  async function cargarEstadisticas(forzar = false, notificar = false) {
+    if (cargando) return;
+    if (estadisticasData && !forzar) { renderEstadisticas(); return; }
+    if (typeof sessionToken === 'undefined' || !sessionToken) { estadoVista('empty'); return; }
+    cargando = true;
+    estadoVista('loading');
+    document.getElementById(IDS.refresh)?.classList.add('is-loading');
+    document.getElementById(IDS.apply)?.classList.add('is-loading');
+    try {
+      const respuesta = await apiRequest('obtenerEstadisticasAsistencia', filtrosServidor());
+      estadisticasData = respuesta;
+      if (!catalogoSecciones.length || !String(document.getElementById(IDS.classFilter)?.value || '')) {
+        catalogoSecciones = Array.isArray(respuesta.porSeccion) ? respuesta.porSeccion.map(item => ({ ...item })) : [];
+        llenarSecciones();
+      }
+      renderEstadisticas();
+      if (notificar && typeof mostrarToast === 'function') mostrarToast('Los indicadores se actualizaron correctamente.', 'success', 'Estadísticas actualizadas');
+    } catch (error) {
+      console.error('No se pudieron cargar las estadísticas:', error);
+      estadisticasData = null;
+      renderEstadisticas();
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudieron consultar las estadísticas.', 'error', 'Error de estadísticas');
+    } finally {
+      cargando = false;
+      document.getElementById(IDS.refresh)?.classList.remove('is-loading');
+      document.getElementById(IDS.apply)?.classList.remove('is-loading');
+    }
+  }
+
+  function llenarSecciones() {
+    const select = document.getElementById(IDS.classFilter);
+    if (!select) return;
+    const actual = select.value;
+    const opciones = catalogoSecciones.map(item => `${item.ano || ''}|${item.seccion || ''}|${item.turno || ''}`)
+      .filter((valor, indice, arreglo) => valor !== '||' && arreglo.indexOf(valor) === indice)
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas las secciones</option>' + opciones.map(valor => {
+      const [ano, seccion, turno] = valor.split('|');
+      return `<option value="${seguro(valor)}">${seguro(ano)} · Sección ${seguro(seccion)} · ${seguro(turno)}</option>`;
+    }).join('');
+    if (opciones.includes(actual)) select.value = actual;
+  }
+
+  function asignar(id, valor) {
+    const nodo = document.getElementById(id);
+    if (nodo) nodo.textContent = String(valor);
+  }
+
+  function alumnosFiltrados() {
+    const alumnos = Array.isArray(estadisticasData?.porAlumno) ? estadisticasData.porAlumno : [];
+    const texto = String(document.getElementById(IDS.search)?.value || '').trim().toLowerCase();
+    if (!texto) return alumnos;
+    return alumnos.filter(item => [item.alumno, item.ano, item.seccion, item.turno].some(valor => String(valor || '').toLowerCase().includes(texto)));
+  }
+
+  function renderEstadisticas() {
+    const resumen = estadisticasData?.resumen || null;
+    const total = numero(resumen?.total);
+    estadoVista(total ? 'ready' : 'empty');
+
+    asignar('stats-total', total);
+    asignar('stats-presentes', numero(resumen?.presentes));
+    asignar('stats-ausentes', numero(resumen?.ausentes));
+    asignar('stats-tardanzas', numero(resumen?.tardanzas));
+    asignar('stats-justificadas', numero(resumen?.justificadas));
+    asignar('stats-porcentaje', porcentaje(resumen?.porcentajeAsistencia));
+    asignar('stats-score-asistencia', porcentaje(resumen?.porcentajeAsistencia));
+    asignar('stats-score-cumplimiento', porcentaje(resumen?.porcentajeCumplimiento));
+
+    const barAsistencia = document.getElementById('stats-bar-asistencia');
+    const barCumplimiento = document.getElementById('stats-bar-cumplimiento');
+    if (barAsistencia) barAsistencia.style.width = `${Math.max(0, Math.min(100, numero(resumen?.porcentajeAsistencia)))}%`;
+    if (barCumplimiento) barCumplimiento.style.width = `${Math.max(0, Math.min(100, numero(resumen?.porcentajeCumplimiento)))}%`;
+
+    const breakdown = document.getElementById('stats-breakdown');
+    if (breakdown) breakdown.innerHTML = `
+      <span><i class="is-present"></i>Presentes <b>${numero(resumen?.presentes)}</b></span>
+      <span><i class="is-absent"></i>Ausentes <b>${numero(resumen?.ausentes)}</b></span>
+      <span><i class="is-late"></i>Tardanzas <b>${numero(resumen?.tardanzas)}</b></span>
+      <span><i class="is-justified"></i>Justificadas <b>${numero(resumen?.justificadas)}</b></span>`;
+
+    renderFechas();
+    renderAlumnos();
+    renderSecciones();
+  }
+
+  function renderFechas() {
+    const contenedor = document.getElementById(IDS.dates);
+    if (!contenedor) return;
+    const fechas = Array.isArray(estadisticasData?.porFecha) ? estadisticasData.porFecha : [];
+    if (!fechas.length) {
+      contenedor.innerHTML = '<div class="stats-mini-empty"><i class="fa-regular fa-calendar-xmark"></i><span>Sin datos diarios en el periodo.</span></div>';
+      return;
+    }
+    contenedor.innerHTML = [...fechas].reverse().slice(0, 10).map(item => {
+      const total = Math.max(1, numero(item.total));
+      const ancho = Math.max(4, Math.min(100, numero(item.porcentajeAsistencia)));
+      return `<article class="stats-daily-item">
+        <div><strong>${seguro(fechaLegible(item.fecha))}</strong><small>${numero(item.total)} registros · ${numero(item.tardanzas)} tardanzas</small></div>
+        <div class="stats-daily-bar"><span style="width:${ancho}%"></span></div>
+        <b>${porcentaje(item.porcentajeAsistencia)}</b>
+      </article>`;
+    }).join('');
+  }
+
+  function renderAlumnos() {
+    const body = document.getElementById(IDS.studentsBody);
+    const cards = document.getElementById(IDS.studentsCards);
+    if (!body || !cards) return;
+    const alumnos = alumnosFiltrados();
+    asignar(IDS.studentCount, `${alumnos.length} ${alumnos.length === 1 ? 'estudiante' : 'estudiantes'}`);
+    body.innerHTML = alumnos.map(item => `<tr>
+      <td><strong>${seguro(item.alumno || 'Estudiante')}</strong><small>${numero(item.total)} registros</small></td>
+      <td><strong>${seguro(item.ano || '')} · ${seguro(item.seccion || '')}</strong><small>${seguro(item.turno || '')}</small></td>
+      <td><span class="stats-state is-present">${numero(item.presentes)}</span></td>
+      <td><span class="stats-state is-absent">${numero(item.ausentes)}</span></td>
+      <td><span class="stats-state is-late">${numero(item.tardanzas)}</span></td>
+      <td><span class="stats-state is-justified">${numero(item.justificadas)}</span></td>
+      <td><span class="stats-rate ${clasePorcentaje(item.porcentajeAsistencia)}">${porcentaje(item.porcentajeAsistencia)}</span></td>
+      <td><span class="stats-rate ${clasePorcentaje(item.porcentajeCumplimiento)}">${porcentaje(item.porcentajeCumplimiento)}</span></td>
+    </tr>`).join('');
+    cards.innerHTML = alumnos.map(item => `<article class="stats-mobile-card">
+      <header><div><strong>${seguro(item.alumno || 'Estudiante')}</strong><span>${seguro(item.ano || '')} · Sección ${seguro(item.seccion || '')} · ${seguro(item.turno || '')}</span></div><b class="stats-rate ${clasePorcentaje(item.porcentajeAsistencia)}">${porcentaje(item.porcentajeAsistencia)}</b></header>
+      <div class="stats-mobile-states"><span class="is-present">P ${numero(item.presentes)}</span><span class="is-absent">A ${numero(item.ausentes)}</span><span class="is-late">T ${numero(item.tardanzas)}</span><span class="is-justified">J ${numero(item.justificadas)}</span></div>
+      <footer><span>${numero(item.total)} registros</span><span>Cumplimiento: ${porcentaje(item.porcentajeCumplimiento)}</span></footer>
+    </article>`).join('');
+  }
+
+  function renderSecciones() {
+    const body = document.getElementById(IDS.sectionsBody);
+    if (!body) return;
+    const secciones = Array.isArray(estadisticasData?.porSeccion) ? estadisticasData.porSeccion : [];
+    body.innerHTML = secciones.map(item => `<tr>
+      <td><strong>${seguro(item.ano || '')} · Sección ${seguro(item.seccion || '')}</strong><small>${seguro(item.turno || '')}</small></td>
+      <td>${numero(item.total)}</td><td>${numero(item.presentes)}</td><td>${numero(item.ausentes)}</td><td>${numero(item.tardanzas)}</td><td>${numero(item.justificadas)}</td>
+      <td><span class="stats-rate ${clasePorcentaje(item.porcentajeAsistencia)}">${porcentaje(item.porcentajeAsistencia)}</span></td>
+    </tr>`).join('');
+  }
+
+  function restablecerFiltros() {
+    document.getElementById(IDS.from).value = primerDiaMesIso();
+    document.getElementById(IDS.to).value = hoyIso();
+    document.getElementById(IDS.classFilter).value = '';
+    document.getElementById(IDS.search).value = '';
+    estadisticasData = null;
+    cargarEstadisticas(true);
+  }
+
+  function exportarCsv() {
+    const alumnos = alumnosFiltrados();
+    if (!alumnos.length) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para exportar.', 'warning', 'Exportación vacía');
+      return;
+    }
+    const columnas = ['alumno', 'ano', 'seccion', 'turno', 'total', 'presentes', 'ausentes', 'tardanzas', 'justificadas', 'porcentajeAsistencia', 'porcentajeCumplimiento'];
+    const escaparCsv = valor => `"${String(valor ?? '').replace(/"/g, '""')}"`;
+    const csv = [columnas.join(','), ...alumnos.map(item => columnas.map(c => escaparCsv(item[c])).join(','))].join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = `Estadisticas_Asistencia_${String(document.getElementById(IDS.from)?.value || '')}_${String(document.getElementById(IDS.to)?.value || '')}.csv`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
+    enlace.remove();
+  }
+
+  function imprimirInforme() {
+    if (!numero(estadisticasData?.resumen?.total)) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para imprimir.', 'warning', 'Informe vacío');
+      return;
+    }
+    document.body.classList.add('stats-printing');
+    window.addEventListener('afterprint', () => document.body.classList.remove('stats-printing'), { once: true });
+    window.print();
+    setTimeout(() => document.body.classList.remove('stats-printing'), 1500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crearInterfazEstadisticas, { once: true });
+  else crearInterfazEstadisticas();
+})();
+/* EDUGESTION_STATS_PANEL_V1_END */
