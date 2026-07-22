@@ -138,7 +138,7 @@ function attendancePreviewKeyboard() {
     inline_keyboard: [
       [{ text: '💾 Guardar asistencia', callback_data: 'attendance:save' }],
       [
-        { text: '✏️ Corregir ausentes', callback_data: 'attendance:edit' },
+        { text: '✏️ Corregir estados', callback_data: 'attendance:edit' },
         { text: '❌ Cancelar', callback_data: 'attendance:cancel' },
       ],
     ],
@@ -208,7 +208,7 @@ async function linkAccount(message, code) {
 
 function formatClassLine(item) {
   const state = item.registrada
-    ? `✅ Registrada · ${item.presentes} presentes · ${item.ausentes} ausentes`
+    ? `✅ Registrada · P:${item.presentes || 0} · A:${item.ausentes || 0} · T:${item.tardanzas || 0} · J:${item.justificadas || 0}`
     : '🟡 Asistencia pendiente';
   return `<b>${escapeHtml(item.horaInicio || '--:--')}–${escapeHtml(item.horaFin || '--:--')}</b> · ${escapeHtml(item.ano)} – Sección ${escapeHtml(item.seccion)}\n${escapeHtml(item.turno || '')} · ${item.total} estudiantes\n${state}`;
 }
@@ -246,7 +246,9 @@ function splitStudentList(students) {
   const chunks = [];
   let current = '';
   students.forEach((student, index) => {
-    const line = `${index + 1}. ${escapeHtml(student.nombre || 'Estudiante')}\n`;
+    const icon = escapeHtml(student.icono || '⚪');
+    const state = escapeHtml(student.estado || 'Presente');
+    const line = `${index + 1}. ${icon} ${escapeHtml(student.nombre || 'Estudiante')} · <i>${state}</i>\n`;
     if ((current + line).length > MAX_TELEGRAM_MESSAGE && current) {
       chunks.push(current.trim());
       current = line;
@@ -273,9 +275,13 @@ async function openClass(chatId, source, index) {
     return;
   }
 
+  const correctionNotice = result.registrada
+    ? '\n⚠️ Esta clase ya tiene asistencia. Al guardar, se actualizará el registro anterior.'
+    : '';
+
   await sendMessage(
     chatId,
-    `✅ <b>Pasar asistencia</b>\n\nCurso: <b>${escapeHtml(clase.ano || '')} – Sección ${escapeHtml(clase.seccion || '')}</b>\nHorario: <b>${escapeHtml(clase.horaInicio || '')}–${escapeHtml(clase.horaFin || '')}</b>\nFecha: <b>${escapeHtml(clase.fecha || '')}</b>\nTotal: <b>${students.length} estudiantes</b>\n\nLista numerada:`,
+    `✅ <b>${result.registrada ? 'Consultar o corregir asistencia' : 'Pasar asistencia'}</b>\n\nCurso: <b>${escapeHtml(clase.ano || '')} – Sección ${escapeHtml(clase.seccion || '')}</b>\nHorario: <b>${escapeHtml(clase.horaInicio || '')}–${escapeHtml(clase.horaFin || '')}</b>\nFecha: <b>${escapeHtml(clase.fecha || '')}</b>\nTotal: <b>${students.length} estudiantes</b>${correctionNotice}\n\nLista numerada y estado actual:`,
   );
 
   for (const chunk of splitStudentList(students)) {
@@ -284,7 +290,7 @@ async function openClass(chatId, source, index) {
 
   await sendMessage(
     chatId,
-    'Escribe solamente los números de los <b>ausentes</b>, separados por comas.\n\nEjemplo: <code>2, 5, 9</code>\n\nSi todos asistieron, escribe <code>0</code> o pulsa <b>Todos presentes</b>.',
+    'Escribe los estados especiales usando este formato:\n\n<code>A: 2,5; T: 3; J: 4</code>\n\n<b>A</b> = ausente · <b>T</b> = tardanza · <b>J</b> = justificada.\nLos estudiantes no indicados quedarán como presentes.\n\nTambién puedes escribir <code>0</code> o pulsar <b>Todos presentes</b>.',
     { reply_markup: attendanceInputKeyboard() },
   );
 }
@@ -293,13 +299,20 @@ async function previewAttendance(chatId, source, text) {
   const telegramId = teacherTelegramId(source);
   const result = await callEduGestion('botPrevisualizarAsistencia', { telegramId, texto: text });
   const absent = Array.isArray(result.ausentes) ? result.ausentes : [];
-  const absentText = absent.length
-    ? absent.map((item) => `${item.numero}. ${escapeHtml(item.nombre)}`).join('\n')
+  const late = Array.isArray(result.tardanzas) ? result.tardanzas : [];
+  const justified = Array.isArray(result.justificadas) ? result.justificadas : [];
+
+  const formatPeople = (items) => items.length
+    ? items.map((item) => `${item.numero}. ${escapeHtml(item.nombre)}`).join('\n')
     : 'Ninguno';
+
+  const overwrite = result.sobrescribira
+    ? '\n\n⚠️ <b>Esta clase ya tenía asistencia.</b> Al confirmar se reemplazará con este nuevo resumen.'
+    : '';
 
   await sendMessage(
     chatId,
-    `📋 <b>Resumen antes de guardar</b>\n\nCurso: <b>${escapeHtml(result.clase?.ano || '')} – Sección ${escapeHtml(result.clase?.seccion || '')}</b>\nPresentes: <b>${result.presentes}</b>\nAusentes: <b>${absent.length}</b>\nTotal: <b>${result.total}</b>\n\n<b>Alumnos ausentes:</b>\n${absentText}\n\nRevisa la información y confirma.`,
+    `📋 <b>Resumen antes de guardar</b>\n\nCurso: <b>${escapeHtml(result.clase?.ano || '')} – Sección ${escapeHtml(result.clase?.seccion || '')}</b>\n🟢 Presentes: <b>${result.presentes || 0}</b>\n🔴 Ausentes: <b>${absent.length}</b>\n🟠 Tardanzas: <b>${late.length}</b>\n🟣 Justificadas: <b>${justified.length}</b>\nTotal: <b>${result.total || 0}</b>\n\n<b>Ausentes</b>\n${formatPeople(absent)}\n\n<b>Tardanzas</b>\n${formatPeople(late)}\n\n<b>Justificadas</b>\n${formatPeople(justified)}${overwrite}\n\nRevisa la información y confirma.`,
     { reply_markup: attendancePreviewKeyboard() },
   );
 }
@@ -307,9 +320,12 @@ async function previewAttendance(chatId, source, text) {
 async function previewAllPresent(chatId, source) {
   const telegramId = teacherTelegramId(source);
   const result = await callEduGestion('botTodosPresentes', { telegramId });
+  const overwrite = result.sobrescribira
+    ? '\n\n⚠️ Esta clase ya tenía asistencia y será actualizada al confirmar.'
+    : '';
   await sendMessage(
     chatId,
-    `📋 <b>Resumen antes de guardar</b>\n\nCurso: <b>${escapeHtml(result.clase?.ano || '')} – Sección ${escapeHtml(result.clase?.seccion || '')}</b>\nPresentes: <b>${result.presentes}</b>\nAusentes: <b>0</b>\nTotal: <b>${result.total}</b>\n\nTodos los estudiantes fueron marcados como presentes.`,
+    `📋 <b>Resumen antes de guardar</b>\n\nCurso: <b>${escapeHtml(result.clase?.ano || '')} – Sección ${escapeHtml(result.clase?.seccion || '')}</b>\n🟢 Presentes: <b>${result.presentes || 0}</b>\n🔴 Ausentes: <b>0</b>\n🟠 Tardanzas: <b>0</b>\n🟣 Justificadas: <b>0</b>\nTotal: <b>${result.total || 0}</b>\n\nTodos los estudiantes fueron marcados como presentes.${overwrite}`,
     { reply_markup: attendancePreviewKeyboard() },
   );
 }
@@ -319,7 +335,7 @@ async function saveAttendance(chatId, source) {
   const result = await callEduGestion('botGuardarAsistencia', { telegramId });
   await sendMessage(
     chatId,
-    `✅ <b>Asistencia guardada</b>\n\nCurso: <b>${escapeHtml(result.clase?.ano || '')} – Sección ${escapeHtml(result.clase?.seccion || '')}</b>\nPresentes: <b>${result.presentes}</b>\nAusentes: <b>${result.ausentes}</b>\nTotal: <b>${result.total}</b>\n\nLos cambios ya están disponibles en EduGestión.`,
+    `✅ <b>${result.modificada ? 'Asistencia actualizada' : 'Asistencia guardada'}</b>\n\nCurso: <b>${escapeHtml(result.clase?.ano || '')} – Sección ${escapeHtml(result.clase?.seccion || '')}</b>\n🟢 Presentes: <b>${result.presentes || 0}</b>\n🔴 Ausentes: <b>${result.ausentes || 0}</b>\n🟠 Tardanzas: <b>${result.tardanzas || 0}</b>\n🟣 Justificadas: <b>${result.justificadas || 0}</b>\nTotal: <b>${result.total || 0}</b>\n\nLos cambios ya están disponibles en EduGestión.`,
     { reply_markup: mainMenuKeyboard(true) },
   );
 }
@@ -352,7 +368,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /estado muestra la cuenta vinculada.\n\nPara pasar asistencia, selecciona una clase y escribe los números de los alumnos ausentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -458,7 +474,7 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'attendance:edit') {
     await sendMessage(
       chatId,
-      '✏️ Escribe nuevamente los números de los alumnos ausentes, separados por comas. Si todos asistieron, escribe <code>0</code>.',
+      '✏️ Escribe nuevamente todos los estados especiales. Ejemplo:\n<code>A: 2,5; T: 3; J: 4</code>\n\nLos estudiantes no indicados quedarán presentes. Para todos presentes escribe <code>0</code>.',
       { reply_markup: attendanceInputKeyboard() },
     );
     return;
@@ -492,7 +508,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase1-ready',
+        status: 'phase1.2-ready',
       });
     }
 
