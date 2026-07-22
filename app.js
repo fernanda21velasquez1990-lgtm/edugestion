@@ -778,16 +778,53 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     buscarAlumnoAsistencia?.addEventListener('input', renderAsistencia);
 
-    btnTodosPresentes?.addEventListener('click', () => {
-      alumnosSeccion.forEach(alumno => { asistenciaTemporal[alumno.id] = 'Presente'; });
+    const ESTADOS_ASISTENCIA = Object.freeze(['Presente', 'Ausente', 'Tardanza', 'Justificada']);
+
+    function normalizarEstadoAsistencia(valor) {
+      const texto = String(valor || '').trim().toLowerCase();
+      if (texto === 'ausente') return 'Ausente';
+      if (texto === 'tardanza' || texto === 'tarde') return 'Tardanza';
+      if (texto === 'justificada' || texto === 'justificado' || texto === 'ausencia justificada') return 'Justificada';
+      return 'Presente';
+    }
+
+    function aplicarEstadoMasivo(estado) {
+      if (!ESTADOS_ASISTENCIA.includes(estado)) return;
+      alumnosSeccion.forEach(alumno => { asistenciaTemporal[alumno.id] = estado; });
       renderAsistencia();
       actualizarStatsSeccion();
+    }
+
+    function asegurarBotonesMasivosAvanzados() {
+      const contenedor = btnTodosPresentes?.parentElement;
+      if (!contenedor || document.getElementById('btn-todos-tardanza')) return;
+
+      const tardanza = document.createElement('button');
+      tardanza.type = 'button';
+      tardanza.id = 'btn-todos-tardanza';
+      tardanza.className = 'attendance-bulk-extra attendance-bulk-extra--late';
+      tardanza.innerHTML = '<i class="fa-solid fa-clock"></i><span>Todos con tardanza</span>';
+      tardanza.addEventListener('click', () => aplicarEstadoMasivo('Tardanza'));
+
+      const justificada = document.createElement('button');
+      justificada.type = 'button';
+      justificada.id = 'btn-todos-justificada';
+      justificada.className = 'attendance-bulk-extra attendance-bulk-extra--justified';
+      justificada.innerHTML = '<i class="fa-solid fa-file-circle-check"></i><span>Todos justificados</span>';
+      justificada.addEventListener('click', () => aplicarEstadoMasivo('Justificada'));
+
+      contenedor.appendChild(tardanza);
+      contenedor.appendChild(justificada);
+    }
+
+    asegurarBotonesMasivosAvanzados();
+
+    btnTodosPresentes?.addEventListener('click', () => {
+      aplicarEstadoMasivo('Presente');
     });
 
     btnTodosAusentes?.addEventListener('click', () => {
-      alumnosSeccion.forEach(alumno => { asistenciaTemporal[alumno.id] = 'Ausente'; });
-      renderAsistencia();
-      actualizarStatsSeccion();
+      aplicarEstadoMasivo('Ausente');
     });
 
     btnCargarListaFiltrada.onclick = cargarAlumnosDeSeccion;
@@ -851,7 +888,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         contadorAsistencia.textContent = `${alumnosSeccion.length} Alumnos`;
         alumnosSeccion.forEach(al => {
           estadisticasAlumnos[al.id] = { faltasSemana: 0, faltasMes: 0 };
-          if (!['Presente', 'Ausente'].includes(asistenciaTemporal[al.id])) asistenciaTemporal[al.id] = 'Presente';
+          asistenciaTemporal[al.id] = normalizarEstadoAsistencia(asistenciaTemporal[al.id]);
         });
         renderAsistencia();
         actualizarStatsSeccion();
@@ -888,11 +925,12 @@ const SESSION_KEY = 'edugestion_session_v2';
         porcentajeAsistencia.textContent = '0%';
         barPresentes.style.width = '0%';
         barAusentes.style.width = '0%';
+        actualizarResumenEstadosExtra({ tardanzas: 0, justificadas: 0 });
         return;
       }
 
       alumnosSeccion.forEach(alumno => {
-        if (!['Presente', 'Ausente'].includes(asistenciaTemporal[alumno.id])) asistenciaTemporal[alumno.id] = 'Presente';
+        asistenciaTemporal[alumno.id] = normalizarEstadoAsistencia(asistenciaTemporal[alumno.id]);
       });
 
       const termino = normalizarTextoAsistencia(buscarAlumnoAsistencia?.value || '');
@@ -909,34 +947,83 @@ const SESSION_KEY = 'edugestion_session_v2';
         return;
       }
 
+      const configuracionEstados = {
+        Presente: { icono: 'fa-check', texto: 'PRES', clase: 'is-present' },
+        Ausente: { icono: 'fa-xmark', texto: 'AUS', clase: 'is-absent' },
+        Tardanza: { icono: 'fa-clock', texto: 'TARD', clase: 'is-late' },
+        Justificada: { icono: 'fa-file-circle-check', texto: 'JUST', clase: 'is-justified' }
+      };
+
       visibles.forEach((al, indice) => {
         const idDom = `alumno-${String(al.id).replace(/[^a-zA-Z0-9_-]/g, '-')}-${indice}`;
         const nombre = escaparHTML(al.nombre || 'Estudiante');
         const cedula = escaparHTML(al.cedula || 'Sin cédula');
-        const estadoInicial = asistenciaTemporal[al.id] === 'Ausente' ? 'Ausente' : 'Presente';
-        const clasePresente = estadoInicial === 'Presente'
-          ? 'w-20 py-2 rounded-xl bg-green-500 text-white font-black text-xs shadow-sm transition'
-          : 'w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition';
-        const claseAusente = estadoInicial === 'Ausente'
-          ? 'w-20 py-2 rounded-xl bg-red-500 text-white font-black text-xs shadow-sm transition'
-          : 'w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition';
+        const estadoInicial = normalizarEstadoAsistencia(asistenciaTemporal[al.id]);
+        const botones = ESTADOS_ASISTENCIA.map(estado => {
+          const cfg = configuracionEstados[estado];
+          const activo = estadoInicial === estado ? ` ${cfg.clase}` : '';
+          const idBoton = `${estado.charAt(0).toLowerCase()}-${idDom}`;
+          return `<button id="${idBoton}" type="button" class="attendance-state-button${activo}" data-attendance-state="${estado}" aria-label="Marcar ${estado.toLowerCase()} a ${nombre}"><i class="fa-solid ${cfg.icono}"></i><span>${cfg.texto}</span></button>`;
+        }).join('');
+
         const d = document.createElement('div');
-        d.className = 'py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:bg-gray-50 px-2 rounded-xl transition';
-        d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-bold"><i class="fa-regular fa-calendar-check mr-1"></i>Registro del día</span></div></div></div><div class="flex gap-2 self-end sm:self-auto"><button id="p-${idDom}" type="button" class="${clasePresente}" aria-label="Marcar presente a ${nombre}"><i class="fa-solid fa-check mr-1"></i> PRES</button><button id="i-${idDom}" type="button" class="${claseAusente}" aria-label="Marcar ausente a ${nombre}"><i class="fa-solid fa-xmark mr-1"></i> AUS</button></div>`;
-        d.querySelector(`#p-${idDom}`).addEventListener('click', () => setA(al.id, 'Presente', idDom));
-        d.querySelector(`#i-${idDom}`).addEventListener('click', () => setA(al.id, 'Ausente', idDom));
+        d.className = 'attendance-student-row attendance-student-row--advanced';
+        d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span></div></div></div><div class="attendance-state-grid">${botones}</div>`;
+        d.querySelectorAll('[data-attendance-state]').forEach(boton => {
+          boton.addEventListener('click', () => setA(al.id, boton.dataset.attendanceState, idDom));
+        });
         listaAlumnosAsistencia.appendChild(d);
       });
     }
 
     window.setA = function(id, est, idDom = id) {
-      asistenciaTemporal[id] = est;
-      const p = document.getElementById(`p-${idDom}`);
-      const i = document.getElementById(`i-${idDom}`);
-      if (!p || !i) return;
-      if(est === 'Presente') { p.className="w-20 py-2 rounded-xl bg-green-500 text-white font-black text-xs shadow-sm transition"; i.className="w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition"; }
-      else { p.className="w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition"; i.className="w-20 py-2 rounded-xl bg-red-500 text-white font-black text-xs shadow-sm transition"; }
+      const estado = normalizarEstadoAsistencia(est);
+      asistenciaTemporal[id] = estado;
+      const fila = document.getElementById(`p-${idDom}`)?.closest('.attendance-student-row--advanced')
+        || document.querySelector(`#${CSS.escape(String(estado.charAt(0).toLowerCase() + '-' + idDom))}`)?.closest('.attendance-student-row--advanced');
+      if (fila) {
+        fila.querySelectorAll('[data-attendance-state]').forEach(boton => {
+          boton.classList.remove('is-present', 'is-absent', 'is-late', 'is-justified');
+          if (boton.dataset.attendanceState === estado) {
+            const mapa = { Presente: 'is-present', Ausente: 'is-absent', Tardanza: 'is-late', Justificada: 'is-justified' };
+            boton.classList.add(mapa[estado]);
+          }
+        });
+        const etiqueta = fila.querySelector('.attendance-current-state');
+        if (etiqueta) {
+          etiqueta.className = `attendance-current-state attendance-current-state--${estado.toLowerCase()}`;
+          etiqueta.textContent = estado;
+        }
+      } else {
+        renderAsistencia();
+      }
       actualizarStatsSeccion();
+    }
+
+    function asegurarResumenEstadosExtra() {
+      let contenedor = document.getElementById('attendance-extra-stats');
+      if (contenedor) return contenedor;
+
+      // Inserta los estados adicionales dentro del bloque de estadísticas del
+      // resumen lateral. Así nunca quedan flotando sobre la lista o el acta.
+      const bloqueEstadisticas = statAusentes?.closest('.space-y-3')
+        || statPresentes?.closest('.space-y-3');
+      if (!bloqueEstadisticas) return null;
+
+      contenedor = document.createElement('div');
+      contenedor.id = 'attendance-extra-stats';
+      contenedor.className = 'attendance-extra-stats';
+      contenedor.innerHTML = '<article><span class="attendance-extra-stats__icon attendance-extra-stats__icon--late"><i class="fa-solid fa-clock"></i></span><div><small>Tardanzas</small><strong id="stat-tardanzas">0</strong></div></article><article><span class="attendance-extra-stats__icon attendance-extra-stats__icon--justified"><i class="fa-solid fa-file-circle-check"></i></span><div><small>Justificadas</small><strong id="stat-justificadas">0</strong></div></article>';
+      bloqueEstadisticas.appendChild(contenedor);
+      return contenedor;
+    }
+
+    function actualizarResumenEstadosExtra({ tardanzas, justificadas }) {
+      asegurarResumenEstadosExtra();
+      const tard = document.getElementById('stat-tardanzas');
+      const just = document.getElementById('stat-justificadas');
+      if (tard) tard.textContent = String(tardanzas || 0);
+      if (just) just.textContent = String(justificadas || 0);
     }
 
     function actualizarStatsSeccion() {
@@ -947,18 +1034,28 @@ const SESSION_KEY = 'edugestion_session_v2';
         porcentajeAsistencia.textContent = '0%';
         barPresentes.style.width = '0%';
         barAusentes.style.width = '0%';
+        actualizarResumenEstadosExtra({ tardanzas: 0, justificadas: 0 });
         return;
       }
       let presentes = 0;
       let ausentes = 0;
+      let tardanzas = 0;
+      let justificadas = 0;
       alumnosSeccion.forEach(alumno => {
-        if (asistenciaTemporal[alumno.id] === 'Ausente') ausentes += 1;
+        const estado = normalizarEstadoAsistencia(asistenciaTemporal[alumno.id]);
+        asistenciaTemporal[alumno.id] = estado;
+        if (estado === 'Ausente') ausentes += 1;
+        else if (estado === 'Tardanza') tardanzas += 1;
+        else if (estado === 'Justificada') justificadas += 1;
         else presentes += 1;
       });
       statPresentes.textContent = presentes;
       statAusentes.textContent = ausentes;
-      const pctPresentes = Math.round((presentes / total) * 100);
-      const pctAusentes = 100 - pctPresentes;
+      actualizarResumenEstadosExtra({ tardanzas, justificadas });
+      const asistenciaEfectiva = presentes + tardanzas;
+      const noAsistencia = ausentes + justificadas;
+      const pctPresentes = Math.round((asistenciaEfectiva / total) * 100);
+      const pctAusentes = Math.round((noAsistencia / total) * 100);
       barPresentes.style.width = `${pctPresentes}%`;
       barAusentes.style.width = `${pctAusentes}%`;
       porcentajeAsistencia.textContent = `${pctPresentes}%`;
@@ -1011,7 +1108,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         btnGuardarAsistencia.disabled = true;
         btnGuardarAsistencia.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Guardando asistencia...';
         try {
-          const payload = { materia: profesorActual.materia, ano: selectFiltroAno.value, seccion: selectFiltroSeccion.value, turno: selectFiltroTurno.value, fecha: fechaAsistencia.value, asistencia: asistenciaTemporal };
+          const payload = { materia: profesorActual.materia, ano: selectFiltroAno.value, seccion: selectFiltroSeccion.value, turno: selectFiltroTurno.value, fecha: fechaAsistencia.value, asistencia: asistenciaTemporal, origen: 'Web', modificadoPor: profesorActual.nombre || profesorActual.usuario || 'Docente' };
           await apiRequest('guardarAsistencia', payload);
           agendaResumenCache.delete(claveRegistroAgenda({
             ano: selectFiltroAno.value,

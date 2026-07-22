@@ -4076,3 +4076,309 @@ body.modal-open {
     letter-spacing: 0.1em;
   }
 }
+
+/* =====================================================
+   ASISTENCIA AVANZADA · FASE 1.1
+   Presente, Ausente, Tardanza y Justificada
+   ===================================================== */
+.attendance-student-row--advanced {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem .55rem;
+  border-bottom: 1px solid #edf3f8;
+  transition: background .18s ease, transform .18s ease;
+}
+
+.attendance-student-row--advanced:hover {
+  background: #f8fbfe;
+}
+
+.attendance-state-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(58px, 1fr));
+  gap: .42rem;
+  flex: 0 0 auto;
+}
+
+.attendance-state-button {
+  min-width: 60px;
+  padding: .58rem .52rem;
+  border: 1px solid #dbe7f1;
+  border-radius: .78rem;
+  background: #f5f8fb;
+  color: #8293a5;
+  font-size: .68rem;
+  font-weight: 900;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
+  transition: transform .16s ease, box-shadow .16s ease, color .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.attendance-state-button:hover {
+  transform: translateY(-1px);
+  border-color: #9dc9ea;
+  background: #fff;
+}
+
+.attendance-state-button.is-present {
+  border-color: #22c55e;
+  background: #22c55e;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(34, 197, 94, .2);
+}
+
+.attendance-state-button.is-absent {
+  border-color: #ef4444;
+  background: #ef4444;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(239, 68, 68, .2);
+}
+
+.attendance-state-button.is-late {
+  border-color: #f59e0b;
+  background: #f59e0b;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(245, 158, 11, .2);
+}
+
+.attendance-state-button.is-justified {
+  border-color: #8b5cf6;
+  background: #8b5cf6;
+  color: #fff;
+  box-shadow: 0 7px 16px rgba(139, 92, 246, .2);
+}
+
+.attendance-current-state {
+  padding: .22rem .5rem;
+  border-radius: 999px;
+  font-size: .62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .025em;
+}
+
+.attendance-current-state--presente { background: #dcfce7; color: #15803d; }
+.attendance-current-state--ausente { background: #fee2e2; color: #b91c1c; }
+.attendance-current-state--tardanza { background: #fef3c7; color: #b45309; }
+.attendance-current-state--justificada { background: #ede9fe; color: #6d28d9; }
+
+.attendance-bulk-extra {
+  border: 1px solid #dbe7f1;
+  border-radius: .72rem;
+  padding: .56rem .7rem;
+  font-size: .68rem;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  background: #fff;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.attendance-bulk-extra:hover { transform: translateY(-1px); }
+.attendance-bulk-extra--late { color: #b45309; background: #fffbeb; border-color: #fde68a; }
+.attendance-bulk-extra--justified { color: #6d28d9; background: #f5f3ff; border-color: #ddd6fe; }
+
+.attendance-extra-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .65rem;
+  margin-top: .8rem;
+}
+
+.attendance-extra-stats article {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  border: 1px solid #e2ebf3;
+  border-radius: .9rem;
+  padding: .72rem;
+  background: #f9fbfd;
+}
+
+.attendance-extra-stats article > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.attendance-extra-stats small {
+  color: #8a99a9;
+  font-size: .62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.attendance-extra-stats strong {
+  color: #173b67;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.attendance-extra-stats__icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: .72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.attendance-extra-stats__icon--late { color: #b45309; background: #fef3c7; }
+.attendance-extra-stats__icon--justified { color: #6d28d9; background: #ede9fe; }
+
+@media (max-width: 900px) {
+  .attendance-student-row--advanced {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .attendance-state-grid {
+    width: 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .attendance-state-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .attendance-state-button {
+    min-height: 42px;
+  }
+}
+
+/* =====================================================
+   FASE 1.1 · CORRECCIÓN DE DISTRIBUCIÓN
+   Evita que acciones y estadísticas se monten sobre
+   el resumen lateral o sobre otros controles.
+   ===================================================== */
+
+/* La búsqueda ocupa una fila y las acciones otra fila. */
+.attendance-list-toolbar {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: .72rem !important;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+}
+
+.attendance-search {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.attendance-search input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Los cuatro botones quedan contenidos dentro del panel central. */
+.attendance-bulk-actions {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: .48rem !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  flex: none !important;
+}
+
+.attendance-bulk-actions button,
+.attendance-bulk-extra {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 42px;
+  padding: .52rem .35rem !important;
+  white-space: normal !important;
+  line-height: 1.12 !important;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* La fila del alumno permite que los cuatro estados se reduzcan sin desbordarse. */
+.attendance-student-row--advanced > :first-child {
+  flex: 1 1 145px;
+  min-width: 0;
+}
+
+.attendance-state-grid {
+  flex: 0 1 270px;
+  min-width: 0;
+  width: min(270px, 100%);
+  grid-template-columns: repeat(4, minmax(46px, 1fr));
+}
+
+.attendance-state-button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: .34rem;
+}
+
+/* Tardanzas y justificadas forman parte del resumen, en filas compactas. */
+.attendance-extra-stats {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: .45rem !important;
+  width: 100%;
+  min-width: 0;
+  margin-top: .75rem !important;
+  padding-top: .75rem;
+  border-top: 1px solid #edf2f7;
+}
+
+.attendance-extra-stats article {
+  width: 100%;
+  min-width: 0;
+  padding: .56rem .62rem !important;
+  gap: .55rem !important;
+}
+
+.attendance-extra-stats article > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.attendance-extra-stats small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attendance-extra-stats strong {
+  line-height: 1.05;
+}
+
+.attendance-extra-stats__icon {
+  width: 1.85rem !important;
+  height: 1.85rem !important;
+  border-radius: .62rem !important;
+}
+
+@media (max-width: 1100px) {
+  .attendance-bulk-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .attendance-state-grid {
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .attendance-bulk-actions,
+  .attendance-state-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
