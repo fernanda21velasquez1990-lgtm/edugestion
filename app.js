@@ -1870,3 +1870,349 @@ const SESSION_KEY = 'edugestion_session_v2';
             window.open(url, '_blank');
         });
     }
+
+/* =====================================================
+   EDUGESTIÓN · VINCULACIÓN SEGURA CON TELEGRAM
+   Genera un código temporal de 6 dígitos desde la cuenta
+   autenticada del docente. No contiene tokens ni secretos.
+   ===================================================== */
+(() => {
+  const TELEGRAM_UI = {
+    buttonId: 'btn-telegram-link',
+    modalId: 'telegram-link-modal',
+    titleId: 'telegram-link-title',
+    contentId: 'telegram-link-content',
+    closeSelector: '[data-close-telegram-link="true"]'
+  };
+
+  let telegramCountdownTimer = null;
+
+  function escapeTelegramUi(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function telegramButton() {
+    return document.getElementById(TELEGRAM_UI.buttonId);
+  }
+
+  function telegramModal() {
+    return document.getElementById(TELEGRAM_UI.modalId);
+  }
+
+  function setTelegramButtonState(state = 'unknown') {
+    const button = telegramButton();
+    if (!button) return;
+    button.dataset.telegramState = state;
+    button.classList.toggle('is-linked', state === 'linked');
+    button.classList.toggle('is-pending', state === 'pending');
+    button.title = state === 'linked'
+      ? 'Telegram vinculado'
+      : state === 'pending'
+        ? 'Código de Telegram pendiente'
+        : 'Vincular Telegram';
+    button.setAttribute('aria-label', button.title);
+  }
+
+  function stopTelegramCountdown() {
+    if (telegramCountdownTimer) {
+      clearInterval(telegramCountdownTimer);
+      telegramCountdownTimer = null;
+    }
+  }
+
+  function closeTelegramModal() {
+    const modal = telegramModal();
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('telegram-modal-open');
+    stopTelegramCountdown();
+  }
+
+  function openTelegramModalShell() {
+    const modal = telegramModal();
+    if (!modal) return;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('telegram-modal-open');
+    setTimeout(() => modal.querySelector(TELEGRAM_UI.closeSelector)?.focus(), 40);
+  }
+
+  function setTelegramModalContent(html, title = 'Telegram docente') {
+    const titleNode = document.getElementById(TELEGRAM_UI.titleId);
+    const contentNode = document.getElementById(TELEGRAM_UI.contentId);
+    if (titleNode) titleNode.textContent = title;
+    if (contentNode) contentNode.innerHTML = html;
+  }
+
+  function showTelegramLoading(message = 'Consultando tu vinculación…') {
+    setTelegramModalContent(`
+      <div class="telegram-link-loading">
+        <i class="fa-solid fa-circle-notch fa-spin"></i>
+        <p>${escapeTelegramUi(message)}</p>
+      </div>
+    `);
+  }
+
+  function showTelegramError(error) {
+    const message = error?.message || 'No fue posible completar la operación.';
+    setTelegramButtonState('unknown');
+    setTelegramModalContent(`
+      <div class="telegram-link-message is-error">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div>
+          <strong>No se pudo conectar con Telegram</strong>
+          <p>${escapeTelegramUi(message)}</p>
+        </div>
+      </div>
+      <div class="telegram-link-actions">
+        <button class="telegram-secondary-button" id="telegram-retry-status" type="button">
+          <i class="fa-solid fa-rotate-right"></i> Reintentar
+        </button>
+      </div>
+    `);
+    document.getElementById('telegram-retry-status')?.addEventListener('click', loadTelegramStatus);
+  }
+
+  function linkedTelegramView(data = {}) {
+    const name = data.telegramNombre || data.telegramUsuario || 'Cuenta de Telegram';
+    const username = data.telegramUsuario ? `@${String(data.telegramUsuario).replace(/^@/, '')}` : '';
+    setTelegramButtonState('linked');
+    setTelegramModalContent(`
+      <div class="telegram-link-success-icon"><i class="fa-brands fa-telegram"></i></div>
+      <div class="telegram-link-centered">
+        <span class="telegram-link-badge is-linked"><i class="fa-solid fa-circle-check"></i> Cuenta vinculada</span>
+        <h3>${escapeTelegramUi(name)}</h3>
+        ${username ? `<p class="telegram-link-username">${escapeTelegramUi(username)}</p>` : ''}
+        <p>Este Telegram ya puede consultar clases y registrar asistencia en nombre del docente autenticado.</p>
+      </div>
+      <div class="telegram-link-security-note">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>La contraseña de EduGestión nunca se comparte con Telegram.</span>
+      </div>
+      <div class="telegram-link-actions">
+        <button class="telegram-secondary-button" id="telegram-refresh-status" type="button">
+          <i class="fa-solid fa-rotate"></i> Actualizar estado
+        </button>
+        <button class="telegram-danger-button" id="telegram-unlink-account" type="button">
+          <i class="fa-solid fa-link-slash"></i> Desvincular
+        </button>
+      </div>
+    `, 'Telegram vinculado');
+    document.getElementById('telegram-refresh-status')?.addEventListener('click', loadTelegramStatus);
+    document.getElementById('telegram-unlink-account')?.addEventListener('click', unlinkTelegramAccount);
+  }
+
+  function unlinkedTelegramView() {
+    setTelegramButtonState('unknown');
+    setTelegramModalContent(`
+      <div class="telegram-link-intro-icon"><i class="fa-brands fa-telegram"></i></div>
+      <div class="telegram-link-centered">
+        <span class="telegram-link-badge"><i class="fa-solid fa-link"></i> Sin vincular</span>
+        <h3>Conecta tu cuenta docente</h3>
+        <p>Generaremos un código temporal de seis dígitos. El código vence en 10 minutos y solo puede utilizarse una vez.</p>
+      </div>
+      <ol class="telegram-link-steps">
+        <li><span>1</span><p>Pulsa <b>Generar código</b>.</p></li>
+        <li><span>2</span><p>Abre el bot <b>EduGestion Asistencia</b> en Telegram.</p></li>
+        <li><span>3</span><p>Envía <code>/vincular CÓDIGO</code>.</p></li>
+      </ol>
+      <div class="telegram-link-actions is-single">
+        <button class="telegram-primary-button" id="telegram-generate-code" type="button">
+          <i class="fa-solid fa-key"></i> Generar código temporal
+        </button>
+      </div>
+    `, 'Vincular Telegram');
+    document.getElementById('telegram-generate-code')?.addEventListener('click', generateTelegramCode);
+  }
+
+  function startTelegramCountdown(minutes = 10) {
+    stopTelegramCountdown();
+    const deadline = Date.now() + Math.max(1, Number(minutes) || 10) * 60 * 1000;
+    const label = document.getElementById('telegram-code-countdown');
+
+    const update = () => {
+      const remaining = Math.max(0, deadline - Date.now());
+      const totalSeconds = Math.ceil(remaining / 1000);
+      const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+      const ss = String(totalSeconds % 60).padStart(2, '0');
+      if (label) label.textContent = `${mm}:${ss}`;
+      if (remaining <= 0) {
+        stopTelegramCountdown();
+        setTelegramButtonState('unknown');
+        const generateButton = document.getElementById('telegram-regenerate-code');
+        if (generateButton) generateButton.disabled = false;
+        const status = document.getElementById('telegram-code-status');
+        if (status) status.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> El código venció. Genera uno nuevo.';
+      }
+    };
+    update();
+    telegramCountdownTimer = setInterval(update, 1000);
+  }
+
+  async function copyTelegramCommand(command) {
+    try {
+      await navigator.clipboard.writeText(command);
+    } catch (error) {
+      const area = document.createElement('textarea');
+      area.value = command;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+    const button = document.getElementById('telegram-copy-command');
+    if (button) {
+      const previous = button.innerHTML;
+      button.innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+      setTimeout(() => { button.innerHTML = previous; }, 1600);
+    }
+    if (typeof mostrarToast === 'function') {
+      mostrarToast('Comando copiado. Pégalo en el bot de Telegram.', 'success', 'Código listo');
+    }
+  }
+
+  function codeTelegramView(data) {
+    const code = String(data.codigo || '').replace(/\D/g, '');
+    const command = `/vincular ${code}`;
+    setTelegramButtonState('pending');
+    setTelegramModalContent(`
+      <div class="telegram-link-code-header">
+        <span class="telegram-link-badge is-pending"><i class="fa-solid fa-hourglass-half"></i> Código temporal</span>
+        <p id="telegram-code-status"><i class="fa-regular fa-clock"></i> Vence en <b id="telegram-code-countdown">10:00</b></p>
+      </div>
+      <div class="telegram-link-code" aria-label="Código temporal de Telegram">${escapeTelegramUi(code)}</div>
+      <div class="telegram-link-command">
+        <code>${escapeTelegramUi(command)}</code>
+        <button id="telegram-copy-command" type="button" title="Copiar comando">
+          <i class="fa-regular fa-copy"></i> Copiar
+        </button>
+      </div>
+      <div class="telegram-link-security-note">
+        <i class="fa-solid fa-mobile-screen-button"></i>
+        <span>Abre <b>EduGestion Asistencia</b> en Telegram y envía el comando copiado.</span>
+      </div>
+      <div class="telegram-link-actions">
+        <button class="telegram-secondary-button" id="telegram-check-link" type="button">
+          <i class="fa-solid fa-rotate"></i> Ya lo envié, verificar
+        </button>
+        <button class="telegram-primary-button" id="telegram-regenerate-code" type="button">
+          <i class="fa-solid fa-key"></i> Generar otro
+        </button>
+      </div>
+    `, 'Código de vinculación');
+
+    document.getElementById('telegram-copy-command')?.addEventListener('click', () => copyTelegramCommand(command));
+    document.getElementById('telegram-check-link')?.addEventListener('click', loadTelegramStatus);
+    document.getElementById('telegram-regenerate-code')?.addEventListener('click', generateTelegramCode);
+    startTelegramCountdown(data.expiraEnMinutos || 10);
+  }
+
+  async function loadTelegramStatus() {
+    if (!sessionToken) return;
+    showTelegramLoading();
+    try {
+      const data = await apiRequest('estadoTelegram');
+      if (data.vinculado) linkedTelegramView(data);
+      else unlinkedTelegramView();
+    } catch (error) {
+      showTelegramError(error);
+    }
+  }
+
+  async function generateTelegramCode() {
+    showTelegramLoading('Generando un código seguro…');
+    try {
+      const data = await apiRequest('crearCodigoTelegram');
+      if (data.vinculado) linkedTelegramView(data);
+      else codeTelegramView(data);
+    } catch (error) {
+      showTelegramError(error);
+    }
+  }
+
+  async function unlinkTelegramAccount() {
+    const confirmed = window.confirm('¿Desvincular este Telegram de tu cuenta docente? El bot dejará de acceder a tus clases y asistencias.');
+    if (!confirmed) return;
+    showTelegramLoading('Desvinculando Telegram…');
+    try {
+      const data = await apiRequest('desvincularTelegram');
+      setTelegramButtonState('unknown');
+      unlinkedTelegramView();
+      if (typeof mostrarToast === 'function') {
+        mostrarToast(data.message || 'Telegram fue desvinculado.', 'success', 'Cuenta actualizada');
+      }
+    } catch (error) {
+      showTelegramError(error);
+    }
+  }
+
+  async function openTelegramLinkModal() {
+    openTelegramModalShell();
+    await loadTelegramStatus();
+  }
+
+  function createTelegramLinkUi() {
+    if (telegramButton()) return;
+    const changePasswordButton = document.getElementById('btn-change-password');
+    const headerActions = changePasswordButton?.parentElement;
+    if (!headerActions) return;
+
+    const button = document.createElement('button');
+    button.id = TELEGRAM_UI.buttonId;
+    button.type = 'button';
+    button.className = 'logout-button telegram-link-button';
+    button.title = 'Vincular Telegram';
+    button.setAttribute('aria-label', 'Vincular Telegram');
+    button.innerHTML = '<i class="fa-brands fa-telegram"></i><span class="telegram-link-indicator" aria-hidden="true"></span>';
+    headerActions.insertBefore(button, changePasswordButton);
+    button.addEventListener('click', openTelegramLinkModal);
+
+    const modal = document.createElement('div');
+    modal.id = TELEGRAM_UI.modalId;
+    modal.className = 'telegram-link-modal';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = `
+      <div class="telegram-link-modal__backdrop" data-close-telegram-link="true"></div>
+      <section class="telegram-link-modal__card" role="dialog" aria-modal="true" aria-labelledby="${TELEGRAM_UI.titleId}">
+        <button class="telegram-link-modal__close" type="button" data-close-telegram-link="true" aria-label="Cerrar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div class="telegram-link-modal__brand"><i class="fa-brands fa-telegram"></i></div>
+        <h2 id="${TELEGRAM_UI.titleId}">Telegram docente</h2>
+        <div id="${TELEGRAM_UI.contentId}" class="telegram-link-modal__content"></div>
+      </section>`;
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll(TELEGRAM_UI.closeSelector).forEach((node) => {
+      node.addEventListener('click', closeTelegramModal);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && modal.classList.contains('is-open')) closeTelegramModal();
+    });
+
+    if (typeof dashboardScreen !== 'undefined' && dashboardScreen) {
+      const observer = new MutationObserver(() => {
+        const loggedIn = !dashboardScreen.classList.contains('hidden') && Boolean(sessionToken);
+        if (loggedIn) loadTelegramStatus().catch(() => {});
+        else setTelegramButtonState('unknown');
+      });
+      observer.observe(dashboardScreen, { attributes: true, attributeFilter: ['class'] });
+      if (!dashboardScreen.classList.contains('hidden') && sessionToken) loadTelegramStatus().catch(() => {});
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createTelegramLinkUi, { once: true });
+  } else {
+    createTelegramLinkUi();
+  }
+})();
