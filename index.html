@@ -574,139 +574,25 @@
        </div>
       </div>
 
-      <style>
-       #section-planificacion .planning-sidebar { position: sticky; top: 18px; max-height: calc(100vh - 115px); overflow: auto; }
-       #section-planificacion .planning-center { display: flex; min-height: 585px; flex-direction: column; gap: 18px; }
-       #section-planificacion .planning-calendar-column { position: sticky; top: 18px; display: flex; min-width: 0; flex-direction: column; gap: 18px; }
-       #section-planificacion .planning-section-group { overflow: hidden; border: 1px solid #d8e9f6; border-radius: 15px; background: rgba(255,255,255,.86); box-shadow: 0 6px 14px rgba(42,91,128,.06); }
-       #section-planificacion .planning-section-group + .planning-section-group { margin-top: 10px; }
-       #section-planificacion .planning-section-group__header { display: grid; width: 100%; grid-template-columns: 36px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 11px; text-align: left; background: transparent; }
-       #section-planificacion .planning-section-group__mark { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 11px; color: #fff; font-size: .78rem; font-weight: 900; }
-       #section-planificacion .planning-section-group--a .planning-section-group__mark { background: #2563eb; }
-       #section-planificacion .planning-section-group--b .planning-section-group__mark { background: #10b981; }
-       #section-planificacion .planning-section-group--c .planning-section-group__mark { background: #a855f7; }
-       #section-planificacion .planning-section-group--otro .planning-section-group__mark { background: #f59e0b; }
-       #section-planificacion .planning-section-group__copy { min-width: 0; }
-       #section-planificacion .planning-section-group__copy strong, #section-planificacion .planning-section-group__copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-       #section-planificacion .planning-section-group__copy strong { color: #294963; font-size: .72rem; }
-       #section-planificacion .planning-section-group__copy small { margin-top: 3px; color: #8298ab; font-size: .6rem; font-weight: 700; }
-       #section-planificacion .planning-section-group__header > i { color: #8ea8bb; font-size: .68rem; }
-       #section-planificacion .planning-section-evaluations { display: flex; flex-direction: column; gap: 6px; padding: 0 9px 9px 54px; }
-       #section-planificacion .planning-evaluation-button { display: grid; width: 100%; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: center; padding: 8px 9px; border: 1px solid #e1edf6; border-radius: 10px; text-align: left; background: #fff; transition: .16s ease; }
-       #section-planificacion .planning-evaluation-button:hover { transform: translateX(2px); border-color: #9bc8e6; box-shadow: 0 5px 12px rgba(32,93,137,.08); }
-       #section-planificacion .planning-evaluation-button strong, #section-planificacion .planning-evaluation-button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-       #section-planificacion .planning-evaluation-button strong { color: #31516b; font-size: .62rem; }
-       #section-planificacion .planning-evaluation-button small { margin-top: 3px; color: #8a9eae; font-size: .54rem; font-weight: 700; }
-       #section-planificacion .planning-evaluation-button b { display: inline-flex; min-width: 39px; justify-content: center; padding: 5px 6px; border-radius: 8px; color: #245a86; background: #e9f5fd; font-size: .6rem; }
-       #section-planificacion .planning-plan-focus { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; gap: 12px; align-items: center; margin-bottom: 16px; padding: 14px; border: 1px solid #cce4f5; border-radius: 16px; background: linear-gradient(135deg,#e9f6ff,#f9fcff); }
-       #section-planificacion .planning-plan-focus.hidden { display: none; }
-       #section-planificacion .planning-plan-focus__icon { display: inline-flex; width: 48px; height: 48px; align-items: center; justify-content: center; border-radius: 14px; color: #fff; background: linear-gradient(145deg,#1d75b5,#2f9dd5); box-shadow: 0 8px 16px rgba(31,117,181,.2); }
-       #section-planificacion .planning-plan-focus span, #section-planificacion .planning-plan-focus strong, #section-planificacion .planning-plan-focus small { display: block; }
-       #section-planificacion .planning-plan-focus span { color: #6f8ca3; font-size: .58rem; font-weight: 850; letter-spacing: .11em; text-transform: uppercase; }
-       #section-planificacion .planning-plan-focus strong { margin-top: 3px; color: #214967; font-size: .9rem; }
-       #section-planificacion .planning-plan-focus small { margin-top: 4px; color: #7590a5; font-size: .65rem; font-weight: 700; }
-       #section-planificacion .planning-plan-focus__weight { min-width: 62px; padding: 9px 10px; border-radius: 12px; color: #1f5f8e; background: #fff; font-size: .8rem; font-weight: 900; text-align: center; box-shadow: 0 4px 12px rgba(30,91,135,.08); }
-       #section-planificacion .planning-row-selected { background: #f0f8ff; box-shadow: inset 3px 0 0 #2584c3; }
-       #section-planificacion .planning-actions-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
-       #section-planificacion .planning-percentage-card { padding: 18px; border: 1px solid #cbe3f4; border-radius: 20px; background: linear-gradient(155deg,rgba(239,249,255,.98),rgba(255,255,255,.98)); box-shadow: 0 12px 28px rgba(28,87,128,.08); }
-       #section-planificacion .planning-percentage-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 15px; }
-       #section-planificacion .planning-percentage-head__title { display: flex; gap: 11px; align-items: center; }
-       #section-planificacion .planning-percentage-head__icon { display: inline-flex; width: 42px; height: 42px; align-items: center; justify-content: center; border-radius: 13px; color: #fff; background: linear-gradient(145deg,#0f766e,#14b8a6); box-shadow: 0 8px 18px rgba(20,184,166,.2); }
-       #section-planificacion .planning-percentage-head span { display: block; color: #7b94a7; font-size: .56rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
-       #section-planificacion .planning-percentage-head h4 { margin: 3px 0 0; color: #214661; font-size: .95rem; font-weight: 900; }
-       #section-planificacion .planning-percentage-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-       #section-planificacion .planning-percentage-filters label { color: #5e7689; font-size: .62rem; font-weight: 850; }
-       #section-planificacion .planning-percentage-filters select { width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid #d2e4f1; border-radius: 11px; color: #31536d; background: #fff; font-size: .7rem; font-weight: 750; }
-       #section-planificacion .planning-percentage-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; margin-top: 14px; }
-       #section-planificacion .planning-percentage-summary article { padding: 11px; border: 1px solid #d7e8f4; border-radius: 13px; background: rgba(255,255,255,.82); }
-       #section-planificacion .planning-percentage-summary small, #section-planificacion .planning-percentage-summary strong { display: block; }
-       #section-planificacion .planning-percentage-summary small { color: #7c95a7; font-size: .56rem; font-weight: 800; text-transform: uppercase; }
-       #section-planificacion .planning-percentage-summary strong { margin-top: 4px; color: #255778; font-size: 1rem; font-weight: 950; }
-       #section-planificacion .planning-percentage-status { display: flex; gap: 8px; align-items: center; margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: .66rem; font-weight: 800; }
-       #section-planificacion .planning-percentage-status.is-ok { color: #047857; background: #d1fae5; }
-       #section-planificacion .planning-percentage-status.is-pending { color: #9a6700; background: #fef3c7; }
-       #section-planificacion .planning-percentage-status.is-over { color: #b91c1c; background: #fee2e2; }
-       #section-planificacion .planning-percentage-track { height: 9px; margin-top: 10px; overflow: hidden; border-radius: 999px; background: #dcebf5; }
-       #section-planificacion .planning-percentage-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#14b8a6,#2e86c1); transition: width .25s ease; }
-       #section-planificacion .planning-smart-calculator { display: grid; grid-template-columns: 1fr 1fr minmax(120px,.8fr); gap: 10px; align-items: end; margin-top: 16px; padding: 13px; border: 1px solid #d7e9f5; border-radius: 15px; background: rgba(255,255,255,.82); }
-       #section-planificacion .planning-smart-calculator label { color: #5f788b; font-size: .62rem; font-weight: 850; }
-       #section-planificacion .planning-smart-calculator input { width: 100%; margin-top: 5px; padding: 10px 11px; border: 1px solid #d1e4f2; border-radius: 11px; color: #244f6d; background: #fff; font-size: .78rem; font-weight: 800; }
-       #section-planificacion .planning-smart-result { min-height: 58px; padding: 9px 11px; border-radius: 12px; color: #fff; background: linear-gradient(145deg,#145d91,#2589c5); }
-       #section-planificacion .planning-smart-result small, #section-planificacion .planning-smart-result strong { display: block; }
-       #section-planificacion .planning-smart-result small { font-size: .55rem; font-weight: 800; text-transform: uppercase; opacity: .76; }
-       #section-planificacion .planning-smart-result strong { margin-top: 4px; font-size: 1.05rem; font-weight: 950; }
-       #section-planificacion .planning-weight-table { margin-top: 15px; overflow: auto; border: 1px solid #d7e7f2; border-radius: 14px; background: #fff; }
-       #section-planificacion .planning-weight-table table { width: 100%; min-width: 520px; border-collapse: collapse; }
-       #section-planificacion .planning-weight-table th { padding: 9px 10px; color: #6c879a; background: #f1f8fd; font-size: .58rem; font-weight: 900; text-align: left; text-transform: uppercase; }
-       #section-planificacion .planning-weight-table td { padding: 9px 10px; border-top: 1px solid #e8f0f6; color: #46657a; font-size: .65rem; font-weight: 700; }
-       #section-planificacion .planning-weight-table input { width: 72px; padding: 7px 8px; border: 1px solid #d4e5f1; border-radius: 9px; color: #28516e; text-align: center; font-weight: 850; }
-       #section-planificacion .planning-final-grade { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding: 12px 14px; border-radius: 14px; color: #fff; background: linear-gradient(135deg,#0f3d68,#1d79b4); }
-       #section-planificacion .planning-final-grade span { font-size: .65rem; font-weight: 800; }
-       #section-planificacion .planning-final-grade strong { font-size: 1rem; font-weight: 950; }
-       #section-planificacion .planning-reference { margin-top: 13px; border: 1px solid #d9e8f3; border-radius: 13px; background: rgba(255,255,255,.75); }
-       #section-planificacion .planning-reference summary { padding: 11px 13px; color: #2e6388; font-size: .65rem; font-weight: 850; cursor: pointer; }
-       #section-planificacion .planning-reference__scroll { max-height: 320px; overflow: auto; border-top: 1px solid #e2edf5; }
-       #section-planificacion .planning-reference table { width: 100%; min-width: 650px; border-collapse: collapse; }
-       #section-planificacion .planning-reference th, #section-planificacion .planning-reference td { padding: 6px 8px; border-right: 1px solid #edf2f6; border-bottom: 1px solid #edf2f6; color: #527086; font-size: .58rem; text-align: center; }
-       #section-planificacion .planning-reference th { position: sticky; top: 0; color: #fff; background: #245f8a; font-weight: 900; }
-       #section-planificacion .planning-reference td:first-child { position: sticky; left: 0; color: #244d68; background: #edf7fd; font-weight: 900; }
-       #section-planificacion .planning-day-box { padding: 14px; border: 1px solid #cfe4f3; border-radius: 18px; background: linear-gradient(155deg,#edf8ff,#fbfdff); box-shadow: 0 8px 22px rgba(31,93,137,.07); }
-       #section-planificacion .planning-day-box__head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid #dceaf4; }
-       #section-planificacion .planning-day-box__head span, #section-planificacion .planning-day-box__head strong { display: block; }
-       #section-planificacion .planning-day-box__head span { color: #819aab; font-size: .55rem; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
-       #section-planificacion .planning-day-box__head strong { margin-top: 3px; color: #254e6b; font-size: .78rem; text-transform: capitalize; }
-       #section-planificacion .planning-day-box__head i { color: #2d82bb; }
-       #section-planificacion .planning-day-box__list { display: flex; flex-direction: column; gap: 8px; margin-top: 11px; }
-       #section-planificacion .planning-day-empty { display: grid; min-height: 90px; place-items: center; padding: 12px; border: 1px dashed #bdd8ea; border-radius: 12px; color: #7894a8; text-align: center; font-size: .63rem; font-weight: 700; }
-       #section-planificacion .planning-day-empty button { margin-top: 8px; padding: 8px 10px; border: 1px solid #a9d1eb; border-radius: 9px; color: #1d6faa; background: #fff; font-size: .62rem; font-weight: 850; }
-       #section-planificacion .planning-day-event { display: grid; width: 100%; grid-template-columns: 34px minmax(0,1fr) auto; gap: 9px; align-items: center; padding: 9px; border: 1px solid #d7e7f2; border-radius: 12px; text-align: left; background: rgba(255,255,255,.9); }
-       #section-planificacion .planning-day-event__section { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 10px; color: #fff; font-size: .72rem; font-weight: 950; }
-       #section-planificacion .planning-day-event--a .planning-day-event__section { background: #2563eb; }
-       #section-planificacion .planning-day-event--b .planning-day-event__section { background: #10b981; }
-       #section-planificacion .planning-day-event--c .planning-day-event__section { background: #a855f7; }
-       #section-planificacion .planning-day-event--otro .planning-day-event__section { background: #f59e0b; }
-       #section-planificacion .planning-day-event strong, #section-planificacion .planning-day-event small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-       #section-planificacion .planning-day-event strong { color: #2e5169; font-size: .66rem; }
-       #section-planificacion .planning-day-event small { margin-top: 3px; color: #8499a9; font-size: .56rem; font-weight: 700; }
-       #section-planificacion .planning-day-event > i { color: #89a4b7; font-size: .62rem; }
-       @media (max-width: 1180px) {
-        #section-planificacion .planning-sidebar, #section-planificacion .planning-calendar-column { position: static; max-height: none; }
-        #section-planificacion .planning-calendar-column { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(280px,.8fr); grid-column: 1 / -1; }
-        #section-planificacion .planning-upcoming { grid-column: 2; }
-       }
-       @media (max-width: 860px) {
-        #section-planificacion .planning-calendar-column { display: flex; grid-column: auto; }
-        #section-planificacion .planning-smart-calculator { grid-template-columns: 1fr 1fr; }
-        #section-planificacion .planning-smart-result { grid-column: 1 / -1; }
-       }
-       @media (max-width: 640px) {
-        #section-planificacion .planning-percentage-summary, #section-planificacion .planning-percentage-filters, #section-planificacion .planning-actions-inline { grid-template-columns: 1fr; }
-        #section-planificacion .planning-smart-calculator { grid-template-columns: 1fr; }
-        #section-planificacion .planning-smart-result { grid-column: auto; }
-        #section-planificacion .planning-plan-focus { grid-template-columns: 42px minmax(0,1fr); }
-        #section-planificacion .planning-plan-focus__weight { grid-column: 1 / -1; }
-       }
-      </style>
-
       <div class="planning-layout">
        <aside class="planning-sidebar bg-white p-4 rounded-3xl shadow-sm border border-gray-100 h-fit">
         <div class="text-center mb-6 border-b border-gray-100 pb-4">
          <div class="bg-blue-50 text-blue-600 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl"><i class="fa-solid fa-book-open"></i></div>
          <h3 class="font-black text-gray-800 text-sm uppercase tracking-widest">Mis planes</h3>
-         <p class="text-xs text-gray-400 mt-1">Secciones y evaluaciones</p>
+         <p class="text-xs text-gray-400 mt-1">Filtra por secci&oacute;n</p>
         </div>
         <button class="w-full mb-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-md transition text-sm flex items-center justify-center gap-2" onclick="mostrarFormularioPlan()" type="button">
          <i class="fa-solid fa-plus"></i> Nueva Evaluaci&oacute;n
         </button>
         <h4 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Secciones planificadas</h4>
-        <div id="menu-secciones-planificacion"></div>
+        <div class="space-y-2 flex flex-col" id="menu-secciones-planificacion"></div>
        </aside>
 
        <div class="planning-center bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
         <div id="panel-form-planificacion">
          <div class="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
           <span class="planning-panel-icon"><i class="fa-solid fa-calendar-plus"></i></span>
-          <div><h3 class="font-black text-gray-800 text-lg">Cargar nueva evaluaci&oacute;n</h3><p class="text-xs text-gray-400 mt-1">La evaluaci&oacute;n aparecer&aacute; autom&aacute;ticamente en el calendario y en su secci&oacute;n.</p></div>
+          <div><h3 class="font-black text-gray-800 text-lg">Cargar nueva evaluaci&oacute;n</h3><p class="text-xs text-gray-400 mt-1">La evaluaci&oacute;n aparecer&aacute; autom&aacute;ticamente en el calendario.</p></div>
          </div>
          <form class="space-y-4" id="form-planificacion">
           <div class="grid grid-cols-2 gap-4">
@@ -724,68 +610,85 @@
            <div><label class="block text-sm font-bold text-gray-700 mb-1">Puntos / Ponderaci&oacute;n</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-puntos" max="100" min="1" placeholder="Ej: 20" required type="number"></div>
            <div><label class="block text-sm font-bold text-gray-700 mb-1">Fecha programada</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-gray-700" id="plan-fecha" required type="date"></div>
           </div>
-          <div class="planning-form-hint"><i class="fa-solid fa-circle-info"></i><span>La ponderaci&oacute;n se suma autom&aacute;ticamente en la tabla inteligente. El sistema te avisar&aacute; si supera el 100%.</span></div>
+          <div class="planning-form-hint"><i class="fa-solid fa-circle-info"></i><span>Los colores del calendario representan las secciones: A, B y C.</span></div>
           <div class="pt-2"><button class="w-full bg-indigo-600 hover:bg-indigo-700 transition text-white py-3.5 rounded-xl font-bold flex justify-center items-center gap-2" id="btn-guardar-plan" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar Evaluaci&oacute;n</button></div>
          </form>
         </div>
 
         <div class="hidden" id="panel-lista-planificacion">
-         <div class="flex justify-between items-center mb-5 border-b border-gray-100 pb-4 gap-3">
+         <div class="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
           <div><h3 class="font-black text-gray-800 text-lg" id="titulo-plan-seccion">Plan de Evaluaci&oacute;n</h3><p class="text-xs font-bold text-gray-400" id="subtitulo-plan-seccion">1er A&ntilde;o - Secci&oacute;n A</p></div>
-          <div class="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200" id="badge-total-puntos">Total: 0%</div>
+          <div class="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200" id="badge-total-puntos">Total: 0 pts</div>
          </div>
-         <div class="planning-plan-focus hidden" id="plan-seleccionado-resumen"></div>
          <div class="w-full" id="contenido-pdf-plan">
-          <div class="overflow-x-auto rounded-xl border border-gray-200"><table class="min-w-full text-sm divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Fecha</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Actividad</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">%</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider no-pdf">Acci&oacute;n</th></tr></thead><tbody class="divide-y divide-gray-100 bg-white" id="tabla-body-planificacion"></tbody></table></div>
-         </div>
-         <div class="hidden planning-actions-inline" id="acciones-planificacion">
-          <button class="w-full px-4 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-sm transition uppercase tracking-wide border border-blue-200 text-center flex items-center justify-center gap-2" id="btn-plan-pdf" type="button"><i class="fa-solid fa-file-pdf text-lg"></i> Guardar en PDF</button>
-          <button class="w-full px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition shadow-md uppercase tracking-wide text-center flex items-center justify-center gap-2" id="btn-plan-whatsapp" type="button"><i class="fa-brands fa-whatsapp text-lg"></i> Alerta WhatsApp</button>
+          <div class="overflow-x-auto rounded-xl border border-gray-200"><table class="min-w-full text-sm divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Fecha</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Actividad</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">Pts</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider no-pdf">Acci&oacute;n</th></tr></thead><tbody class="divide-y divide-gray-100 bg-white" id="tabla-body-planificacion"></tbody></table></div>
          </div>
         </div>
 
-        <section class="planning-percentage-card" id="tabla-porcentajes">
-         <div class="planning-percentage-head">
-          <div class="planning-percentage-head__title">
-           <span class="planning-percentage-head__icon"><i class="fa-solid fa-calculator"></i></span>
-           <div><span>Calculadora inteligente</span><h4>Tabla digital de porcentajes</h4></div>
+        <section class="planning-ponderation" aria-labelledby="titulo-calculadora-ponderacion">
+         <div class="planning-ponderation__header">
+          <div class="planning-ponderation__icon"><i class="fa-solid fa-calculator"></i></div>
+          <div>
+           <span>Herramienta docente</span>
+           <h3 id="titulo-calculadora-ponderacion">Calculadora y tabla de ponderaci&oacute;n</h3>
+           <p>Calcula el aporte de una calificaci&oacute;n sobre 20 seg&uacute;n su porcentaje.</p>
           </div>
-          <button class="text-xs font-bold text-slate-500 hover:text-blue-700" id="btn-limpiar-notas" type="button" title="Limpiar calificaciones"><i class="fa-solid fa-eraser"></i> Limpiar</button>
-         </div>
-         <div class="planning-percentage-filters">
-          <label>A&ntilde;o<select id="porcentaje-ano"><option value="1ero">1er A&ntilde;o</option><option value="2do">2do A&ntilde;o</option><option value="3ero">3er A&ntilde;o</option><option value="4to">4to A&ntilde;o</option><option value="5to">5to A&ntilde;o</option></select></label>
-          <label>Secci&oacute;n<select id="porcentaje-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select></label>
-         </div>
-         <div class="planning-percentage-summary">
-          <article><small>Programado</small><strong id="porcentaje-total">0%</strong></article>
-          <article><small>Disponible</small><strong id="porcentaje-disponible">100%</strong></article>
-          <article><small>Evaluaciones</small><strong id="porcentaje-cantidad">0</strong></article>
-         </div>
-         <div class="planning-percentage-status is-pending" id="porcentaje-estado"><i class="fa-solid fa-circle-info"></i><span>A&uacute;n falta distribuir el 100%.</span></div>
-         <div class="planning-percentage-track"><span id="porcentaje-barra"></span></div>
-
-         <div class="planning-smart-calculator">
-          <label>Calificaci&oacute;n obtenida / 20<input id="calc-nota" max="20" min="0" placeholder="Ej: 18" step="0.01" type="number"></label>
-          <label>Ponderaci&oacute;n %<input id="calc-porcentaje" max="100" min="0" placeholder="Ej: 30" step="0.01" type="number"></label>
-          <div class="planning-smart-result"><small>Aporte a la nota final</small><strong id="calc-aporte">0.00 pts</strong></div>
          </div>
 
-         <div class="planning-weight-table">
-          <table>
-           <thead><tr><th>Evaluaci&oacute;n</th><th>Peso</th><th>Nota /20</th><th>Aporte</th></tr></thead>
-           <tbody id="tabla-ponderaciones-body"><tr><td colspan="4">Selecciona una secci&oacute;n con evaluaciones.</td></tr></tbody>
-          </table>
+         <div class="planning-ponderation__calculator">
+          <label class="planning-ponderation__field" for="ponderacion-nota">
+           <span>Calificaci&oacute;n obtenida</span>
+           <div><input id="ponderacion-nota" min="0" max="20" step="0.01" placeholder="Ej.: 18" type="number"><small>/ 20</small></div>
+          </label>
+          <label class="planning-ponderation__field" for="ponderacion-porcentaje">
+           <span>Porcentaje</span>
+           <div><input id="ponderacion-porcentaje" min="0.01" max="100" step="0.01" placeholder="Ej.: 30" type="number"><small>%</small></div>
+          </label>
+          <div class="planning-ponderation__result" aria-live="polite">
+           <span>Aporte ponderado</span>
+           <strong id="ponderacion-resultado">0,00</strong>
+           <small>puntos sobre 20</small>
+          </div>
          </div>
-         <div class="planning-final-grade"><span>Calificaci&oacute;n final ponderada acumulada</span><strong id="nota-final-ponderada">0.00 / 20</strong></div>
 
-         <details class="planning-reference">
-          <summary><i class="fa-solid fa-table-cells"></i> Ver tabla de referencia del 1 al 20</summary>
-          <div class="planning-reference__scroll"><table><thead id="tabla-referencia-head"></thead><tbody id="tabla-referencia-body"></tbody></table></div>
+         <div class="planning-ponderation__actions">
+          <button id="btn-agregar-ponderacion" type="button"><i class="fa-solid fa-plus"></i> Agregar al acumulado</button>
+          <button id="btn-limpiar-ponderacion" type="button"><i class="fa-solid fa-eraser"></i> Limpiar acumulado</button>
+         </div>
+
+         <div class="planning-ponderation__summary">
+          <article><span>Porcentaje usado</span><strong id="ponderacion-total-porcentaje">0%</strong></article>
+          <article><span>Porcentaje disponible</span><strong id="ponderacion-porcentaje-restante">100%</strong></article>
+          <article><span>Nota acumulada</span><strong id="ponderacion-nota-acumulada">0,00</strong></article>
+          <p id="ponderacion-estado"><i class="fa-solid fa-circle-info"></i> Agrega resultados para construir tu ponderaci&oacute;n.</p>
+         </div>
+
+         <div class="planning-ponderation__history">
+          <div class="planning-ponderation__subhead"><h4>Acumulado actual</h4><span id="ponderacion-contador">0 registros</span></div>
+          <div class="planning-ponderation__history-list" id="ponderacion-lista">
+           <div class="planning-ponderation__empty"><i class="fa-regular fa-rectangle-list"></i><span>A&uacute;n no has agregado c&aacute;lculos.</span></div>
+          </div>
+         </div>
+
+         <details class="planning-ponderation__reference" open>
+          <summary><span><i class="fa-solid fa-table-cells"></i> Tabla digital de porcentajes</span><small>Calificaciones del 1 al 20</small></summary>
+          <div class="planning-ponderation__table-wrap">
+           <table aria-label="Tabla digital de ponderaciones">
+            <thead id="ponderacion-tabla-head"></thead>
+            <tbody id="ponderacion-tabla-body"></tbody>
+           </table>
+          </div>
          </details>
         </section>
        </div>
 
-       <div class="planning-calendar-column">
+       <aside class="planning-calendar-column space-y-5">
+        <div class="hidden bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex-col gap-3" id="acciones-planificacion">
+         <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-100 pb-2">Acciones del plan</h4>
+         <button class="w-full px-4 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-sm transition uppercase tracking-wide border border-blue-200 text-center flex items-center justify-center gap-2" id="btn-plan-pdf" type="button"><i class="fa-solid fa-file-pdf text-lg"></i> Guardar en PDF</button>
+         <button class="w-full px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition shadow-md uppercase tracking-wide text-center flex items-center justify-center gap-2" id="btn-plan-whatsapp" type="button"><i class="fa-brands fa-whatsapp text-lg"></i> Alerta WhatsApp</button>
+        </div>
+
         <div class="planning-calendar-card bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
          <div class="planning-calendar-card__top">
           <div><span class="planning-calendar-card__eyebrow">Vista mensual</span><h4><i class="fa-regular fa-calendar"></i> Calendario</h4></div>
@@ -802,16 +705,13 @@
          <div class="planning-section-legend"><span><i class="section-dot section-a"></i>Secci&oacute;n A</span><span><i class="section-dot section-b"></i>Secci&oacute;n B</span><span><i class="section-dot section-c"></i>Secci&oacute;n C</span></div>
         </div>
 
-        <div class="planning-day-box">
-         <div class="planning-day-box__head"><div><span>D&iacute;a seleccionado</span><strong id="dia-compacto-fecha">Selecciona una fecha</strong></div><i class="fa-solid fa-calendar-check"></i></div>
-         <div class="planning-day-box__list" id="detalle-dia-compacto"><div class="planning-day-empty"><div><i class="fa-regular fa-hand-pointer"></i><p>Haz clic en un d&iacute;a del calendario para consultar o abrir sus evaluaciones.</p></div></div></div>
-        </div>
-
         <div class="planning-upcoming bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
-         <div class="planning-upcoming__header"><div><span>Pr&oacute;ximas fechas</span><h4>Evaluaciones cercanas</h4></div><i class="fa-solid fa-clock-rotate-left"></i></div>
-         <div id="proximas-evaluaciones" class="planning-upcoming__list"></div>
+         <div class="planning-upcoming__header"><div><span>D&iacute;a seleccionado</span><h4 id="resumen-dia-titulo">Selecciona una fecha</h4></div><i class="fa-solid fa-calendar-day"></i></div>
+         <div id="resumen-dia-calendario" class="planning-upcoming__list">
+          <div class="planning-upcoming-empty"><i class="fa-regular fa-hand-pointer"></i><span>Haz clic en un d&iacute;a del calendario para ver lo programado.</span></div>
+         </div>
         </div>
-       </div>
+       </aside>
       </div>
 
       <div class="planning-calendar-modal hidden" id="modal-calendario-planificacion" aria-hidden="true">
@@ -827,11 +727,11 @@
           <div class="planning-weekdays planning-weekdays--full"><span>Domingo</span><span>Lunes</span><span>Martes</span><span>Mi&eacute;rcoles</span><span>Jueves</span><span>Viernes</span><span>S&aacute;bado</span></div>
           <div class="planning-calendar-grid planning-calendar-grid--full" id="grid-calendario-ampliado"></div>
          </div>
-         <div class="planning-calendar-detail">
+         <aside class="planning-calendar-detail">
           <div class="planning-calendar-detail__head"><span id="detalle-dia-etiqueta">Selecciona un d&iacute;a</span><strong id="detalle-dia-fecha">Sin fecha</strong></div>
           <div id="detalle-dia-calendario" class="planning-calendar-detail__list"><div class="planning-calendar-empty"><i class="fa-regular fa-hand-pointer"></i><p>Haz clic en cualquier d&iacute;a para consultar sus evaluaciones.</p></div></div>
           <div class="planning-section-legend planning-section-legend--modal"><span><i class="section-dot section-a"></i>Secci&oacute;n A</span><span><i class="section-dot section-b"></i>Secci&oacute;n B</span><span><i class="section-dot section-c"></i>Secci&oacute;n C</span></div>
-         </div>
+         </aside>
         </div>
        </div>
       </div>

@@ -3047,3 +3047,566 @@ body.modal-open {
 
 
 }
+
+/* =========================================================
+   PLANIFICACIÓN: CALCULADORA DE PONDERACIÓN + DETALLE DEL DÍA
+   Se agregan estilos sin modificar el calendario ni el diseño existente.
+========================================================= */
+.planning-ponderation {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #d6e8f5;
+}
+
+.planning-ponderation__header {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.planning-ponderation__icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  color: #fff;
+  background: linear-gradient(145deg, #0f5f99, #2588c7);
+  box-shadow: 0 9px 20px rgba(37, 99, 235, 0.20);
+}
+
+.planning-ponderation__header span {
+  display: block;
+  color: #60839e;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.planning-ponderation__header h3 {
+  margin: 3px 0 0;
+  color: #203f5b;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.planning-ponderation__header p {
+  margin: 5px 0 0;
+  color: #7b93a7;
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.planning-ponderation__calculator {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(145px, 0.8fr);
+  gap: 12px;
+  align-items: stretch;
+}
+
+.planning-ponderation__field {
+  display: block;
+  padding: 12px;
+  border: 1px solid #d5e7f4;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.80);
+}
+
+.planning-ponderation__field > span,
+.planning-ponderation__result > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #55748e;
+  font-size: 0.64rem;
+  font-weight: 850;
+}
+
+.planning-ponderation__field > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+}
+
+.planning-ponderation__field input {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 11px;
+  border: 1px solid #cddfeb;
+  border-radius: 10px;
+  outline: none;
+  color: #213e58;
+  background: #fff;
+  font-size: 0.83rem;
+  font-weight: 800;
+}
+
+.planning-ponderation__field input:focus {
+  border-color: #2b83be;
+  box-shadow: 0 0 0 3px rgba(43, 131, 190, 0.12);
+}
+
+.planning-ponderation__field small {
+  color: #708ba0;
+  font-size: 0.67rem;
+  font-weight: 850;
+}
+
+.planning-ponderation__result {
+  display: flex;
+  min-height: 94px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border: 1px solid #b9d9ef;
+  border-radius: 14px;
+  text-align: center;
+  background: linear-gradient(145deg, #e8f6ff, #f8fcff);
+}
+
+.planning-ponderation__result strong {
+  color: #0f659f;
+  font-size: 1.45rem;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+}
+
+.planning-ponderation__result small {
+  margin-top: 3px;
+  color: #7791a5;
+  font-size: 0.57rem;
+  font-weight: 750;
+}
+
+.planning-ponderation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.planning-ponderation__actions button {
+  display: inline-flex;
+  min-height: 38px;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid #b9d8eb;
+  border-radius: 11px;
+  color: #1d6b9d;
+  background: rgba(255, 255, 255, 0.90);
+  font-size: 0.66rem;
+  font-weight: 850;
+}
+
+.planning-ponderation__actions button:first-child {
+  color: #fff;
+  border-color: #216fa7;
+  background: #216fa7;
+}
+
+.planning-ponderation__actions button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.planning-ponderation__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.planning-ponderation__summary article {
+  padding: 11px 12px;
+  border: 1px solid #d6e7f3;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.planning-ponderation__summary article span,
+.planning-ponderation__summary article strong {
+  display: block;
+}
+
+.planning-ponderation__summary article span {
+  color: #738da2;
+  font-size: 0.56rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.planning-ponderation__summary article strong {
+  margin-top: 5px;
+  color: #1f547a;
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+#ponderacion-estado {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #cbe2f1;
+  border-radius: 11px;
+  color: #316f99;
+  background: #eef8ff;
+  font-size: 0.65rem;
+  font-weight: 750;
+}
+
+#ponderacion-estado.is-success {
+  color: #087555;
+  border-color: #b9e5d7;
+  background: #eaf9f3;
+}
+
+#ponderacion-estado.is-error {
+  color: #ad3434;
+  border-color: #f0c4c4;
+  background: #fff1f1;
+}
+
+.planning-ponderation__history,
+.planning-ponderation__reference {
+  margin-top: 16px;
+  border: 1px solid #d4e6f3;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.70);
+}
+
+.planning-ponderation__subhead,
+.planning-ponderation__reference summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.planning-ponderation__subhead {
+  border-bottom: 1px solid #e0edf6;
+}
+
+.planning-ponderation__subhead h4 {
+  margin: 0;
+  color: #315570;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.planning-ponderation__subhead span {
+  color: #7c94a7;
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.planning-ponderation__history-list {
+  display: flex;
+  max-height: 240px;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px;
+  overflow: auto;
+}
+
+.planning-ponderation__empty {
+  display: flex;
+  min-height: 64px;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  color: #829aac;
+  font-size: 0.64rem;
+  font-weight: 750;
+}
+
+.planning-ponderation__history-item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto 30px;
+  gap: 9px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #e0ebf3;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.planning-ponderation__history-number {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: #fff;
+  background: #2b82bb;
+  font-size: 0.65rem;
+  font-weight: 900;
+}
+
+.planning-ponderation__history-item strong,
+.planning-ponderation__history-item small {
+  display: block;
+}
+
+.planning-ponderation__history-item strong {
+  color: #31516a;
+  font-size: 0.68rem;
+}
+
+.planning-ponderation__history-item small {
+  margin-top: 2px;
+  color: #8297a8;
+  font-size: 0.56rem;
+  font-weight: 700;
+}
+
+.planning-ponderation__history-item > b {
+  color: #126ca5;
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.planning-ponderation__history-item button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9px;
+  color: #cb5b5b;
+  background: #fff2f2;
+}
+
+.planning-ponderation__reference summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.planning-ponderation__reference summary::-webkit-details-marker { display: none; }
+
+.planning-ponderation__reference summary span {
+  color: #315570;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.planning-ponderation__reference summary span i { margin-right: 6px; color: #277fb9; }
+
+.planning-ponderation__reference summary small {
+  color: #7f97aa;
+  font-size: 0.56rem;
+  font-weight: 800;
+}
+
+.planning-ponderation__table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border-top: 1px solid #dceaf4;
+}
+
+.planning-ponderation__table-wrap table {
+  width: 100%;
+  min-width: 660px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #fff;
+  font-size: 0.62rem;
+}
+
+.planning-ponderation__table-wrap th,
+.planning-ponderation__table-wrap td {
+  padding: 8px;
+  border-right: 1px solid #e5eef5;
+  border-bottom: 1px solid #e5eef5;
+  text-align: center;
+}
+
+.planning-ponderation__table-wrap thead th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  color: #fff !important;
+  background: #1f6798 !important;
+  font-size: 0.59rem !important;
+  font-weight: 900;
+}
+
+.planning-ponderation__table-wrap tbody th {
+  position: sticky;
+  z-index: 1;
+  left: 0;
+  color: #245b80 !important;
+  background: #edf7fd !important;
+  font-size: 0.62rem !important;
+  font-weight: 950;
+}
+
+.planning-day-empty {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-height: 74px;
+  padding: 10px;
+  border: 1px dashed #bfd9eb;
+  border-radius: 13px;
+  color: #718da2;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.planning-day-empty > i {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: #2c7cac;
+  background: #e5f4fd;
+}
+
+.planning-day-empty strong,
+.planning-day-empty span { display: block; }
+.planning-day-empty strong { color: #34566f; font-size: 0.68rem; }
+.planning-day-empty span { margin-top: 3px; font-size: 0.56rem; font-weight: 700; }
+.planning-day-empty button { padding: 7px 9px; border: 1px solid #a9d2e9; border-radius: 9px; color: #1f6f9f; background: #fff; font-size: 0.58rem; font-weight: 850; }
+
+.planning-day-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #d7e7f2;
+  border-radius: 12px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.82);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.planning-day-item:hover { transform: translateY(-1px); box-shadow: 0 7px 16px rgba(41,104,151,.09); }
+
+.planning-day-item__section {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.planning-day-item--a .planning-day-item__section { background: var(--plan-a); }
+.planning-day-item--b .planning-day-item__section { background: var(--plan-b); }
+.planning-day-item--c .planning-day-item__section { background: var(--plan-c); }
+.planning-day-item--otro .planning-day-item__section { background: #f59e0b; }
+.planning-day-item__copy { min-width: 0; }
+.planning-day-item__copy strong,
+.planning-day-item__copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.planning-day-item__copy strong { color: #2d4e67; font-size: 0.67rem; }
+.planning-day-item__copy small { margin-top: 3px; color: #7d95a7; font-size: 0.56rem; font-weight: 700; }
+.planning-day-item > i { color: #8ba5b8; font-size: 0.62rem; }
+
+@media (max-width: 640px) {
+  .planning-ponderation__calculator,
+  .planning-ponderation__summary { grid-template-columns: 1fr; }
+  #ponderacion-estado { grid-column: auto; }
+  .planning-ponderation__actions button { width: 100%; }
+  .planning-ponderation__subhead,
+  .planning-ponderation__reference summary { align-items: flex-start; flex-direction: column; gap: 5px; }
+}
+
+
+/* =========================================================
+   CORRECCIÓN FINAL DEL DISEÑO DE PLANIFICACIÓN
+   Restaura las tres columnas: planes, formulario y calendario.
+   Debe permanecer al final del archivo para anular reglas antiguas.
+========================================================= */
+#section-planificacion .planning-layout {
+  display: grid !important;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(390px, 1.6fr) minmax(280px, 0.95fr) !important;
+  gap: 18px !important;
+  width: 100% !important;
+  overflow: visible !important;
+  align-items: start !important;
+}
+
+#section-planificacion .planning-sidebar,
+#section-planificacion .planning-center,
+#section-planificacion .planning-calendar-column {
+  min-width: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+}
+
+#section-planificacion .planning-calendar-column {
+  display: flex !important;
+  flex-direction: column !important;
+  grid-column: auto !important;
+  gap: 20px !important;
+}
+
+#section-planificacion .planning-calendar-card,
+#section-planificacion .planning-upcoming,
+#section-planificacion #acciones-planificacion {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+}
+
+#section-planificacion .planning-section-button__copy {
+  min-width: 0 !important;
+}
+
+#section-planificacion .planning-section-button__copy strong,
+#section-planificacion .planning-section-button__copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  #section-planificacion .planning-layout {
+    grid-template-columns: minmax(190px, 230px) minmax(0, 1fr) !important;
+  }
+
+  #section-planificacion .planning-calendar-column {
+    display: grid !important;
+    grid-column: 1 / -1 !important;
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr) !important;
+    gap: 18px !important;
+  }
+
+  #section-planificacion #acciones-planificacion {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 860px) {
+  #section-planificacion .planning-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #section-planificacion .planning-calendar-column {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-column: auto !important;
+  }
+}
