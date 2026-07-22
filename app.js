@@ -2313,3 +2313,356 @@ const SESSION_KEY = 'edugestion_session_v2';
     createTelegramLinkUi();
   }
 })();
+
+/* EDUGESTION_AUDIT_PANEL_V1_START */
+(() => {
+  const IDS = Object.freeze({
+    tab: 'tab-auditoria',
+    section: 'section-auditoria',
+    body: 'auditoria-tabla-body',
+    cards: 'auditoria-mobile-list',
+    search: 'auditoria-buscar',
+    date: 'auditoria-fecha',
+    origin: 'auditoria-origen',
+    sectionFilter: 'auditoria-seccion',
+    count: 'auditoria-conteo',
+    empty: 'auditoria-vacio',
+    loading: 'auditoria-cargando'
+  });
+
+  let registrosAuditoria = [];
+  let cargandoAuditoria = false;
+
+  function htmlSeguro(valor = '') {
+    if (typeof escaparHTML === 'function') return escaparHTML(valor);
+    return String(valor).replace(/[&<>'"]/g, caracter => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[caracter]));
+  }
+
+  function crearInterfazAuditoria() {
+    if (document.getElementById(IDS.tab) || document.getElementById(IDS.section)) return;
+    const tabHorarioExistente = document.getElementById('tab-horario');
+    const navegacion = tabHorarioExistente?.parentElement;
+    const principal = document.getElementById('app-main');
+    if (!navegacion || !principal) return;
+
+    const tab = document.createElement('button');
+    tab.id = IDS.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item';
+    tab.setAttribute('aria-selected', 'false');
+    tab.dataset.title = 'Auditoría de asistencia';
+    tab.dataset.description = 'Consulta quién modificó cada registro, desde dónde y qué estado cambió.';
+    tab.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span>';
+    tabHorarioExistente.insertAdjacentElement('afterend', tab);
+
+    const section = document.createElement('section');
+    section.id = IDS.section;
+    section.className = 'hidden max-w-[1400px] mx-auto space-y-6 audit-panel';
+    section.innerHTML = `
+      <section class="audit-hero">
+        <div>
+          <span class="audit-eyebrow"><i class="fa-solid fa-shield-halved"></i> Trazabilidad segura</span>
+          <h2>Historial de cambios de asistencia</h2>
+          <p>Revisa las modificaciones realizadas desde EduGestión Web y desde el bot de Telegram.</p>
+        </div>
+        <div class="audit-hero__actions">
+          <button id="auditoria-exportar" type="button" class="audit-button audit-button--secondary">
+            <i class="fa-solid fa-file-csv"></i> Exportar CSV
+          </button>
+          <button id="auditoria-actualizar" type="button" class="audit-button audit-button--primary">
+            <i class="fa-solid fa-rotate"></i> Actualizar
+          </button>
+        </div>
+      </section>
+
+      <section class="audit-metrics" aria-label="Resumen de auditoría">
+        <article class="audit-metric audit-metric--total">
+          <span><i class="fa-solid fa-list-check"></i></span>
+          <div><strong id="auditoria-total">0</strong><small>Cambios registrados</small></div>
+        </article>
+        <article class="audit-metric audit-metric--web">
+          <span><i class="fa-solid fa-display"></i></span>
+          <div><strong id="auditoria-web">0</strong><small>Desde la web</small></div>
+        </article>
+        <article class="audit-metric audit-metric--telegram">
+          <span><i class="fa-brands fa-telegram"></i></span>
+          <div><strong id="auditoria-telegram">0</strong><small>Desde Telegram</small></div>
+        </article>
+        <article class="audit-metric audit-metric--today">
+          <span><i class="fa-regular fa-calendar-check"></i></span>
+          <div><strong id="auditoria-hoy">0</strong><small>Cambios de hoy</small></div>
+        </article>
+      </section>
+
+      <section class="audit-filter-card">
+        <div class="audit-filter-card__title">
+          <div>
+            <span><i class="fa-solid fa-filter"></i></span>
+            <div><strong>Filtros del historial</strong><small>Combina criterios para localizar un cambio específico.</small></div>
+          </div>
+          <button id="auditoria-limpiar" type="button"><i class="fa-solid fa-eraser"></i> Limpiar filtros</button>
+        </div>
+        <div class="audit-filters">
+          <label class="audit-search audit-field--wide">
+            <span>Buscar</span>
+            <div><i class="fa-solid fa-magnifying-glass"></i><input id="${IDS.search}" type="search" placeholder="Estudiante, materia, docente o acción"></div>
+          </label>
+          <label class="audit-field">
+            <span>Fecha de asistencia</span>
+            <input id="${IDS.date}" type="date">
+          </label>
+          <label class="audit-field">
+            <span>Origen</span>
+            <select id="${IDS.origin}">
+              <option value="">Todos</option>
+              <option value="Web">Web</option>
+              <option value="Telegram">Telegram</option>
+            </select>
+          </label>
+          <label class="audit-field">
+            <span>Sección</span>
+            <select id="${IDS.sectionFilter}"><option value="">Todas</option></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="audit-history-card">
+        <div class="audit-history-card__header">
+          <div>
+            <span class="audit-history-icon"><i class="fa-solid fa-timeline"></i></span>
+            <div><h3>Movimientos registrados</h3><p>Del más reciente al más antiguo.</p></div>
+          </div>
+          <span id="${IDS.count}" class="audit-count">0 registros</span>
+        </div>
+
+        <div id="${IDS.loading}" class="audit-status hidden">
+          <i class="fa-solid fa-circle-notch fa-spin"></i><strong>Cargando historial…</strong>
+          <span>Consultando los cambios guardados en la institución.</span>
+        </div>
+        <div id="${IDS.empty}" class="audit-status hidden">
+          <i class="fa-solid fa-inbox"></i><strong>No hay resultados</strong>
+          <span>Cambia los filtros o registra una modificación de asistencia.</span>
+        </div>
+
+        <div class="audit-table-wrap">
+          <table class="audit-table">
+            <thead><tr><th>Fecha y hora</th><th>Estudiante y clase</th><th>Origen y responsable</th><th>Cambio realizado</th></tr></thead>
+            <tbody id="${IDS.body}"></tbody>
+          </table>
+        </div>
+        <div id="${IDS.cards}" class="audit-mobile-list"></div>
+      </section>`;
+    principal.appendChild(section);
+
+    tab.addEventListener('click', abrirAuditoria);
+    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', cerrarAuditoria, { capture: true });
+    });
+    document.getElementById('auditoria-actualizar')?.addEventListener('click', () => cargarAuditoria(true));
+    document.getElementById('auditoria-exportar')?.addEventListener('click', exportarAuditoriaCsv);
+    document.getElementById('auditoria-limpiar')?.addEventListener('click', limpiarFiltrosAuditoria);
+    [IDS.search, IDS.date, IDS.origin, IDS.sectionFilter].forEach(id => {
+      const control = document.getElementById(id);
+      control?.addEventListener(id === IDS.search ? 'input' : 'change', renderAuditoria);
+    });
+  }
+
+  function cerrarAuditoria() {
+    document.getElementById(IDS.tab)?.classList.remove('is-active');
+    document.getElementById(IDS.tab)?.setAttribute('aria-selected', 'false');
+    document.getElementById(IDS.section)?.classList.add('hidden');
+  }
+
+  async function abrirAuditoria() {
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('is-active');
+      item.setAttribute('aria-selected', 'false');
+    });
+    document.querySelectorAll('#app-main > section').forEach(item => item.classList.add('hidden'));
+    const tab = document.getElementById(IDS.tab);
+    const section = document.getElementById(IDS.section);
+    tab?.classList.add('is-active');
+    tab?.setAttribute('aria-selected', 'true');
+    section?.classList.remove('hidden');
+    if (typeof pageTitle !== 'undefined' && pageTitle) pageTitle.textContent = 'Auditoría de asistencia';
+    if (typeof pageDescription !== 'undefined' && pageDescription) pageDescription.textContent = 'Consulta quién modificó cada registro, desde dónde y qué estado cambió.';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await cargarAuditoria(false);
+  }
+
+  function mostrarEstadoAuditoria(tipo) {
+    const loading = document.getElementById(IDS.loading);
+    const empty = document.getElementById(IDS.empty);
+    loading?.classList.toggle('hidden', tipo !== 'loading');
+    empty?.classList.toggle('hidden', tipo !== 'empty');
+  }
+
+  async function cargarAuditoria(forzar = false) {
+    if (cargandoAuditoria || (registrosAuditoria.length && !forzar)) {
+      renderAuditoria();
+      return;
+    }
+    if (typeof sessionToken === 'undefined' || !sessionToken) {
+      mostrarEstadoAuditoria('empty');
+      return;
+    }
+    cargandoAuditoria = true;
+    mostrarEstadoAuditoria('loading');
+    document.getElementById('auditoria-actualizar')?.classList.add('is-loading');
+    try {
+      const respuesta = await apiRequest('obtenerAuditoriaAsistencia', { limite: 300 });
+      registrosAuditoria = Array.isArray(respuesta.auditoria) ? respuesta.auditoria : [];
+      llenarSeccionesAuditoria();
+      actualizarMetricasAuditoria();
+      renderAuditoria();
+      if (forzar && typeof mostrarToast === 'function') mostrarToast('El historial se actualizó correctamente.', 'success', 'Auditoría actualizada');
+    } catch (error) {
+      console.error('No se pudo cargar la auditoría:', error);
+      registrosAuditoria = [];
+      renderAuditoria();
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo consultar el historial.', 'error', 'Error de auditoría');
+    } finally {
+      cargandoAuditoria = false;
+      document.getElementById('auditoria-actualizar')?.classList.remove('is-loading');
+    }
+  }
+
+  function llenarSeccionesAuditoria() {
+    const select = document.getElementById(IDS.sectionFilter);
+    if (!select) return;
+    const actual = select.value;
+    const opciones = [...new Set(registrosAuditoria.map(r => `${r.ano || ''}|${r.seccion || ''}|${r.turno || ''}`))]
+      .filter(valor => valor !== '||')
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas</option>' + opciones.map(valor => {
+      const [ano, seccion, turno] = valor.split('|');
+      return `<option value="${htmlSeguro(valor)}">${htmlSeguro(ano)} · Sección ${htmlSeguro(seccion)} · ${htmlSeguro(turno)}</option>`;
+    }).join('');
+    if (opciones.includes(actual)) select.value = actual;
+  }
+
+  function hoyIsoAuditoria() {
+    const ahora = new Date();
+    const local = new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function actualizarMetricasAuditoria() {
+    const hoy = hoyIsoAuditoria();
+    const total = registrosAuditoria.length;
+    const web = registrosAuditoria.filter(r => String(r.origen || '').toLowerCase() === 'web').length;
+    const telegram = registrosAuditoria.filter(r => String(r.origen || '').toLowerCase() === 'telegram').length;
+    const delDia = registrosAuditoria.filter(r => String(r.registradoEn || '').slice(0, 10) === hoy).length;
+    const asignar = (id, valor) => { const nodo = document.getElementById(id); if (nodo) nodo.textContent = String(valor); };
+    asignar('auditoria-total', total);
+    asignar('auditoria-web', web);
+    asignar('auditoria-telegram', telegram);
+    asignar('auditoria-hoy', delDia);
+  }
+
+  function registrosFiltradosAuditoria() {
+    const texto = String(document.getElementById(IDS.search)?.value || '').trim().toLowerCase();
+    const fecha = String(document.getElementById(IDS.date)?.value || '');
+    const origen = String(document.getElementById(IDS.origin)?.value || '');
+    const seccion = String(document.getElementById(IDS.sectionFilter)?.value || '');
+    return registrosAuditoria.filter(registro => {
+      if (fecha && String(registro.fecha || '') !== fecha) return false;
+      if (origen && String(registro.origen || '') !== origen) return false;
+      if (seccion && `${registro.ano || ''}|${registro.seccion || ''}|${registro.turno || ''}` !== seccion) return false;
+      if (texto) {
+        const bolsa = [registro.alumno, registro.materia, registro.docente, registro.actorNombre, registro.accion, registro.estadoAnterior, registro.estadoNuevo]
+          .map(valor => String(valor || '').toLowerCase()).join(' ');
+        if (!bolsa.includes(texto)) return false;
+      }
+      return true;
+    });
+  }
+
+  function claseEstadoAuditoria(estado) {
+    const normalizado = String(estado || '').toLowerCase();
+    if (normalizado === 'presente') return 'is-present';
+    if (normalizado === 'ausente') return 'is-absent';
+    if (normalizado === 'tardanza') return 'is-late';
+    if (normalizado === 'justificada') return 'is-justified';
+    return 'is-neutral';
+  }
+
+  function iconoOrigenAuditoria(origen) {
+    return String(origen || '').toLowerCase() === 'telegram' ? 'fa-brands fa-telegram' : 'fa-solid fa-display';
+  }
+
+  function fechaHoraAuditoria(valor) {
+    const texto = String(valor || '').trim();
+    if (!texto) return { fecha: '—', hora: '' };
+    const partes = texto.replace('T', ' ').split(' ');
+    const fecha = partes[0] || texto;
+    const hora = (partes[1] || '').slice(0, 8);
+    const [ano, mes, dia] = fecha.split('-');
+    return { fecha: dia && mes && ano ? `${dia}/${mes}/${ano}` : fecha, hora };
+  }
+
+  function renderAuditoria() {
+    const body = document.getElementById(IDS.body);
+    const cards = document.getElementById(IDS.cards);
+    if (!body || !cards) return;
+    const registros = registrosFiltradosAuditoria();
+    const count = document.getElementById(IDS.count);
+    if (count) count.textContent = `${registros.length} ${registros.length === 1 ? 'registro' : 'registros'}`;
+    mostrarEstadoAuditoria(registros.length ? 'ready' : 'empty');
+
+    body.innerHTML = registros.map(registro => {
+      const momento = fechaHoraAuditoria(registro.registradoEn);
+      const anterior = htmlSeguro(registro.estadoAnterior || 'Sin registro');
+      const nuevo = htmlSeguro(registro.estadoNuevo || 'Sin registro');
+      return `<tr>
+        <td><strong>${htmlSeguro(momento.fecha)}</strong><small>${htmlSeguro(momento.hora)}</small><span>Asistencia: ${htmlSeguro(registro.fecha || '—')}</span></td>
+        <td><strong>${htmlSeguro(registro.alumno || 'Estudiante')}</strong><small>${htmlSeguro(registro.materia || 'Materia')}</small><span>${htmlSeguro(registro.ano || '')} · Sección ${htmlSeguro(registro.seccion || '')} · ${htmlSeguro(registro.turno || '')}</span></td>
+        <td><span class="audit-origin audit-origin--${String(registro.origen || '').toLowerCase()}"><i class="${iconoOrigenAuditoria(registro.origen)}"></i>${htmlSeguro(registro.origen || 'Web')}</span><strong>${htmlSeguro(registro.actorNombre || registro.docente || 'Docente')}</strong><small>${htmlSeguro(registro.accion || 'Actualización')}</small></td>
+        <td><div class="audit-change"><span class="audit-state ${claseEstadoAuditoria(registro.estadoAnterior)}">${anterior}</span><i class="fa-solid fa-arrow-right"></i><span class="audit-state ${claseEstadoAuditoria(registro.estadoNuevo)}">${nuevo}</span></div></td>
+      </tr>`;
+    }).join('');
+
+    cards.innerHTML = registros.map(registro => {
+      const momento = fechaHoraAuditoria(registro.registradoEn);
+      return `<article class="audit-mobile-card">
+        <div class="audit-mobile-card__top"><div><strong>${htmlSeguro(registro.alumno || 'Estudiante')}</strong><span>${htmlSeguro(registro.materia || '')}</span></div><span class="audit-origin audit-origin--${String(registro.origen || '').toLowerCase()}"><i class="${iconoOrigenAuditoria(registro.origen)}"></i>${htmlSeguro(registro.origen || 'Web')}</span></div>
+        <div class="audit-mobile-card__class">${htmlSeguro(registro.ano || '')} · Sección ${htmlSeguro(registro.seccion || '')} · ${htmlSeguro(registro.turno || '')}</div>
+        <div class="audit-change"><span class="audit-state ${claseEstadoAuditoria(registro.estadoAnterior)}">${htmlSeguro(registro.estadoAnterior || 'Sin registro')}</span><i class="fa-solid fa-arrow-right"></i><span class="audit-state ${claseEstadoAuditoria(registro.estadoNuevo)}">${htmlSeguro(registro.estadoNuevo || 'Sin registro')}</span></div>
+        <footer><span><i class="fa-regular fa-clock"></i>${htmlSeguro(momento.fecha)} ${htmlSeguro(momento.hora)}</span><span>${htmlSeguro(registro.actorNombre || registro.docente || 'Docente')}</span></footer>
+      </article>`;
+    }).join('');
+  }
+
+  function limpiarFiltrosAuditoria() {
+    [IDS.search, IDS.date, IDS.origin, IDS.sectionFilter].forEach(id => {
+      const control = document.getElementById(id);
+      if (control) control.value = '';
+    });
+    renderAuditoria();
+  }
+
+  function exportarAuditoriaCsv() {
+    const registros = registrosFiltradosAuditoria();
+    if (!registros.length) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay registros para exportar.', 'warning', 'Exportación vacía');
+      return;
+    }
+    const columnas = ['registradoEn', 'fecha', 'alumno', 'materia', 'ano', 'seccion', 'turno', 'origen', 'actorNombre', 'accion', 'estadoAnterior', 'estadoNuevo'];
+    const escaparCsv = valor => `"${String(valor ?? '').replace(/"/g, '""')}"`;
+    const csv = [columnas.join(','), ...registros.map(r => columnas.map(c => escaparCsv(r[c])).join(','))].join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = `Auditoria_Asistencia_${hoyIsoAuditoria()}.csv`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
+    enlace.remove();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crearInterfazAuditoria, { once: true });
+  else crearInterfazAuditoria();
+})();
+/* EDUGESTION_AUDIT_PANEL_V1_END */
