@@ -3610,3 +3610,27 @@ body.modal-open {
     grid-column: auto !important;
   }
 }
+
+/* =====================================================
+   CORRECCIÓN: MENÚ DE SECCIONES EN ASISTENCIA
+   Mantiene visible en escritorio la lista de clases/secciones
+   del día y permite desplazamiento cuando hay muchas.
+   ===================================================== */
+#box-clases-hoy {
+  display: block !important;
+}
+
+#lista-botones-clases-hoy {
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+#lista-botones-clases-hoy::-webkit-scrollbar {
+  width: 6px;
+}
+
+#lista-botones-clases-hoy::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
