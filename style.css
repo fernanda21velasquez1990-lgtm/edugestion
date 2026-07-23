@@ -4759,4 +4759,38 @@ body.modal-open {
 .stats-pdf-footer { display: flex; justify-content: space-between; margin-top: 3mm; padding-top: 1.8mm; border-top: .3mm solid #d8e2e9; color: #8495a3; font-size: 6.3px; }
 
 @page { size: A4 landscape; margin: 0; }
+
+/* EDUGESTION_SHARE_REPORT_V1_START */
+.stats-button--share { border-color: rgba(255,255,255,.46); background: rgba(255,255,255,.17); }
+body.stats-share-open { overflow: hidden; }
+.stats-share-modal { position: fixed; inset: 0; z-index: 2147483646; display: grid; place-items: center; padding: 20px; background: rgba(7,29,49,.58); backdrop-filter: blur(5px); }
+.stats-share-modal.hidden { display: none !important; }
+.stats-share-dialog { position: relative; width: min(510px,100%); max-height: calc(100vh - 32px); overflow-y: auto; padding: 26px; border: 1px solid #d5e4ef; border-radius: 26px; background: #fff; box-shadow: 0 28px 80px rgba(8,36,61,.28); }
+.stats-share-close { position: absolute; top: 16px; right: 16px; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid #dbe7ef; border-radius: 12px; background: #f7fafc; color: #587187; }
+.stats-share-heading { display: flex; align-items: center; gap: 14px; padding-right: 44px; }
+.stats-share-heading > span { display: grid; width: 52px; height: 52px; flex: 0 0 auto; place-items: center; border-radius: 16px; background: #e6f5ff; color: #147bb4; font-size: 20px; }
+.stats-share-heading h3, .stats-share-heading p { margin: 0; }
+.stats-share-heading h3 { color: #173951; font-size: 1.2rem; font-weight: 900; }
+.stats-share-heading p { max-width: 320px; margin-top: 4px; overflow: hidden; color: #7b8fa0; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.stats-share-native { display: flex; width: 100%; align-items: center; gap: 14px; margin-top: 22px; padding: 15px; border: 1px solid #b9dff2; border-radius: 17px; background: linear-gradient(135deg,#eaf8ff,#f4fbff); color: #125f8f; text-align: left; }
+.stats-share-native.hidden { display: none !important; }
+.stats-share-native > i { display: grid; width: 42px; height: 42px; flex: 0 0 auto; place-items: center; border-radius: 13px; background: #fff; box-shadow: 0 7px 18px rgba(23,126,181,.14); font-size: 18px; }
+.stats-share-native strong, .stats-share-native small { display: block; }
+.stats-share-native strong { font-size: .9rem; }
+.stats-share-native small { margin-top: 3px; color: #62849a; font-size: .72rem; }
+.stats-share-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 14px; color: #8b9cab; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+.stats-share-divider::before, .stats-share-divider::after { height: 1px; flex: 1; background: #e1eaf0; content: ''; }
+.stats-share-channels { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.stats-share-channels button { display: grid; min-width: 0; min-height: 84px; place-items: center; gap: 7px; padding: 12px 8px; border: 1px solid #dbe6ee; border-radius: 16px; background: #fff; color: #29475d; font-weight: 850; transition: transform .18s ease, box-shadow .18s ease; }
+.stats-share-channels button:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(24,72,105,.12); }
+.stats-share-channels i { font-size: 24px; }
+.stats-share-channels [data-share-channel=whatsapp] i { color: #20b15a; }
+.stats-share-channels [data-share-channel=telegram] i { color: #239bd7; }
+.stats-share-channels [data-share-channel=email] i { color: #e05a50; }
+.stats-share-help { margin: 14px 0 0; padding: 11px 13px; border-radius: 12px; background: #fff8e8; color: #876b2c; font-size: .72rem; line-height: 1.45; }
+.stats-share-footer { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 16px; }
+.stats-share-footer button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; border: 1px solid #d8e5ed; border-radius: 13px; background: #f7fafc; color: #31556f; font-size: .76rem; font-weight: 850; }
+@media (max-width: 560px) { .stats-share-dialog { padding: 22px 16px 18px; border-radius: 22px; } .stats-share-channels { grid-template-columns: 1fr; } .stats-share-channels button { display: flex; min-height: 52px; justify-content: flex-start; padding: 11px 15px; } .stats-share-footer { grid-template-columns: 1fr; } }
+/* EDUGESTION_SHARE_REPORT_V1_END */
+
 /* EDUGESTION_STATS_PDF_V1_END */

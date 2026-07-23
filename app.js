@@ -2681,6 +2681,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     refresh: 'estadisticas-actualizar',
     export: 'estadisticas-exportar',
     pdf: 'estadisticas-pdf',
+    share: 'estadisticas-compartir',
     print: 'estadisticas-imprimir',
     studentsBody: 'estadisticas-alumnos-body',
     studentsCards: 'estadisticas-alumnos-cards',
@@ -2694,6 +2695,7 @@ const SESSION_KEY = 'edugestion_session_v2';
   let estadisticasData = null;
   let cargando = false;
   let catalogoSecciones = [];
+  let informeCompartirPendiente = null;
 
   const seguro = (valor = '') => {
     if (typeof escaparHTML === 'function') return escaparHTML(valor);
@@ -2754,6 +2756,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         <div class="stats-hero__actions">
           <button id="${IDS.export}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
           <button id="${IDS.pdf}" type="button" class="stats-button stats-button--secondary stats-button--pdf"><i class="fa-solid fa-file-pdf"></i> Generar PDF</button>
+          <button id="${IDS.share}" type="button" class="stats-button stats-button--secondary stats-button--share"><i class="fa-solid fa-share-nodes"></i> Compartir PDF</button>
           <button id="${IDS.print}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-print"></i> Imprimir</button>
           <button id="${IDS.refresh}" type="button" class="stats-button stats-button--primary"><i class="fa-solid fa-rotate"></i> Actualizar</button>
         </div>
@@ -2812,6 +2815,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         <div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>Sección</th><th>Registros</th><th>Presentes</th><th>Ausentes</th><th>Tardanzas</th><th>Justificadas</th><th>Asistencia</th></tr></thead><tbody id="${IDS.sectionsBody}"></tbody></table></div>
       </section>`;
     principal.appendChild(section);
+    crearModalCompartirInforme();
 
     document.getElementById(IDS.from).value = primerDiaMesIso();
     document.getElementById(IDS.to).value = hoyIso();
@@ -2825,6 +2829,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById(IDS.clear)?.addEventListener('click', restablecerFiltros);
     document.getElementById(IDS.export)?.addEventListener('click', exportarCsv);
     document.getElementById(IDS.pdf)?.addEventListener('click', generarPdfProfesional);
+    document.getElementById(IDS.share)?.addEventListener('click', prepararCompartirPdfProfesional);
     document.getElementById(IDS.print)?.addEventListener('click', imprimirInforme);
     document.getElementById(IDS.search)?.addEventListener('input', renderEstadisticas);
   }
@@ -3155,6 +3160,81 @@ const SESSION_KEY = 'edugestion_session_v2';
     return reporte;
   }
 
+  function nombreArchivoInformePdf() {
+    const desde = String(document.getElementById(IDS.from)?.value || 'inicio');
+    const hasta = String(document.getElementById(IDS.to)?.value || 'fin');
+    return `Informe_Asistencia_Horizontal_${desde}_${hasta}.pdf`;
+  }
+
+  function mensajeCompartirInforme() {
+    const desde = fechaLegible(document.getElementById(IDS.from)?.value || '');
+    const hasta = fechaLegible(document.getElementById(IDS.to)?.value || '');
+    const docente = String(window.profesorActual?.nombre || window.usuarioActual?.nombre || 'Docente');
+    const materia = String(window.profesorActual?.materia || window.usuarioActual?.materia || '');
+    return `Comparto el informe de asistencia de ${docente}${materia ? ` (${materia})` : ''}, correspondiente al periodo ${desde} al ${hasta}.`;
+  }
+
+  function opcionesPdfProfesional(reporte, archivo) {
+    const anchoCaptura = Math.max(1123, Math.ceil(reporte.scrollWidth || reporte.getBoundingClientRect().width));
+    const altoCaptura = Math.max(794, Math.ceil(reporte.scrollHeight || reporte.getBoundingClientRect().height));
+    return {
+      margin: [6, 6, 8, 6],
+      filename: archivo,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        letterRendering: true,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
+        windowWidth: anchoCaptura,
+        windowHeight: altoCaptura
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape', compress: true },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.stats-pdf-kpi', '.stats-pdf-signatures'] }
+    };
+  }
+
+  async function crearPdfProfesionalBlob() {
+    const reporte = construirReportePdf();
+    const hostPdf = document.createElement('div');
+    hostPdf.className = 'stats-pdf-render-host';
+    hostPdf.setAttribute('aria-hidden', 'true');
+    hostPdf.appendChild(reporte);
+
+    const scrollAnterior = { x: window.scrollX, y: window.scrollY };
+    document.body.appendChild(hostPdf);
+    window.scrollTo(0, 0);
+    const archivo = nombreArchivoInformePdf();
+
+    try {
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const worker = html2pdf().set(opcionesPdfProfesional(reporte, archivo)).from(reporte).toPdf();
+      const blob = await worker.outputPdf('blob');
+      return { blob, archivo };
+    } finally {
+      hostPdf.remove();
+      window.scrollTo(scrollAnterior.x, scrollAnterior.y);
+    }
+  }
+
+  function descargarBlobPdf(blob, archivo) {
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = archivo;
+    enlace.style.display = 'none';
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
   async function generarPdfProfesional() {
     if (!numero(estadisticasData?.resumen?.total)) {
       if (typeof mostrarToast === 'function') mostrarToast('No hay datos para generar el informe.', 'warning', 'Informe vacío');
@@ -3173,59 +3253,156 @@ const SESSION_KEY = 'edugestion_session_v2';
       boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generando…';
     }
 
-    const reporte = construirReportePdf();
-    const hostPdf = document.createElement('div');
-    hostPdf.className = 'stats-pdf-render-host';
-    hostPdf.setAttribute('aria-hidden', 'true');
-    hostPdf.appendChild(reporte);
-
-    const scrollAnterior = { x: window.scrollX, y: window.scrollY };
-    document.body.appendChild(hostPdf);
-    window.scrollTo(0, 0);
-
-    const desde = String(document.getElementById(IDS.from)?.value || 'inicio');
-    const hasta = String(document.getElementById(IDS.to)?.value || 'fin');
-    const archivo = `Informe_Asistencia_Horizontal_${desde}_${hasta}.pdf`;
-
     try {
-      if (document.fonts?.ready) await document.fonts.ready;
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-      const anchoCaptura = Math.max(1123, Math.ceil(reporte.scrollWidth || reporte.getBoundingClientRect().width));
-      const altoCaptura = Math.max(794, Math.ceil(reporte.scrollHeight || reporte.getBoundingClientRect().height));
-
-      await html2pdf().set({
-        margin: [6, 6, 8, 6],
-        filename: archivo,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          allowTaint: false,
-          backgroundColor: '#ffffff',
-          letterRendering: true,
-          scrollX: 0,
-          scrollY: 0,
-          x: 0,
-          y: 0,
-          windowWidth: anchoCaptura,
-          windowHeight: altoCaptura
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape', compress: true },
-        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.stats-pdf-kpi', '.stats-pdf-signatures'] }
-      }).from(reporte).save();
+      const { blob, archivo } = await crearPdfProfesionalBlob();
+      descargarBlobPdf(blob, archivo);
       if (typeof mostrarToast === 'function') mostrarToast('El informe PDF se generó correctamente.', 'success', 'Informe descargado');
     } catch (error) {
       console.error('No se pudo generar el informe PDF:', error);
       if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo generar el PDF.', 'error', 'Error de PDF');
     } finally {
-      hostPdf.remove();
-      window.scrollTo(scrollAnterior.x, scrollAnterior.y);
       if (boton) {
         boton.disabled = false;
         boton.classList.remove('is-loading');
         boton.innerHTML = contenidoAnterior;
       }
+    }
+  }
+
+  function crearModalCompartirInforme() {
+    if (document.getElementById('stats-share-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'stats-share-modal';
+    modal.className = 'stats-share-modal hidden';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'stats-share-title');
+    modal.innerHTML = `
+      <div class="stats-share-dialog">
+        <button id="stats-share-close" class="stats-share-close" type="button" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+        <div class="stats-share-heading"><span><i class="fa-solid fa-share-nodes"></i></span><div><h3 id="stats-share-title">Compartir informe PDF</h3><p id="stats-share-file">Informe preparado</p></div></div>
+        <button id="stats-share-native" class="stats-share-native" type="button"><i class="fa-solid fa-mobile-screen-button"></i><span><strong>Compartir archivo</strong><small>Envía el PDF como archivo adjunto desde tu dispositivo.</small></span></button>
+        <div class="stats-share-divider"><span>O usa un acceso rápido</span></div>
+        <div class="stats-share-channels">
+          <button type="button" data-share-channel="whatsapp"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></button>
+          <button type="button" data-share-channel="telegram"><i class="fa-brands fa-telegram"></i><span>Telegram</span></button>
+          <button type="button" data-share-channel="email"><i class="fa-solid fa-envelope"></i><span>Correo</span></button>
+        </div>
+        <p class="stats-share-help">En computadora, los accesos rápidos descargan primero el PDF. Luego debes adjuntarlo manualmente en el mensaje abierto.</p>
+        <div class="stats-share-footer">
+          <button id="stats-share-download" type="button"><i class="fa-solid fa-download"></i> Descargar PDF</button>
+          <button id="stats-share-copy" type="button"><i class="fa-regular fa-copy"></i> Copiar mensaje</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    document.getElementById('stats-share-close')?.addEventListener('click', cerrarModalCompartirInforme);
+    document.getElementById('stats-share-native')?.addEventListener('click', compartirArchivoNativo);
+    document.getElementById('stats-share-download')?.addEventListener('click', descargarInformeCompartirPendiente);
+    document.getElementById('stats-share-copy')?.addEventListener('click', copiarMensajeInforme);
+    modal.querySelectorAll('[data-share-channel]').forEach(boton => boton.addEventListener('click', () => abrirCanalCompartirInforme(boton.dataset.shareChannel)));
+    modal.addEventListener('click', evento => { if (evento.target === modal) cerrarModalCompartirInforme(); });
+  }
+
+  function abrirModalCompartirInforme() {
+    const modal = document.getElementById('stats-share-modal');
+    if (!modal || !informeCompartirPendiente) return;
+    const nombre = document.getElementById('stats-share-file');
+    if (nombre) nombre.textContent = informeCompartirPendiente.archivo;
+    const nativo = document.getElementById('stats-share-native');
+    const puedeCompartir = Boolean(navigator.share && navigator.canShare?.({ files: [informeCompartirPendiente.file] }));
+    nativo?.classList.toggle('hidden', !puedeCompartir);
+    modal.classList.remove('hidden');
+    document.body.classList.add('stats-share-open');
+  }
+
+  function cerrarModalCompartirInforme() {
+    document.getElementById('stats-share-modal')?.classList.add('hidden');
+    document.body.classList.remove('stats-share-open');
+  }
+
+  async function prepararCompartirPdfProfesional() {
+    if (!numero(estadisticasData?.resumen?.total)) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para compartir.', 'warning', 'Informe vacío');
+      return;
+    }
+    if (typeof html2pdf !== 'function') {
+      if (typeof mostrarToast === 'function') mostrarToast('La librería de PDF no está disponible.', 'error', 'PDF no disponible');
+      return;
+    }
+    const boton = document.getElementById(IDS.share);
+    const contenidoAnterior = boton?.innerHTML || '';
+    if (boton) {
+      boton.disabled = true;
+      boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Preparando…';
+    }
+    try {
+      const { blob, archivo } = await crearPdfProfesionalBlob();
+      const file = new File([blob], archivo, { type: 'application/pdf', lastModified: Date.now() });
+      informeCompartirPendiente = {
+        blob,
+        file,
+        archivo,
+        titulo: 'Informe de asistencia — EduGestión',
+        mensaje: mensajeCompartirInforme()
+      };
+      abrirModalCompartirInforme();
+    } catch (error) {
+      console.error('No se pudo preparar el informe para compartir:', error);
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo preparar el PDF.', 'error', 'Error al compartir');
+    } finally {
+      if (boton) {
+        boton.disabled = false;
+        boton.innerHTML = contenidoAnterior;
+      }
+    }
+  }
+
+  async function compartirArchivoNativo() {
+    if (!informeCompartirPendiente || !navigator.share) return;
+    try {
+      await navigator.share({
+        title: informeCompartirPendiente.titulo,
+        text: informeCompartirPendiente.mensaje,
+        files: [informeCompartirPendiente.file]
+      });
+      cerrarModalCompartirInforme();
+      if (typeof mostrarToast === 'function') mostrarToast('El informe fue enviado al menú de compartir.', 'success', 'Informe compartido');
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('No se pudo compartir el archivo:', error);
+        if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el menú para compartir. Usa uno de los accesos rápidos.', 'warning', 'Compartir no disponible');
+      }
+    }
+  }
+
+  function descargarInformeCompartirPendiente() {
+    if (!informeCompartirPendiente) return;
+    descargarBlobPdf(informeCompartirPendiente.blob, informeCompartirPendiente.archivo);
+    if (typeof mostrarToast === 'function') mostrarToast('PDF descargado. Ya puedes adjuntarlo.', 'success', 'Informe listo');
+  }
+
+  function abrirCanalCompartirInforme(canal) {
+    if (!informeCompartirPendiente) return;
+    descargarInformeCompartirPendiente();
+    const texto = encodeURIComponent(`${informeCompartirPendiente.mensaje}\n\nAdjunto el informe PDF generado por EduGestión.`);
+    const asunto = encodeURIComponent('Informe de asistencia — EduGestión');
+    const destinos = {
+      whatsapp: `https://wa.me/?text=${texto}`,
+      telegram: `https://t.me/share/url?url=&text=${texto}`,
+      email: `mailto:?subject=${asunto}&body=${texto}`
+    };
+    const destino = destinos[canal];
+    if (destino) window.open(destino, '_blank', 'noopener,noreferrer');
+  }
+
+  async function copiarMensajeInforme() {
+    if (!informeCompartirPendiente) return;
+    try {
+      await navigator.clipboard.writeText(`${informeCompartirPendiente.mensaje}\n\nAdjunto el informe PDF generado por EduGestión.`);
+      if (typeof mostrarToast === 'function') mostrarToast('Mensaje copiado al portapapeles.', 'success', 'Texto copiado');
+    } catch {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo copiar automáticamente.', 'warning', 'Copia no disponible');
     }
   }
 
