@@ -2680,6 +2680,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     clear: 'estadisticas-limpiar',
     refresh: 'estadisticas-actualizar',
     export: 'estadisticas-exportar',
+    pdf: 'estadisticas-pdf',
     print: 'estadisticas-imprimir',
     studentsBody: 'estadisticas-alumnos-body',
     studentsCards: 'estadisticas-alumnos-cards',
@@ -2752,6 +2753,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         </div>
         <div class="stats-hero__actions">
           <button id="${IDS.export}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
+          <button id="${IDS.pdf}" type="button" class="stats-button stats-button--secondary stats-button--pdf"><i class="fa-solid fa-file-pdf"></i> Generar PDF</button>
           <button id="${IDS.print}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-print"></i> Imprimir</button>
           <button id="${IDS.refresh}" type="button" class="stats-button stats-button--primary"><i class="fa-solid fa-rotate"></i> Actualizar</button>
         </div>
@@ -2822,6 +2824,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById(IDS.refresh)?.addEventListener('click', () => cargarEstadisticas(true, true));
     document.getElementById(IDS.clear)?.addEventListener('click', restablecerFiltros);
     document.getElementById(IDS.export)?.addEventListener('click', exportarCsv);
+    document.getElementById(IDS.pdf)?.addEventListener('click', generarPdfProfesional);
     document.getElementById(IDS.print)?.addEventListener('click', imprimirInforme);
     document.getElementById(IDS.search)?.addEventListener('input', renderEstadisticas);
   }
@@ -3026,6 +3029,204 @@ const SESSION_KEY = 'edugestion_session_v2';
     enlace.click();
     URL.revokeObjectURL(enlace.href);
     enlace.remove();
+  }
+
+  function nombreInstitucionReporte() {
+    const campo = document.getElementById('input-institucion');
+    const guardado = typeof storageGet === 'function' ? storageGet('nombreInstitucion', '') : '';
+    return String(campo?.value || guardado || 'UNIDAD EDUCATIVA EDUGESTIÓN').trim();
+  }
+
+  function fechaHoraReporte() {
+    return new Date().toLocaleString('es-BO', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function estadoTextoFiltro() {
+    const select = document.getElementById(IDS.classFilter);
+    return select?.selectedOptions?.[0]?.textContent?.trim() || 'Todas las secciones';
+  }
+
+  function filaEstadoPdf(etiqueta, valor, clase) {
+    return `<div class="stats-pdf-kpi ${clase}"><span>${seguro(etiqueta)}</span><strong>${seguro(valor)}</strong></div>`;
+  }
+
+  function construirReportePdf() {
+    const resumen = estadisticasData?.resumen || {};
+    const alumnos = alumnosFiltrados();
+    const secciones = Array.isArray(estadisticasData?.porSeccion) ? estadisticasData.porSeccion : [];
+    const fechas = Array.isArray(estadisticasData?.porFecha) ? estadisticasData.porFecha : [];
+    const desde = String(document.getElementById(IDS.from)?.value || '');
+    const hasta = String(document.getElementById(IDS.to)?.value || '');
+    const docente = String(profesorActual?.nombre || document.getElementById('profesor-name')?.textContent || 'Docente').trim();
+    const materia = String(profesorActual?.materia || document.getElementById('profesor-materia')?.textContent || 'Materia').trim();
+    const institucion = nombreInstitucionReporte();
+    const total = numero(resumen.total);
+
+    const reporte = document.createElement('article');
+    reporte.className = 'stats-pdf-report';
+    reporte.setAttribute('aria-hidden', 'true');
+    reporte.innerHTML = `
+      <header class="stats-pdf-header">
+        <div class="stats-pdf-brand"><span>EG</span></div>
+        <div class="stats-pdf-heading">
+          <p>${seguro(institucion.toUpperCase())}</p>
+          <h1>INFORME DE ASISTENCIA</h1>
+          <small>Reporte estadístico del periodo seleccionado</small>
+        </div>
+        <div class="stats-pdf-folio"><b>EDUGESTIÓN</b><span>Emitido: ${seguro(fechaHoraReporte())}</span></div>
+      </header>
+
+      <section class="stats-pdf-meta">
+        <div><span>Docente</span><strong>${seguro(docente)}</strong></div>
+        <div><span>Materia</span><strong>${seguro(materia)}</strong></div>
+        <div><span>Periodo</span><strong>${seguro(fechaLegible(desde))} al ${seguro(fechaLegible(hasta))}</strong></div>
+        <div><span>Sección analizada</span><strong>${seguro(estadoTextoFiltro())}</strong></div>
+      </section>
+
+      <section class="stats-pdf-summary">
+        ${filaEstadoPdf('Registros', total, 'is-total')}
+        ${filaEstadoPdf('Presentes', numero(resumen.presentes), 'is-present')}
+        ${filaEstadoPdf('Ausentes', numero(resumen.ausentes), 'is-absent')}
+        ${filaEstadoPdf('Tardanzas', numero(resumen.tardanzas), 'is-late')}
+        ${filaEstadoPdf('Justificadas', numero(resumen.justificadas), 'is-justified')}
+        ${filaEstadoPdf('Asistencia efectiva', porcentaje(resumen.porcentajeAsistencia), 'is-rate')}
+      </section>
+
+      <section class="stats-pdf-section stats-pdf-two-columns">
+        <div>
+          <h2>Indicadores del periodo</h2>
+          <div class="stats-pdf-indicator"><span>Asistencia efectiva</span><strong>${seguro(porcentaje(resumen.porcentajeAsistencia))}</strong><div><i style="width:${Math.max(0, Math.min(100, numero(resumen.porcentajeAsistencia)))}%"></i></div><small>Presentes + tardanzas sobre el total de registros.</small></div>
+          <div class="stats-pdf-indicator is-violet"><span>Cumplimiento registrado</span><strong>${seguro(porcentaje(resumen.porcentajeCumplimiento))}</strong><div><i style="width:${Math.max(0, Math.min(100, numero(resumen.porcentajeCumplimiento)))}%"></i></div><small>Incluye las ausencias justificadas.</small></div>
+        </div>
+        <div>
+          <h2>Resumen de estados</h2>
+          <table class="stats-pdf-compact-table"><tbody>
+            <tr><th>Presente</th><td>${numero(resumen.presentes)}</td><td>${total ? porcentaje(numero(resumen.presentes) * 100 / total) : '0%'}</td></tr>
+            <tr><th>Ausente</th><td>${numero(resumen.ausentes)}</td><td>${total ? porcentaje(numero(resumen.ausentes) * 100 / total) : '0%'}</td></tr>
+            <tr><th>Tardanza</th><td>${numero(resumen.tardanzas)}</td><td>${total ? porcentaje(numero(resumen.tardanzas) * 100 / total) : '0%'}</td></tr>
+            <tr><th>Justificada</th><td>${numero(resumen.justificadas)}</td><td>${total ? porcentaje(numero(resumen.justificadas) * 100 / total) : '0%'}</td></tr>
+          </tbody></table>
+        </div>
+      </section>
+
+      <section class="stats-pdf-section">
+        <h2>Detalle por estudiante</h2>
+        <table class="stats-pdf-table">
+          <thead><tr><th>Estudiante</th><th>Clase</th><th>P</th><th>A</th><th>T</th><th>J</th><th>Asistencia</th><th>Cumplimiento</th></tr></thead>
+          <tbody>${alumnos.length ? alumnos.map(item => `<tr>
+            <td><strong>${seguro(item.alumno || 'Estudiante')}</strong><small>${numero(item.total)} registros</small></td>
+            <td>${seguro(item.ano || '')} · ${seguro(item.seccion || '')}<small>${seguro(item.turno || '')}</small></td>
+            <td>${numero(item.presentes)}</td><td>${numero(item.ausentes)}</td><td>${numero(item.tardanzas)}</td><td>${numero(item.justificadas)}</td>
+            <td><b>${seguro(porcentaje(item.porcentajeAsistencia))}</b></td><td><b>${seguro(porcentaje(item.porcentajeCumplimiento))}</b></td>
+          </tr>`).join('') : '<tr><td colspan="8">No hay estudiantes para los filtros seleccionados.</td></tr>'}</tbody>
+        </table>
+      </section>
+
+      <section class="stats-pdf-section">
+        <h2>Resumen por sección</h2>
+        <table class="stats-pdf-table">
+          <thead><tr><th>Sección</th><th>Registros</th><th>Presentes</th><th>Ausentes</th><th>Tardanzas</th><th>Justificadas</th><th>Asistencia</th></tr></thead>
+          <tbody>${secciones.length ? secciones.map(item => `<tr>
+            <td><strong>${seguro(item.ano || '')} · Sección ${seguro(item.seccion || '')}</strong><small>${seguro(item.turno || '')}</small></td>
+            <td>${numero(item.total)}</td><td>${numero(item.presentes)}</td><td>${numero(item.ausentes)}</td><td>${numero(item.tardanzas)}</td><td>${numero(item.justificadas)}</td><td><b>${seguro(porcentaje(item.porcentajeAsistencia))}</b></td>
+          </tr>`).join('') : '<tr><td colspan="7">No hay secciones en el periodo.</td></tr>'}</tbody>
+        </table>
+      </section>
+
+      <section class="stats-pdf-section stats-pdf-dates">
+        <h2>Evolución por fecha</h2>
+        <div>${fechas.length ? [...fechas].reverse().slice(0, 16).map(item => `<article><span>${seguro(fechaLegible(item.fecha))}</span><div><i style="width:${Math.max(1, Math.min(100, numero(item.porcentajeAsistencia)))}%"></i></div><strong>${seguro(porcentaje(item.porcentajeAsistencia))}</strong></article>`).join('') : '<p>Sin datos diarios.</p>'}</div>
+      </section>
+
+      <section class="stats-pdf-note">
+        <strong>Criterio de lectura</strong>
+        <p>La asistencia efectiva considera los estados Presente y Tardanza. El cumplimiento registrado también incorpora las ausencias justificadas. Este informe refleja los datos disponibles en EduGestión al momento de su emisión.</p>
+      </section>
+
+      <section class="stats-pdf-signatures">
+        <div><span></span><strong>${seguro(docente)}</strong><small>Firma del docente</small></div>
+        <div><span></span><strong>Dirección / Secretaría</strong><small>Firma y sello institucional</small></div>
+      </section>
+
+      <footer class="stats-pdf-footer"><span>Generado por EduGestión</span><span>${seguro(institucion)}</span></footer>`;
+    return reporte;
+  }
+
+  async function generarPdfProfesional() {
+    if (!numero(estadisticasData?.resumen?.total)) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para generar el informe.', 'warning', 'Informe vacío');
+      return;
+    }
+    if (typeof html2pdf !== 'function') {
+      if (typeof mostrarToast === 'function') mostrarToast('La librería de PDF no está disponible. Recarga la página e inténtalo nuevamente.', 'error', 'PDF no disponible');
+      return;
+    }
+
+    const boton = document.getElementById(IDS.pdf);
+    const contenidoAnterior = boton?.innerHTML || '';
+    if (boton) {
+      boton.disabled = true;
+      boton.classList.add('is-loading');
+      boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generando…';
+    }
+
+    const reporte = construirReportePdf();
+    const hostPdf = document.createElement('div');
+    hostPdf.className = 'stats-pdf-render-host';
+    hostPdf.setAttribute('aria-hidden', 'true');
+    hostPdf.appendChild(reporte);
+
+    const scrollAnterior = { x: window.scrollX, y: window.scrollY };
+    document.body.appendChild(hostPdf);
+    window.scrollTo(0, 0);
+
+    const desde = String(document.getElementById(IDS.from)?.value || 'inicio');
+    const hasta = String(document.getElementById(IDS.to)?.value || 'fin');
+    const archivo = `Informe_Asistencia_Horizontal_${desde}_${hasta}.pdf`;
+
+    try {
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const anchoCaptura = Math.max(1123, Math.ceil(reporte.scrollWidth || reporte.getBoundingClientRect().width));
+      const altoCaptura = Math.max(794, Math.ceil(reporte.scrollHeight || reporte.getBoundingClientRect().height));
+
+      await html2pdf().set({
+        margin: [6, 6, 8, 6],
+        filename: archivo,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: '#ffffff',
+          letterRendering: true,
+          scrollX: 0,
+          scrollY: 0,
+          x: 0,
+          y: 0,
+          windowWidth: anchoCaptura,
+          windowHeight: altoCaptura
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape', compress: true },
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.stats-pdf-kpi', '.stats-pdf-signatures'] }
+      }).from(reporte).save();
+      if (typeof mostrarToast === 'function') mostrarToast('El informe PDF se generó correctamente.', 'success', 'Informe descargado');
+    } catch (error) {
+      console.error('No se pudo generar el informe PDF:', error);
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo generar el PDF.', 'error', 'Error de PDF');
+    } finally {
+      hostPdf.remove();
+      window.scrollTo(scrollAnterior.x, scrollAnterior.y);
+      if (boton) {
+        boton.disabled = false;
+        boton.classList.remove('is-loading');
+        boton.innerHTML = contenidoAnterior;
+      }
+    }
   }
 
   function imprimirInforme() {

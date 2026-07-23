@@ -4677,3 +4677,86 @@ body.modal-open {
   body.stats-printing .stats-mobile-list { display: none !important; }
 }
 /* EDUGESTION_STATS_PANEL_V1_END */
+
+
+/* EDUGESTION_STATS_PDF_V1_START */
+.stats-button--pdf { border-color: rgba(255,255,255,.46); background: rgba(255,255,255,.2); }
+.stats-button:disabled { cursor: wait; opacity: .76; }
+
+/* Hoja A4 horizontal: 297 mm x 210 mm. */
+.stats-pdf-render-host {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  width: 297mm;
+  min-height: 210mm;
+  padding: 6mm 8mm 8mm;
+  overflow: visible;
+  background: #fff;
+  pointer-events: none;
+}
+
+.stats-pdf-report {
+  box-sizing: border-box;
+  width: 281mm;
+  max-width: 281mm;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  background: #fff;
+  color: #263e52;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 9px;
+  line-height: 1.3;
+}
+.stats-pdf-report *, .stats-pdf-report *::before, .stats-pdf-report *::after { box-sizing: border-box; }
+.stats-pdf-header { display: grid; grid-template-columns: 17mm minmax(0,1fr) 54mm; align-items: center; gap: 5mm; padding: 5mm 6mm; border-radius: 4mm; color: #fff; background: linear-gradient(135deg,#0f4f87,#1d7fb7); page-break-inside: avoid; }
+.stats-pdf-brand { display: flex; width: 15mm; height: 15mm; align-items: center; justify-content: center; border: .7mm solid rgba(255,255,255,.7); border-radius: 4mm; background: rgba(255,255,255,.14); font-size: 15px; font-weight: 900; }
+.stats-pdf-heading p, .stats-pdf-heading h1, .stats-pdf-heading small { margin: 0; }
+.stats-pdf-heading p { font-size: 7.5px; font-weight: 800; letter-spacing: .08em; }
+.stats-pdf-heading h1 { margin-top: 1mm; font-size: 19px; line-height: 1; letter-spacing: .025em; }
+.stats-pdf-heading small { display: block; margin-top: 1.2mm; color: rgba(255,255,255,.83); }
+.stats-pdf-folio { text-align: right; }
+.stats-pdf-folio b, .stats-pdf-folio span { display: block; }
+.stats-pdf-folio b { font-size: 10px; letter-spacing: .08em; }
+.stats-pdf-folio span { margin-top: 1.7mm; color: rgba(255,255,255,.82); font-size: 7px; }
+
+.stats-pdf-meta { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3mm; margin-top: 3.5mm; padding: 3.5mm 4mm; border: .3mm solid #d9e5ee; border-radius: 3mm; background: #f8fbfd; page-break-inside: avoid; }
+.stats-pdf-meta span, .stats-pdf-meta strong { display: block; }
+.stats-pdf-meta span { color: #70869a; font-size: 6.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.stats-pdf-meta strong { margin-top: .7mm; color: #203d55; font-size: 8.5px; overflow-wrap: anywhere; }
+
+.stats-pdf-summary { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 2.5mm; margin-top: 3.5mm; page-break-inside: avoid; }
+.stats-pdf-kpi { min-width: 0; padding: 2.6mm 2mm; border: .3mm solid #dce7ef; border-radius: 2.5mm; background: #fff; text-align: center; page-break-inside: avoid; }
+.stats-pdf-kpi span, .stats-pdf-kpi strong { display: block; }
+.stats-pdf-kpi span { color: #708499; font-size: 6.2px; font-weight: 800; text-transform: uppercase; }
+.stats-pdf-kpi strong { margin-top: .8mm; color: #213f58; font-size: 14px; line-height: 1; }
+.stats-pdf-kpi.is-present { border-top: 1.2mm solid #1fa66c; }.stats-pdf-kpi.is-absent { border-top: 1.2mm solid #e94c4c; }.stats-pdf-kpi.is-late { border-top: 1.2mm solid #e59a17; }.stats-pdf-kpi.is-justified { border-top: 1.2mm solid #7e4ade; }.stats-pdf-kpi.is-rate { border-top: 1.2mm solid #1685aa; }.stats-pdf-kpi.is-total { border-top: 1.2mm solid #276da5; }
+
+.stats-pdf-section { margin-top: 4mm; page-break-inside: auto; }
+.stats-pdf-section h2 { margin: 0 0 1.8mm; padding-bottom: 1.2mm; border-bottom: .45mm solid #1f76aa; color: #1d4968; font-size: 10.5px; }
+.stats-pdf-two-columns { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 6mm; page-break-inside: avoid; }
+.stats-pdf-indicator { position: relative; margin-top: 2mm; padding: 2.3mm; border-radius: 2.5mm; background: #f5f9fc; }
+.stats-pdf-indicator > span { font-weight: 800; }.stats-pdf-indicator > strong { float: right; color: #116ea6; font-size: 11.5px; }.stats-pdf-indicator > div { clear: both; height: 2mm; margin-top: 1.6mm; overflow: hidden; border-radius: 99px; background: #dfeaf1; }.stats-pdf-indicator > div i { display: block; height: 100%; border-radius: inherit; background: #25b778; }.stats-pdf-indicator.is-violet > div i { background: #8252dc; }.stats-pdf-indicator small { display: block; margin-top: 1.2mm; color: #72869a; font-size: 6.8px; }
+.stats-pdf-compact-table, .stats-pdf-table { width: 100%; border-collapse: collapse; }
+.stats-pdf-compact-table th, .stats-pdf-compact-table td { padding: 1.8mm 2mm; border-bottom: .25mm solid #e3ebf1; text-align: left; }.stats-pdf-compact-table td { text-align: right; }
+
+.stats-pdf-table { table-layout: fixed; }
+.stats-pdf-table thead { display: table-header-group; }
+.stats-pdf-table tr { page-break-inside: avoid; }
+.stats-pdf-table th { padding: 1.9mm 1.5mm; color: #fff; background: #275f88; font-size: 6.4px; letter-spacing: .025em; text-align: left; text-transform: uppercase; white-space: normal; overflow-wrap: anywhere; }
+.stats-pdf-table td { padding: 1.9mm 1.5mm; border-bottom: .25mm solid #e0e8ee; color: #2e4b61; font-size: 7.2px; vertical-align: top; overflow-wrap: anywhere; }
+.stats-pdf-table tbody tr:nth-child(even) { background: #f8fafc; }
+.stats-pdf-table td strong, .stats-pdf-table td small { display: block; }.stats-pdf-table td small { margin-top: .5mm; color: #8093a3; font-size: 6.2px; }
+.stats-pdf-table th:first-child { width: 24%; }.stats-pdf-table th:nth-child(2) { width: 15%; }
+
+.stats-pdf-dates > div { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1.5mm 3mm; }
+.stats-pdf-dates article { display: grid; grid-template-columns: 20mm minmax(0,1fr) 10mm; align-items: center; gap: 1.6mm; padding: 1.5mm 1.8mm; border-radius: 2mm; background: #f6f9fb; page-break-inside: avoid; }.stats-pdf-dates article span { font-weight: 800; }.stats-pdf-dates article div { height: 1.6mm; overflow: hidden; border-radius: 99px; background: #dfe9f0; }.stats-pdf-dates article div i { display: block; height: 100%; background: #2da6bf; }.stats-pdf-dates article strong { color: #176f9e; text-align: right; }
+.stats-pdf-note { margin-top: 4mm; padding: 2.8mm 3.5mm; border-left: 1.2mm solid #2678aa; border-radius: 1.5mm; background: #f1f7fb; page-break-inside: avoid; }.stats-pdf-note strong { color: #1f5579; }.stats-pdf-note p { margin: .8mm 0 0; color: #61798d; font-size: 7px; }
+.stats-pdf-signatures { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 30mm; margin: 13mm 24mm 6mm; page-break-inside: avoid; }.stats-pdf-signatures div { text-align: center; }.stats-pdf-signatures span { display: block; border-top: .35mm solid #466176; }.stats-pdf-signatures strong, .stats-pdf-signatures small { display: block; }.stats-pdf-signatures strong { margin-top: 1.7mm; font-size: 8px; }.stats-pdf-signatures small { margin-top: .6mm; color: #718597; font-size: 6.8px; }
+.stats-pdf-footer { display: flex; justify-content: space-between; margin-top: 3mm; padding-top: 1.8mm; border-top: .3mm solid #d8e2e9; color: #8495a3; font-size: 6.3px; }
+
+@page { size: A4 landscape; margin: 0; }
+/* EDUGESTION_STATS_PDF_V1_END */
