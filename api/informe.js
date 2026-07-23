@@ -1,13 +1,35 @@
+// EduGestión Fase 1.8.1 — CORS para envío local y público
 const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_PDF_BYTES = 3_900_000;
 const MAX_CAPTION_LENGTH = 900;
 
-function jsonResponse(payload, status = 200) {
+const ALLOWED_ORIGINS = new Set([
+  'https://edugestion-a2xh.vercel.app',
+  'http://127.0.0.1:5500',
+  'http://localhost:5500',
+]);
+
+function corsHeaders(request) {
+  const origin = String(request?.headers?.get('origin') || '').trim();
+  const allowOrigin = ALLOWED_ORIGINS.has(origin)
+    ? origin
+    : 'https://edugestion-a2xh.vercel.app';
+  return {
+    'access-control-allow-origin': allowOrigin,
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'Content-Type',
+    'access-control-max-age': '86400',
+    'vary': 'Origin',
+  };
+}
+
+function jsonResponse(payload, status = 200, request = null) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'cache-control': 'no-store',
+      ...corsHeaders(request),
     },
   });
 }
@@ -93,22 +115,29 @@ function errorStatus(error) {
 
 export default {
   async fetch(request) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(request),
+      });
+    }
+
     if (request.method === 'GET') {
       return jsonResponse({
         ok: true,
         service: 'EduGestion envío de informes',
-        status: 'phase1.8-report-ready',
-      });
+        status: 'phase1.8.1-cors-ready',
+      }, 200, request);
     }
 
     if (request.method !== 'POST') {
-      return jsonResponse({ ok: false, error: 'Método no permitido' }, 405);
+      return jsonResponse({ ok: false, error: 'Método no permitido' }, 405, request);
     }
 
     try {
       const contentType = request.headers.get('content-type') || '';
       if (!contentType.includes('multipart/form-data')) {
-        return jsonResponse({ ok: false, error: 'Se esperaba un formulario con el archivo PDF.' }, 415);
+        return jsonResponse({ ok: false, error: 'Se esperaba un formulario con el archivo PDF.' }, 415, request);
       }
 
       const form = await request.formData();
@@ -120,13 +149,13 @@ export default {
       const seccion = trimText(form.get('seccion'), 80) || 'Todas las secciones';
 
       if (!token) {
-        return jsonResponse({ ok: false, code: 'SESSION_REQUIRED', error: 'La sesión docente no está disponible.' }, 401);
+        return jsonResponse({ ok: false, code: 'SESSION_REQUIRED', error: 'La sesión docente no está disponible.' }, 401, request);
       }
       if (!(pdf instanceof File) || pdf.size === 0) {
-        return jsonResponse({ ok: false, code: 'BAD_REQUEST', error: 'No se recibió un archivo PDF válido.' }, 400);
+        return jsonResponse({ ok: false, code: 'BAD_REQUEST', error: 'No se recibió un archivo PDF válido.' }, 400, request);
       }
       if (pdf.type && pdf.type !== 'application/pdf') {
-        return jsonResponse({ ok: false, code: 'BAD_REQUEST', error: 'El archivo recibido no es un PDF.' }, 400);
+        return jsonResponse({ ok: false, code: 'BAD_REQUEST', error: 'El archivo recibido no es un PDF.' }, 400, request);
       }
       if (pdf.size > MAX_PDF_BYTES) {
         return jsonResponse({
@@ -134,7 +163,7 @@ export default {
           code: 'PDF_TOO_LARGE',
           error: 'El informe es demasiado pesado para el envío directo. Reduce el periodo o usa Descargar PDF.',
           maxBytes: MAX_PDF_BYTES,
-        }, 413);
+        }, 413, request);
       }
 
       const destination = await callEduGestion('botResolverDestinoInforme', { token });
@@ -169,14 +198,14 @@ export default {
         tamanoBytes: pdf.size,
         mensajeId: String(telegramResult.message_id || ''),
         warning: auditWarning,
-      });
+      }, 200, request);
     } catch (error) {
       console.error('No se pudo enviar el informe:', error);
       return jsonResponse({
         ok: false,
         code: error?.code || 'REPORT_SEND_ERROR',
         error: error?.message || 'No se pudo enviar el informe por Telegram.',
-      }, errorStatus(error));
+      }, errorStatus(error), request);
     }
   },
 };
