@@ -3152,6 +3152,396 @@ const SESSION_KEY = 'edugestion_session_v2';
   });
 
 
+
+
+/* =========================================================
+   BIBLIOTECA DIGITAL — RECURSOS, ARCHIVOS Y APUNTES
+   ========================================================= */
+(() => {
+  const LIB_IDS = { tab: 'tab-biblioteca', section: 'section-biblioteca' };
+  let bibliotecaDatos = null;
+  let bibliotecaFiltro = 'Todos';
+  let bibliotecaBusqueda = '';
+
+  const escLib = valor => String(valor ?? '').replace(/[&<>'"]/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+  }[c]));
+
+  function crearBibliotecaDigital() {
+    if (document.getElementById(LIB_IDS.tab)) return;
+    const nav = document.getElementById('app-nav');
+    const main = document.getElementById('app-main');
+    if (!nav || !main) return;
+
+    const tab = document.createElement('button');
+    tab.id = LIB_IDS.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item';
+    tab.setAttribute('aria-selected', 'false');
+    tab.dataset.title = 'Biblioteca digital';
+    tab.dataset.description = 'Libros, cursos, enlaces, archivos y apuntes para tus clases.';
+    tab.innerHTML = '<i class="fa-solid fa-book-open-reader"></i><span>Biblioteca digital</span>';
+
+    const directorTab = nav.querySelector('#tab-historial-administrativo');
+    if (directorTab) nav.insertBefore(tab, directorTab);
+    else nav.appendChild(tab);
+
+    const section = document.createElement('section');
+    section.id = LIB_IDS.section;
+    section.className = 'hidden digital-library';
+    section.innerHTML = `
+      <header class="platform-hero library-hero">
+        <div class="platform-hero__copy">
+          <span class="platform-hero__eyebrow"><i class="fa-solid fa-books"></i> Centro personal de recursos docentes</span>
+          <h2>Biblioteca digital</h2>
+          <p>Guarda libros, cursos, archivos, enlaces y apuntes. Investiga temas para preparar clases sin perder tus fuentes.</p>
+          <div class="platform-hero__badges">
+            <span><i class="fa-brands fa-google"></i> Búsqueda académica</span>
+            <span><i class="fa-brands fa-youtube"></i> Videos educativos</span>
+            <span><i class="fa-brands fa-google-drive"></i> Archivos en Drive</span>
+          </div>
+        </div>
+        <div class="platform-hero__icon"><i class="fa-solid fa-book-atlas"></i></div>
+      </header>
+
+      <section class="library-search-hub">
+        <div class="library-search-card library-search-card--google">
+          <span><i class="fa-brands fa-google"></i></span>
+          <div><strong>Buscar información en Google</strong><small>Artículos, guías, documentos y actividades.</small></div>
+          <form id="library-google-form"><input id="library-google-query" type="search" placeholder="Ej.: sistema solar para primer año"><button type="submit"><i class="fa-solid fa-magnifying-glass"></i> Buscar</button></form>
+        </div>
+        <div class="library-search-card library-search-card--youtube">
+          <span><i class="fa-brands fa-youtube"></i></span>
+          <div><strong>Buscar clases y cursos en YouTube</strong><small>Videos, experimentos y explicaciones educativas.</small></div>
+          <form id="library-youtube-form"><input id="library-youtube-query" type="search" placeholder="Ej.: curso de educación física escolar"><button type="submit"><i class="fa-solid fa-play"></i> Buscar</button></form>
+        </div>
+      </section>
+
+      <section class="library-summary" id="library-summary"></section>
+
+      <section class="library-workspace">
+        <aside class="library-tools">
+          <section class="library-panel">
+            <header><span><i class="fa-solid fa-plus"></i></span><div><h3>Agregar material</h3><p>Guárdalo únicamente en tu cuenta.</p></div></header>
+            <div class="library-action-grid">
+              <button type="button" data-library-open-form="link"><i class="fa-solid fa-link"></i><span>Guardar enlace</span></button>
+              <button type="button" data-library-open-form="file"><i class="fa-solid fa-file-arrow-up"></i><span>Subir archivo</span></button>
+              <button type="button" data-library-open-form="note"><i class="fa-solid fa-note-sticky"></i><span>Nuevo apunte</span></button>
+            </div>
+          </section>
+
+          <section class="library-panel">
+            <header><span><i class="fa-solid fa-filter"></i></span><div><h3>Organizar</h3><p>Filtra tu colección.</p></div></header>
+            <div class="library-filter-list">
+              <button class="is-active" data-library-filter="Todos"><i class="fa-solid fa-layer-group"></i><span>Todos</span></button>
+              <button data-library-filter="Favoritos"><i class="fa-solid fa-star"></i><span>Favoritos</span></button>
+              <button data-library-filter="Archivo"><i class="fa-solid fa-file-pdf"></i><span>Archivos</span></button>
+              <button data-library-filter="Enlace"><i class="fa-solid fa-link"></i><span>Enlaces</span></button>
+              <button data-library-filter="Apunte"><i class="fa-solid fa-pen-to-square"></i><span>Apuntes</span></button>
+              <button data-library-filter="Predeterminados"><i class="fa-solid fa-landmark"></i><span>Material oficial</span></button>
+            </div>
+          </section>
+        </aside>
+
+        <div class="library-main">
+          <section class="library-collection-header">
+            <div><span><i class="fa-solid fa-folder-open"></i></span><div><h3>Mi colección docente</h3><p>Material disponible para preparar tus clases.</p></div></div>
+            <div class="library-collection-actions">
+              <label><i class="fa-solid fa-magnifying-glass"></i><input id="library-local-search" type="search" placeholder="Buscar por título, área o etiqueta"></label>
+              <button id="library-refresh" type="button"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+          </section>
+          <div id="library-content" class="library-grid">
+            <div class="library-loading"><i class="fa-solid fa-circle-notch fa-spin"></i><strong>Cargando tu biblioteca…</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <div id="library-modal" class="library-modal hidden" aria-hidden="true">
+        <div class="library-modal__backdrop" data-library-close></div>
+        <section class="library-modal__card" role="dialog" aria-modal="true" aria-labelledby="library-modal-title">
+          <header><div><span id="library-modal-icon"><i class="fa-solid fa-plus"></i></span><div><small>Biblioteca digital</small><h3 id="library-modal-title">Agregar material</h3></div></div><button type="button" data-library-close><i class="fa-solid fa-xmark"></i></button></header>
+          <form id="library-resource-form">
+            <input id="library-form-type" type="hidden" value="Enlace">
+            <div class="library-form-grid">
+              <label class="library-field library-field--wide"><span>Título *</span><input id="library-title" required maxlength="160" placeholder="Nombre del libro, curso o apunte"></label>
+              <label class="library-field"><span>Categoría</span><select id="library-category"><option>Libro y documento</option><option>Curso</option><option>Actividad</option><option>Normativa</option><option>Material pedagógico</option><option>Investigación</option><option>General</option></select></label>
+              <label class="library-field"><span>Área</span><input id="library-area" maxlength="80" placeholder="Ej.: Ciencias Naturales"></label>
+              <label class="library-field library-field--wide"><span>Descripción</span><textarea id="library-description" rows="3" maxlength="600" placeholder="¿Para qué usarás este material?"></textarea></label>
+              <label class="library-field library-field--wide" id="library-url-field"><span>Enlace *</span><input id="library-url" type="url" placeholder="https://..."></label>
+              <label class="library-field library-field--wide hidden" id="library-file-field"><span>Archivo *</span><input id="library-file" type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"><small>PDF, Word, PowerPoint o TXT. Máximo 10 MB.</small></label>
+              <label class="library-field library-field--wide hidden" id="library-note-field"><span>Contenido del apunte *</span><textarea id="library-note" rows="8" maxlength="12000" placeholder="Escribe ideas, resumen de clase, referencias o actividades…"></textarea></label>
+              <label class="library-field library-field--wide"><span>Etiquetas</span><input id="library-tags" maxlength="160" placeholder="Ej.: primer año, experimento, evaluación"></label>
+              <label class="library-check"><input id="library-favorite" type="checkbox"><span><i class="fa-solid fa-star"></i> Guardar como favorito</span></label>
+            </div>
+            <footer><button type="button" data-library-close>Cancelar</button><button id="library-save" type="submit"><i class="fa-solid fa-cloud-arrow-up"></i><span>Guardar material</span></button></footer>
+          </form>
+        </section>
+      </div>
+    `;
+    main.appendChild(section);
+
+    tab.addEventListener('click', abrirBiblioteca);
+    section.querySelector('#library-google-form')?.addEventListener('submit', e => abrirBusqueda(e, 'google'));
+    section.querySelector('#library-youtube-form')?.addEventListener('submit', e => abrirBusqueda(e, 'youtube'));
+    section.querySelector('#library-resource-form')?.addEventListener('submit', guardarRecurso);
+    section.querySelector('#library-refresh')?.addEventListener('click', () => cargarBiblioteca(true));
+    section.querySelector('#library-local-search')?.addEventListener('input', e => {
+      bibliotecaBusqueda = String(e.target.value || '').trim().toLowerCase();
+      renderBiblioteca();
+    });
+    section.querySelectorAll('[data-library-filter]').forEach(btn => btn.addEventListener('click', () => {
+      bibliotecaFiltro = btn.dataset.libraryFilter;
+      section.querySelectorAll('[data-library-filter]').forEach(b => b.classList.toggle('is-active', b === btn));
+      renderBiblioteca();
+    }));
+    section.querySelectorAll('[data-library-open-form]').forEach(btn => btn.addEventListener('click', () => abrirFormulario(btn.dataset.libraryOpenForm)));
+    section.querySelectorAll('[data-library-close]').forEach(btn => btn.addEventListener('click', cerrarFormulario));
+  }
+
+  function abrirBusqueda(event, motor) {
+    event.preventDefault();
+    const input = document.getElementById(motor === 'google' ? 'library-google-query' : 'library-youtube-query');
+    const tema = String(input?.value || '').trim();
+    if (!tema) {
+      mostrarToast('Escribe un tema para realizar la búsqueda.', 'warning', 'Tema requerido');
+      input?.focus();
+      return;
+    }
+    const url = motor === 'google'
+      ? `https://www.google.com/search?q=${encodeURIComponent(tema + ' material educativo')}`
+      : `https://www.youtube.com/results?search_query=${encodeURIComponent(tema + ' clase educativa')}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  async function abrirBiblioteca() {
+    if (String(profesorActual?.rol || '').toLowerCase() === 'director') {
+      mostrarToast('La biblioteca digital pertenece a las cuentas docentes.', 'warning', 'Acceso docente');
+      return;
+    }
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('is-active');
+      item.setAttribute('aria-selected', 'false');
+    });
+    document.querySelectorAll('#app-main > section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(LIB_IDS.tab)?.classList.add('is-active');
+    document.getElementById(LIB_IDS.tab)?.setAttribute('aria-selected', 'true');
+    document.getElementById(LIB_IDS.section)?.classList.remove('hidden');
+    if (pageTitle) pageTitle.textContent = 'Biblioteca digital';
+    if (pageDescription) pageDescription.textContent = 'Libros, cursos, enlaces, archivos y apuntes para tus clases.';
+    window.scrollTo({top:0,behavior:'smooth'});
+    await cargarBiblioteca(false);
+  }
+
+  async function cargarBiblioteca(forzar = false) {
+    if (bibliotecaDatos && !forzar) {
+      renderBiblioteca();
+      return;
+    }
+    const content = document.getElementById('library-content');
+    const refresh = document.getElementById('library-refresh');
+    if (content) content.innerHTML = '<div class="library-loading"><i class="fa-solid fa-circle-notch fa-spin"></i><strong>Cargando tu biblioteca…</strong></div>';
+    refresh?.classList.add('is-loading');
+    try {
+      bibliotecaDatos = await apiRequest('obtenerBiblioteca');
+      renderBiblioteca();
+    } catch (error) {
+      if (content) content.innerHTML = `<div class="library-empty"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar la biblioteca</strong><span>${escLib(error.message)}</span></div>`;
+      mostrarToast(error.message || 'No se pudo cargar la biblioteca.', 'error', 'Biblioteca no disponible');
+    } finally {
+      refresh?.classList.remove('is-loading');
+    }
+  }
+
+  function renderResumen() {
+    const target = document.getElementById('library-summary');
+    if (!target || !bibliotecaDatos) return;
+    const r = bibliotecaDatos.resumen || {};
+    target.innerHTML = `
+      <article><span><i class="fa-solid fa-book"></i></span><div><strong>${r.total || 0}</strong><small>Recursos propios</small></div></article>
+      <article><span><i class="fa-solid fa-file-arrow-up"></i></span><div><strong>${r.archivos || 0}</strong><small>Archivos en Drive</small></div></article>
+      <article><span><i class="fa-solid fa-link"></i></span><div><strong>${r.enlaces || 0}</strong><small>Enlaces guardados</small></div></article>
+      <article><span><i class="fa-solid fa-note-sticky"></i></span><div><strong>${r.apuntes || 0}</strong><small>Apuntes digitales</small></div></article>
+      <article><span><i class="fa-solid fa-star"></i></span><div><strong>${r.favoritos || 0}</strong><small>Favoritos</small></div></article>`;
+  }
+
+  function recursosFiltrados() {
+    if (!bibliotecaDatos) return [];
+    const propios = (bibliotecaDatos.recursos || []).map(x => ({...x, predeterminado:false}));
+    const defaults = (bibliotecaDatos.predeterminados || []).map(x => ({...x, predeterminado:true}));
+    let items = [...defaults, ...propios];
+
+    if (bibliotecaFiltro === 'Favoritos') items = items.filter(x => x.favorito);
+    else if (bibliotecaFiltro === 'Predeterminados') items = items.filter(x => x.predeterminado);
+    else if (bibliotecaFiltro !== 'Todos') items = items.filter(x => x.tipo === bibliotecaFiltro);
+
+    if (bibliotecaBusqueda) {
+      items = items.filter(x => [x.titulo,x.categoria,x.area,x.descripcion,x.etiquetas,x.apunte,x.fuente]
+        .join(' ').toLowerCase().includes(bibliotecaBusqueda));
+    }
+    return items;
+  }
+
+  function iconoRecurso(recurso) {
+    if (recurso.predeterminado) return 'fa-landmark';
+    if (recurso.tipo === 'Archivo') return recurso.mimeType === 'application/pdf' ? 'fa-file-pdf' : 'fa-file';
+    if (recurso.tipo === 'Apunte') return 'fa-note-sticky';
+    if (recurso.categoria === 'Curso') return 'fa-graduation-cap';
+    return 'fa-link';
+  }
+
+  function renderBiblioteca() {
+    renderResumen();
+    const content = document.getElementById('library-content');
+    if (!content || !bibliotecaDatos) return;
+    const items = recursosFiltrados();
+    if (!items.length) {
+      content.innerHTML = '<div class="library-empty"><i class="fa-solid fa-folder-open"></i><strong>No hay recursos en esta vista</strong><span>Agrega un enlace, sube un archivo o crea un apunte.</span></div>';
+      return;
+    }
+
+    content.innerHTML = items.map(r => `
+      <article class="library-resource ${r.predeterminado ? 'is-default' : ''}">
+        <header>
+          <span><i class="fa-solid ${iconoRecurso(r)}"></i></span>
+          <div><small>${escLib(r.categoria || r.tipo)}</small><h4>${escLib(r.titulo)}</h4></div>
+          ${r.predeterminado ? '<em>Recomendado</em>' : `<button type="button" data-library-favorite="${escLib(r.id)}" class="${r.favorito ? 'is-active' : ''}" title="Favorito"><i class="fa-solid fa-star"></i></button>`}
+        </header>
+        <p>${escLib(r.descripcion || (r.tipo === 'Apunte' ? String(r.apunte || '').slice(0,180) : 'Recurso disponible para tus clases.'))}</p>
+        <div class="library-resource__meta">
+          ${r.area ? `<span><i class="fa-solid fa-shapes"></i>${escLib(r.area)}</span>` : ''}
+          ${r.fuente ? `<span><i class="fa-solid fa-building-columns"></i>${escLib(r.fuente)}</span>` : ''}
+          ${r.archivoNombre ? `<span><i class="fa-solid fa-paperclip"></i>${escLib(r.archivoNombre)}</span>` : ''}
+        </div>
+        ${r.tipo === 'Apunte' ? `<details><summary>Leer apunte completo</summary><div>${escLib(r.apunte).replace(/\n/g,'<br>')}</div></details>` : ''}
+        <footer>
+          ${r.url ? `<a href="${escLib(r.url)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i>${r.tipo === 'Archivo' ? 'Abrir archivo' : 'Consultar recurso'}</a>` : '<span></span>'}
+          ${r.predeterminado ? '' : `<button type="button" data-library-delete="${escLib(r.id)}"><i class="fa-solid fa-trash"></i></button>`}
+        </footer>
+      </article>`).join('');
+
+    content.querySelectorAll('[data-library-favorite]').forEach(btn => btn.addEventListener('click', () => alternarFavorito(btn.dataset.libraryFavorite)));
+    content.querySelectorAll('[data-library-delete]').forEach(btn => btn.addEventListener('click', () => eliminarRecurso(btn.dataset.libraryDelete)));
+  }
+
+  function abrirFormulario(modo) {
+    const modal = document.getElementById('library-modal');
+    const type = document.getElementById('library-form-type');
+    const title = document.getElementById('library-modal-title');
+    const urlField = document.getElementById('library-url-field');
+    const fileField = document.getElementById('library-file-field');
+    const noteField = document.getElementById('library-note-field');
+    const form = document.getElementById('library-resource-form');
+    form?.reset();
+
+    const config = {
+      link: ['Enlace','Guardar enlace o curso'],
+      file: ['Archivo','Subir libro o material'],
+      note: ['Apunte','Crear apunte digital']
+    }[modo] || ['Enlace','Agregar material'];
+
+    if (type) type.value = config[0];
+    if (title) title.textContent = config[1];
+    urlField?.classList.toggle('hidden', modo !== 'link');
+    fileField?.classList.toggle('hidden', modo !== 'file');
+    noteField?.classList.toggle('hidden', modo !== 'note');
+    document.getElementById('library-url')?.toggleAttribute('required', modo === 'link');
+    document.getElementById('library-file')?.toggleAttribute('required', modo === 'file');
+    document.getElementById('library-note')?.toggleAttribute('required', modo === 'note');
+    const area = document.getElementById('library-area');
+    if (area) area.value = profesorActual?.materia || '';
+
+    modal?.classList.remove('hidden');
+    modal?.setAttribute('aria-hidden','false');
+    document.body.classList.add('library-modal-open');
+    setTimeout(() => document.getElementById('library-title')?.focus(), 50);
+  }
+
+  function cerrarFormulario() {
+    const modal = document.getElementById('library-modal');
+    modal?.classList.add('hidden');
+    modal?.setAttribute('aria-hidden','true');
+    document.body.classList.remove('library-modal-open');
+  }
+
+  function archivoBase64(file) {
+    return new Promise((resolve,reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function guardarRecurso(event) {
+    event.preventDefault();
+    const tipo = document.getElementById('library-form-type')?.value || 'Enlace';
+    const save = document.getElementById('library-save');
+    const payload = {
+      tipo,
+      titulo: document.getElementById('library-title')?.value.trim(),
+      categoria: document.getElementById('library-category')?.value,
+      area: document.getElementById('library-area')?.value.trim(),
+      descripcion: document.getElementById('library-description')?.value.trim(),
+      etiquetas: document.getElementById('library-tags')?.value.trim(),
+      url: document.getElementById('library-url')?.value.trim(),
+      apunte: document.getElementById('library-note')?.value.trim(),
+      favorito: document.getElementById('library-favorite')?.checked
+    };
+
+    save?.classList.add('is-loading');
+    save?.setAttribute('disabled','disabled');
+    try {
+      if (tipo === 'Archivo') {
+        const file = document.getElementById('library-file')?.files?.[0];
+        if (!file) throw new Error('Selecciona un archivo.');
+        if (file.size > 10 * 1024 * 1024) throw new Error('El archivo supera el límite de 10 MB.');
+        payload.archivoNombre = file.name;
+        payload.mimeType = file.type || 'application/octet-stream';
+        payload.base64 = await archivoBase64(file);
+        await apiRequest('subirArchivoBiblioteca', payload);
+      } else {
+        await apiRequest('guardarRecursoBiblioteca', payload);
+      }
+      cerrarFormulario();
+      bibliotecaDatos = null;
+      await cargarBiblioteca(true);
+      mostrarToast('El material quedó guardado en tu biblioteca.', 'success', 'Biblioteca actualizada');
+    } catch (error) {
+      mostrarToast(error.message || 'No se pudo guardar el material.', 'error', 'No se guardó');
+    } finally {
+      save?.classList.remove('is-loading');
+      save?.removeAttribute('disabled');
+    }
+  }
+
+  async function alternarFavorito(id) {
+    try {
+      await apiRequest('alternarFavoritoBiblioteca', {id});
+      bibliotecaDatos = null;
+      await cargarBiblioteca(true);
+    } catch (error) {
+      mostrarToast(error.message, 'error', 'No se actualizó');
+    }
+  }
+
+  async function eliminarRecurso(id) {
+    if (!window.confirm('¿Eliminar este recurso de tu biblioteca?')) return;
+    try {
+      await apiRequest('eliminarRecursoBiblioteca', {id});
+      bibliotecaDatos = null;
+      await cargarBiblioteca(true);
+      mostrarToast('Recurso eliminado.', 'success');
+    } catch (error) {
+      mostrarToast(error.message, 'error', 'No se eliminó');
+    }
+  }
+
+  crearBibliotecaDigital();
+  window.addEventListener('DOMContentLoaded', crearBibliotecaDigital);
+})();
+
+
 })();
 
 /* EDUGESTION_AUDIT_PANEL_V1_START */
