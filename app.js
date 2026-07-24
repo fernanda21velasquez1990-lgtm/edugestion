@@ -2508,6 +2508,9 @@ const SESSION_KEY = 'edugestion_session_v2';
     section.querySelector('#director-refresh')?.addEventListener('click', () => cargarPanelDirector(true));
     section.querySelector('#director-filter-teacher')?.addEventListener('change', event => {
       filtroDocenteDirector = event.target.value;
+      busquedaDirector = '';
+      const input = document.getElementById('director-search');
+      if (input) input.value = '';
       renderPanelDirector();
     });
     section.querySelector('#director-search')?.addEventListener('input', event => {
@@ -2619,12 +2622,108 @@ const SESSION_KEY = 'edugestion_session_v2';
     return `<div class="director-table-wrap"><table class="director-table"><thead><tr>${headers.map(x => `<th>${h(x)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   }
 
+
+  function docenteSeleccionado() {
+    if (!datosDirector || !filtroDocenteDirector) return null;
+    return (datosDirector.docentes || []).find(d => String(d.id) === String(filtroDocenteDirector)) || null;
+  }
+
+  function obtenerSeccionesDocente(idDocente) {
+    const fuentes = []
+      .concat(datosDirector?.estudiantes || [])
+      .concat(datosDirector?.horarios || [])
+      .concat(datosDirector?.evaluaciones || [])
+      .filter(x => String(x.idProfesor || '') === String(idDocente));
+
+    const mapa = new Map();
+    fuentes.forEach(x => {
+      const ano = String(x.ano || '').trim();
+      const seccion = String(x.seccion || '').trim();
+      const turno = String(x.turno || '').trim();
+      if (!ano && !seccion) return;
+      const clave = `${ano}|${seccion}|${turno}`;
+      if (!mapa.has(clave)) mapa.set(clave, { ano, seccion, turno });
+    });
+    return [...mapa.values()].sort((a,b) =>
+      `${a.ano}-${a.seccion}-${a.turno}`.localeCompare(`${b.ano}-${b.seccion}-${b.turno}`, 'es')
+    );
+  }
+
+  function contextoDocenteHtml() {
+    const d = docenteSeleccionado();
+    if (!d) {
+      return `<section class="director-selection-help">
+        <span><i class="fa-solid fa-hand-pointer"></i></span>
+        <div><strong>Selecciona un docente para consultar su información</strong>
+        <p>Usa el selector superior o pulsa “Ver información” en una tarjeta. Después navega por Estudiantes, Asistencia, Notas, Horarios, Actas y Auditoría.</p></div>
+      </section>`;
+    }
+
+    const secciones = obtenerSeccionesDocente(d.id);
+    return `<section class="director-selected-teacher">
+      <div class="director-selected-teacher__profile">
+        <span>${h((d.nombre || 'D').charAt(0))}</span>
+        <div>
+          <small>Docente seleccionado</small>
+          <h3>${h(d.nombre)}</h3>
+          <p>${h(d.materia || 'Sin materia')} · @${h(d.usuario || '')}</p>
+        </div>
+        <em class="${d.activo ? 'is-active' : 'is-inactive'}">${d.activo ? 'Cuenta activa' : 'Cuenta inactiva'}</em>
+      </div>
+      <div class="director-selected-teacher__summary">
+        <div><i class="fa-solid fa-users"></i><strong>${h(d.estudiantes)}</strong><small>Estudiantes</small></div>
+        <div><i class="fa-solid fa-user-check"></i><strong>${h(d.porcentajeAsistencia)}%</strong><small>Asistencia</small></div>
+        <div><i class="fa-solid fa-square-poll-vertical"></i><strong>${h(d.evaluaciones)}</strong><small>Evaluaciones</small></div>
+        <div><i class="fa-solid fa-calendar-week"></i><strong>${h(d.bloquesHorario)}</strong><small>Bloques</small></div>
+      </div>
+      <div class="director-selected-teacher__sections">
+        <strong><i class="fa-solid fa-school"></i> Secciones asignadas</strong>
+        <div>${secciones.length
+          ? secciones.map(s => `<button type="button" data-director-section="${h(`${s.ano}|${s.seccion}|${s.turno}`)}"><span>${h(s.ano || 'Curso')} ${h(s.seccion)}</span><small>${h(s.turno || 'Sin turno')}</small></button>`).join('')
+          : '<span class="director-no-sections">No hay secciones registradas para este docente.</span>'}
+        </div>
+      </div>
+    </section>`;
+  }
+
+  function filtrarPorSeccionTemporal(lista, clave) {
+    if (!clave) return lista;
+    const [ano, seccion, turno] = String(clave).split('|');
+    return (lista || []).filter(x =>
+      String(x.ano || '') === ano &&
+      String(x.seccion || '') === seccion &&
+      String(x.turno || '') === turno
+    );
+  }
+
+  function horarioInteractivoHtml(items) {
+    if (!items.length) return `<div class="director-empty"><i class="fa-solid fa-calendar-xmark"></i><strong>Sin horario registrado</strong><span>El docente seleccionado todavía no tiene bloques de horario.</span></div>`;
+    const ordenDias = ['Lunes','Martes','Miércoles','Miercoles','Jueves','Viernes','Sábado','Sabado','Domingo'];
+    const dias = [...new Set(items.map(x => String(x.dia || 'Sin día')))].sort((a,b) => {
+      const ia = ordenDias.indexOf(a), ib = ordenDias.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    return `<div class="director-schedule-board">${dias.map(dia => {
+      const bloques = items.filter(x => String(x.dia || 'Sin día') === dia)
+        .sort((a,b) => String(a.horaInicio || '').localeCompare(String(b.horaInicio || '')));
+      return `<article class="director-schedule-day">
+        <header><i class="fa-solid fa-calendar-day"></i><strong>${h(dia)}</strong><small>${bloques.length} bloque${bloques.length === 1 ? '' : 's'}</small></header>
+        <div>${bloques.map(x => `<section>
+          <time>${h(x.horaInicio)} – ${h(x.horaFin)}</time>
+          <strong>${h(x.ano)} ${h(x.seccion)}</strong>
+          <span>${h(x.turno)}${x.materia ? ` · ${h(x.materia)}` : ''}</span>
+        </section>`).join('')}</div>
+      </article>`;
+    }).join('')}</div>`;
+  }
+
   function renderPanelDirector() {
     const content = document.getElementById('director-content');
     if (!content || !datosDirector) return;
     content.classList.remove('hidden');
     const r = datosDirector.resumen || {};
     let html = '';
+    const contexto = contextoDocenteHtml();
 
     if (vistaDirector === 'resumen') {
       const docentes = filtrar(datosDirector.docentes, ['nombre','materia','usuario','seccion','turno']);
@@ -2671,14 +2770,34 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     if (vistaDirector === 'estudiantes') {
       const items = filtrar(datosDirector.estudiantes, ['docente','nombre','cedula','ano','seccion','turno','representante']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-users"></i></span><div><h3>Estudiantes por docente</h3><p>Matrícula registrada en cada cuenta docente.</p></div></div><small>${items.length} estudiantes</small></header>
-      ${tabla(['Estudiante','Docente responsable','Curso','Representante','Contacto'], items.slice(0,700).map(x => `<tr><td><strong>${h(x.nombre)}</strong><small>${h(x.cedula || 'Sin cédula')}</small></td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)} · ${h(x.turno)}</td><td>${h(x.representante || 'No registrado')}</td><td>${h(x.telefonoRepresentante || x.emailRepresentante || '—')}</td></tr>`))}</section>`;
+      const grupos = new Map();
+      items.forEach(x => {
+        const key = `${x.ano || ''}|${x.seccion || ''}|${x.turno || ''}`;
+        if (!grupos.has(key)) grupos.set(key, []);
+        grupos.get(key).push(x);
+      });
+      const tarjetas = [...grupos.entries()].map(([key, alumnos]) => {
+        const [ano,seccion,turno] = key.split('|');
+        return `<button class="director-section-card" type="button" data-director-section="${h(key)}">
+          <span><i class="fa-solid fa-school"></i></span>
+          <div><strong>${h(ano || 'Curso')} ${h(seccion)}</strong><small>${h(turno || 'Sin turno')}</small></div>
+          <em>${alumnos.length} alumno${alumnos.length === 1 ? '' : 's'}</em>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>`;
+      }).join('');
+      html = `<section class="director-card">
+        <header><div><span><i class="fa-solid fa-users"></i></span><div><h3>Estudiantes y secciones del docente</h3><p>Selecciona una sección para filtrar su matrícula.</p></div></div><small>${items.length} estudiantes</small></header>
+        ${tarjetas ? `<div class="director-section-grid">${tarjetas}</div>` : ''}
+        ${tabla(['Estudiante','Docente responsable','Curso','Representante','Contacto'], items.slice(0,700).map(x => `<tr><td><strong>${h(x.nombre)}</strong><small>${h(x.cedula || 'Sin cédula')}</small></td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)} · ${h(x.turno)}</td><td>${h(x.representante || 'No registrado')}</td><td>${h(x.telefonoRepresentante || x.emailRepresentante || '—')}</td></tr>`), filtroDocenteDirector ? 'Este docente todavía no tiene estudiantes registrados.' : 'Selecciona un docente para ver sus secciones y estudiantes.')}
+      </section>`;
     }
 
     if (vistaDirector === 'horarios') {
-      const items = filtrar(datosDirector.horarios, ['docente','dia','horaInicio','horaFin','ano','seccion','turno']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-calendar-week"></i></span><div><h3>Horarios institucionales</h3><p>Bloques semanales organizados por docente.</p></div></div><small>${items.length} bloques</small></header>
-      ${tabla(['Día','Horario','Docente','Curso / sección','Turno'], items.map(x => `<tr><td><strong>${h(x.dia)}</strong></td><td>${h(x.horaInicio)} – ${h(x.horaFin)}</td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)}</td><td>${h(x.turno)}</td></tr>`))}</section>`;
+      const items = filtrar(datosDirector.horarios, ['docente','dia','horaInicio','horaFin','ano','seccion','turno','materia']);
+      html = `<section class="director-card">
+        <header><div><span><i class="fa-solid fa-calendar-week"></i></span><div><h3>Horario completo del docente</h3><p>Agenda semanal con días, horas, cursos, secciones y turnos.</p></div></div><small>${items.length} bloques</small></header>
+        ${horarioInteractivoHtml(items)}
+      </section>`;
     }
 
     if (vistaDirector === 'actas') {
@@ -2693,14 +2812,28 @@ const SESSION_KEY = 'edugestion_session_v2';
       ${tabla(['Fecha y hora','Docente','Estudiante','Origen','Cambio'], items.slice(0,600).map(x => `<tr><td>${h(x.registradoEn)}</td><td><strong>${h(x.docente)}</strong><small>${h(x.actorNombre || '')}</small></td><td>${h(x.alumno)}</td><td>${h(x.origen)}</td><td>${h(x.estadoAnterior || '—')} → <strong>${h(x.estadoNuevo || '—')}</strong></td></tr>`))}</section>`;
     }
 
-    content.innerHTML = html;
+    content.innerHTML = contexto + html;
+
+    content.querySelectorAll('[data-director-section]').forEach(button => {
+      button.addEventListener('click', () => {
+        const clave = button.dataset.directorSection;
+        const [ano, seccion, turno] = String(clave || '').split('|');
+        busquedaDirector = `${ano} ${seccion} ${turno}`.trim().toLowerCase();
+        const input = document.getElementById('director-search');
+        if (input) input.value = `${ano} ${seccion} ${turno}`.trim();
+        vistaDirector = 'estudiantes';
+        document.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b.dataset.directorView === 'estudiantes'));
+        renderPanelDirector();
+      });
+    });
+
     content.querySelectorAll('[data-open-teacher]').forEach(button => {
       button.addEventListener('click', () => {
         filtroDocenteDirector = button.dataset.openTeacher;
         const select = document.getElementById('director-filter-teacher');
         if (select) select.value = filtroDocenteDirector;
-        vistaDirector = 'docentes';
-        document.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b.dataset.directorView === 'docentes'));
+        vistaDirector = 'estudiantes';
+        document.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b.dataset.directorView === 'estudiantes'));
         renderPanelDirector();
       });
     });
