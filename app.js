@@ -1,3 +1,4 @@
+/* EDUGESTION_GUIDE_TABS_FIX_V3_20260724 */
 /* EDUGESTION_GUIDE_FIX_V2_20260724 */
 /* EDUGESTION_DIRECTOR_ALUMNOS_SECCION_V2_20260724 */
 const API_URL = String(window.EDUGESTION_CONFIG?.API_URL || '').trim();
@@ -4621,10 +4622,6 @@ Archivo enviado directamente desde EduGestión.`);
       if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
         cerrarGuia();
       }
-    });
-
-    modal.querySelector('.user-guide-modal__card')?.addEventListener('click', event => {
-      event.stopPropagation();
     });
 
     window.abrirGuiaEduGestion = abrirGuia;
