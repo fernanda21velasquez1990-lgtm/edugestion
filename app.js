@@ -2415,6 +2415,320 @@ const SESSION_KEY = 'edugestion_session_v2';
   } else {
     createTelegramLinkUi();
   }
+
+/* =========================================================
+   PANEL DEL DIRECTOR — SOLO LECTURA
+   ========================================================= */
+  const DIRECTOR_IDS = {
+    tab: 'tab-historial-administrativo',
+    section: 'section-historial-administrativo'
+  };
+  let datosDirector = null;
+  let vistaDirector = 'resumen';
+  let filtroDocenteDirector = '';
+  let busquedaDirector = '';
+
+  function h(valor = '') {
+    return String(valor).replace(/[&<>'"]/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+    }[c]));
+  }
+
+  function esDirector() {
+    return String(profesorActual?.rol || '').toLowerCase() === 'director';
+  }
+
+  function crearPanelDirector() {
+    if (document.getElementById(DIRECTOR_IDS.tab)) return;
+    const nav = document.getElementById('app-nav');
+    const main = document.getElementById('app-main');
+    if (!nav || !main) return;
+
+    const tab = document.createElement('button');
+    tab.id = DIRECTOR_IDS.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item director-only-nav';
+    tab.setAttribute('aria-selected', 'false');
+    tab.dataset.title = 'Panel de dirección';
+    tab.dataset.description = 'Consulta institucional consolidada y de solo lectura.';
+    tab.innerHTML = '<i class="fa-solid fa-building-shield"></i><span>Historial administrativo</span>';
+    nav.appendChild(tab);
+
+    const section = document.createElement('section');
+    section.id = DIRECTOR_IDS.section;
+    section.className = 'hidden director-dashboard';
+    section.innerHTML = `
+      <header class="platform-hero director-hero">
+        <div class="platform-hero__copy">
+          <span class="platform-hero__eyebrow"><i class="fa-solid fa-lock"></i> Acceso exclusivo de dirección</span>
+          <h2>Panel administrativo institucional</h2>
+          <p>Supervisa la actividad académica de todos los docentes sin modificar ningún registro.</p>
+          <div class="platform-hero__badges">
+            <span><i class="fa-solid fa-eye"></i> Solo lectura</span>
+            <span><i class="fa-solid fa-users-gear"></i> Todos los docentes</span>
+            <span><i class="fa-solid fa-shield-halved"></i> Acceso restringido</span>
+          </div>
+        </div>
+        <div class="platform-hero__icon"><i class="fa-solid fa-chart-line"></i></div>
+      </header>
+
+      <section class="director-toolbar">
+        <div class="director-toolbar__identity">
+          <span><i class="fa-solid fa-user-tie"></i></span>
+          <div><small>Cuenta autorizada</small><strong id="director-account-name">Dirección</strong></div>
+        </div>
+        <div class="director-toolbar__filters">
+          <label><span>Docente</span><select id="director-filter-teacher"><option value="">Todos los docentes</option></select></label>
+          <label class="director-search"><span>Buscar</span><div><i class="fa-solid fa-magnifying-glass"></i><input id="director-search" type="search" placeholder="Docente, estudiante, materia o sección"></div></label>
+          <button id="director-refresh" type="button"><i class="fa-solid fa-rotate"></i><span>Actualizar</span></button>
+        </div>
+      </section>
+
+      <nav class="director-view-tabs" aria-label="Vistas del panel director">
+        <button class="is-active" data-director-view="resumen" type="button"><i class="fa-solid fa-gauge-high"></i><span>Resumen</span></button>
+        <button data-director-view="docentes" type="button"><i class="fa-solid fa-chalkboard-user"></i><span>Docentes</span></button>
+        <button data-director-view="asistencia" type="button"><i class="fa-solid fa-user-check"></i><span>Asistencia</span></button>
+        <button data-director-view="notas" type="button"><i class="fa-solid fa-square-poll-vertical"></i><span>Notas y evaluaciones</span></button>
+        <button data-director-view="estudiantes" type="button"><i class="fa-solid fa-users"></i><span>Estudiantes</span></button>
+        <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span></button>
+        <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
+        <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
+      </nav>
+
+      <div id="director-loading" class="director-state">
+        <i class="fa-solid fa-circle-notch fa-spin"></i>
+        <strong>Cargando información institucional…</strong>
+        <span>Consultando los registros de todos los docentes.</span>
+      </div>
+      <div id="director-content" class="director-content hidden"></div>
+    `;
+    main.appendChild(section);
+
+    tab.addEventListener('click', abrirPanelDirector);
+    section.querySelector('#director-refresh')?.addEventListener('click', () => cargarPanelDirector(true));
+    section.querySelector('#director-filter-teacher')?.addEventListener('change', event => {
+      filtroDocenteDirector = event.target.value;
+      renderPanelDirector();
+    });
+    section.querySelector('#director-search')?.addEventListener('input', event => {
+      busquedaDirector = String(event.target.value || '').trim().toLowerCase();
+      renderPanelDirector();
+    });
+    section.querySelectorAll('[data-director-view]').forEach(button => {
+      button.addEventListener('click', () => {
+        vistaDirector = button.dataset.directorView;
+        section.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b === button));
+        renderPanelDirector();
+      });
+    });
+  }
+
+  function aplicarAccesoPorRol() {
+    crearPanelDirector();
+    const director = esDirector();
+    document.body.classList.toggle('director-session', director);
+    document.querySelectorAll('#app-nav .nav-item').forEach(item => {
+      const soloDirector = item.id === DIRECTOR_IDS.tab;
+      item.classList.toggle('role-hidden', director ? !soloDirector : soloDirector);
+    });
+    document.querySelectorAll('#app-main > section').forEach(section => {
+      if (director && section.id !== DIRECTOR_IDS.section) section.classList.add('hidden');
+    });
+    const sidebarLabel = document.querySelector('.sidebar-label');
+    const portalLabel = document.querySelector('.sidebar-brand__text small');
+    if (sidebarLabel) sidebarLabel.textContent = director ? 'Supervisión institucional' : 'Espacio de trabajo';
+    if (portalLabel) portalLabel.textContent = director ? 'Panel de dirección' : 'Portal docente';
+    if (profesorMateria) profesorMateria.textContent = director ? 'Acceso institucional · Solo lectura' : (profesorActual?.materia || 'Sin materia asignada');
+    if (director) {
+      document.getElementById('director-account-name').textContent = profesorActual?.nombre || 'Dirección';
+      abrirPanelDirector();
+    }
+  }
+
+  async function abrirPanelDirector() {
+    if (!esDirector()) {
+      mostrarToast('Esta sección es exclusiva de la dirección.', 'warning', 'Acceso restringido');
+      return;
+    }
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('is-active');
+      item.setAttribute('aria-selected', 'false');
+    });
+    document.querySelectorAll('#app-main > section').forEach(section => section.classList.add('hidden'));
+    document.getElementById(DIRECTOR_IDS.tab)?.classList.add('is-active');
+    document.getElementById(DIRECTOR_IDS.tab)?.setAttribute('aria-selected', 'true');
+    document.getElementById(DIRECTOR_IDS.section)?.classList.remove('hidden');
+    if (pageTitle) pageTitle.textContent = 'Panel de dirección';
+    if (pageDescription) pageDescription.textContent = 'Consulta consolidada de todos los docentes · acceso de solo lectura.';
+    window.scrollTo({top: 0, behavior: 'smooth'});
+    await cargarPanelDirector(false);
+  }
+
+  async function cargarPanelDirector(forzar = false) {
+    if (!esDirector() || (datosDirector && !forzar)) {
+      renderPanelDirector();
+      return;
+    }
+    const loading = document.getElementById('director-loading');
+    const content = document.getElementById('director-content');
+    const refresh = document.getElementById('director-refresh');
+    loading?.classList.remove('hidden');
+    content?.classList.add('hidden');
+    refresh?.classList.add('is-loading');
+    try {
+      datosDirector = await apiRequest('obtenerPanelDirector');
+      llenarFiltroDocentes();
+      renderPanelDirector();
+      if (forzar) mostrarToast('La información institucional fue actualizada.', 'success', 'Panel actualizado');
+    } catch (error) {
+      if (content) {
+        content.innerHTML = `<div class="director-empty"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar el panel</strong><span>${h(error.message || 'Error de conexión.')}</span></div>`;
+        content.classList.remove('hidden');
+      }
+      mostrarToast(error.message || 'No se pudo cargar la información.', 'error', 'Panel no disponible');
+    } finally {
+      loading?.classList.add('hidden');
+      refresh?.classList.remove('is-loading');
+    }
+  }
+
+  function llenarFiltroDocentes() {
+    const select = document.getElementById('director-filter-teacher');
+    if (!select || !datosDirector) return;
+    const actual = select.value;
+    select.innerHTML = '<option value="">Todos los docentes</option>' +
+      (datosDirector.docentes || []).map(d => `<option value="${h(d.id)}">${h(d.nombre)} · ${h(d.materia)}</option>`).join('');
+    if ([...select.options].some(o => o.value === actual)) select.value = actual;
+  }
+
+  function filtrar(lista, campos = []) {
+    return (lista || []).filter(item => {
+      if (filtroDocenteDirector && String(item.idProfesor || item.id) !== filtroDocenteDirector) return false;
+      if (!busquedaDirector) return true;
+      const bolsa = campos.map(c => String(item[c] || '')).join(' ').toLowerCase();
+      return bolsa.includes(busquedaDirector);
+    });
+  }
+
+  function metric(icon, value, label, note = '') {
+    return `<article class="director-metric"><span><i class="fa-solid ${icon}"></i></span><div><strong>${h(value)}</strong><small>${h(label)}</small>${note ? `<em>${h(note)}</em>` : ''}</div></article>`;
+  }
+
+  function tabla(headers, rows, empty = 'No hay registros para los filtros seleccionados.') {
+    if (!rows.length) return `<div class="director-empty"><i class="fa-solid fa-inbox"></i><strong>Sin resultados</strong><span>${h(empty)}</span></div>`;
+    return `<div class="director-table-wrap"><table class="director-table"><thead><tr>${headers.map(x => `<th>${h(x)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  }
+
+  function renderPanelDirector() {
+    const content = document.getElementById('director-content');
+    if (!content || !datosDirector) return;
+    content.classList.remove('hidden');
+    const r = datosDirector.resumen || {};
+    let html = '';
+
+    if (vistaDirector === 'resumen') {
+      const docentes = filtrar(datosDirector.docentes, ['nombre','materia','usuario','seccion','turno']);
+      html = `
+        <section class="director-metrics">
+          ${metric('fa-chalkboard-user', r.docentes || 0, 'Docentes registrados', `${r.docentesActivos || 0} activos`)}
+          ${metric('fa-users', r.estudiantes || 0, 'Estudiantes registrados')}
+          ${metric('fa-user-check', `${r.porcentajeAsistencia || 0}%`, 'Asistencia institucional', `${r.registrosAsistencia || 0} marcaciones`)}
+          ${metric('fa-square-poll-vertical', r.evaluaciones || 0, 'Evaluaciones planificadas')}
+          ${metric('fa-calendar-week', r.horarios || 0, 'Bloques de horario')}
+          ${metric('fa-file-signature', r.actas || 0, 'Actas registradas')}
+        </section>
+        <section class="director-card">
+          <header><div><span><i class="fa-solid fa-chart-column"></i></span><div><h3>Rendimiento por docente</h3><p>Resumen comparativo de actividad académica.</p></div></div><small>Solo lectura</small></header>
+          <div class="director-teacher-grid">
+            ${docentes.map(d => `
+              <article class="director-teacher-card">
+                <div class="director-teacher-card__head"><span>${h((d.nombre || 'D').charAt(0))}</span><div><strong>${h(d.nombre)}</strong><small>${h(d.materia || 'Sin materia')}</small></div><em class="${d.activo ? 'is-active' : 'is-inactive'}">${d.activo ? 'Activo' : 'Inactivo'}</em></div>
+                <div class="director-progress"><div><span>Asistencia</span><strong>${h(d.porcentajeAsistencia)}%</strong></div><progress max="100" value="${Number(d.porcentajeAsistencia) || 0}"></progress></div>
+                <dl><div><dt>Estudiantes</dt><dd>${h(d.estudiantes)}</dd></div><div><dt>Evaluaciones</dt><dd>${h(d.evaluaciones)}</dd></div><div><dt>Horario</dt><dd>${h(d.bloquesHorario)}</dd></div><div><dt>Actas</dt><dd>${h(d.actas)}</dd></div></dl>
+                <button type="button" data-open-teacher="${h(d.id)}"><i class="fa-solid fa-eye"></i> Ver información</button>
+              </article>`).join('') || '<div class="director-empty"><span>No hay docentes para mostrar.</span></div>'}
+          </div>
+        </section>`;
+    }
+
+    if (vistaDirector === 'docentes') {
+      const items = filtrar(datosDirector.docentes, ['nombre','materia','usuario','email','seccion','turno']);
+      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-chalkboard-user"></i></span><div><h3>Directorio de docentes</h3><p>Cuentas y actividad institucional.</p></div></div><small>${items.length} docentes</small></header>
+      ${tabla(['Docente','Asignación','Estudiantes','Asistencia','Evaluaciones','Actividad'], items.map(d => `<tr><td><strong>${h(d.nombre)}</strong><small>@${h(d.usuario)}</small></td><td>${h(d.materia)}<small>${h(d.seccion)} · ${h(d.turno)}</small></td><td>${h(d.estudiantes)}</td><td><strong>${h(d.porcentajeAsistencia)}%</strong><small>${h(d.registrosAsistencia)} registros</small></td><td>${h(d.evaluaciones)}<small>${h(d.puntosPlanificados)} puntos</small></td><td>${d.activo ? '<span class="director-status is-ok">Activo</span>' : '<span class="director-status is-off">Inactivo</span>'}</td></tr>`))}</section>`;
+    }
+
+    if (vistaDirector === 'asistencia') {
+      const items = filtrar(datosDirector.asistencia, ['docente','alumno','materia','ano','seccion','turno','estado','fecha']);
+      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-user-check"></i></span><div><h3>Control de asistencia por docente</h3><p>Marcaciones consolidadas de toda la institución.</p></div></div><small>${items.length} registros</small></header>
+      ${tabla(['Fecha','Docente','Estudiante','Clase','Estado'], items.slice(0,500).map(x => `<tr><td>${h(x.fecha)}</td><td><strong>${h(x.docente)}</strong><small>${h(x.materia)}</small></td><td>${h(x.alumno)}</td><td>${h(x.ano)} · ${h(x.seccion)} · ${h(x.turno)}</td><td><span class="director-status director-status--${h(String(x.estado || '').toLowerCase())}">${h(x.estado)}</span></td></tr>`))}</section>`;
+    }
+
+    if (vistaDirector === 'notas') {
+      const items = filtrar(datosDirector.evaluaciones, ['docente','actividad','ano','seccion','fecha','puntos']);
+      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-square-poll-vertical"></i></span><div><h3>Control de notas y evaluaciones</h3><p>Consulta las evaluaciones y ponderaciones planificadas por cada docente. Este panel no modifica calificaciones.</p></div></div><small>${items.length} evaluaciones</small></header>
+      ${tabla(['Fecha','Docente','Curso / sección','Evaluación','Ponderación'], items.slice(0,500).map(x => `<tr><td>${h(x.fecha)}</td><td><strong>${h(x.docente)}</strong></td><td>${h(x.ano)} · ${h(x.seccion)}</td><td>${h(x.actividad)}</td><td><strong>${h(x.puntos)} puntos</strong></td></tr>`), 'Todavía no existen evaluaciones planificadas.')}</section>`;
+    }
+
+    if (vistaDirector === 'estudiantes') {
+      const items = filtrar(datosDirector.estudiantes, ['docente','nombre','cedula','ano','seccion','turno','representante']);
+      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-users"></i></span><div><h3>Estudiantes por docente</h3><p>Matrícula registrada en cada cuenta docente.</p></div></div><small>${items.length} estudiantes</small></header>
+      ${tabla(['Estudiante','Docente responsable','Curso','Representante','Contacto'], items.slice(0,700).map(x => `<tr><td><strong>${h(x.nombre)}</strong><small>${h(x.cedula || 'Sin cédula')}</small></td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)} · ${h(x.turno)}</td><td>${h(x.representante || 'No registrado')}</td><td>${h(x.telefonoRepresentante || x.emailRepresentante || '—')}</td></tr>`))}</section>`;
+    }
+
+    if (vistaDirector === 'horarios') {
+      const items = filtrar(datosDirector.horarios, ['docente','dia','horaInicio','horaFin','ano','seccion','turno']);
+      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-calendar-week"></i></span><div><h3>Horarios institucionales</h3><p>Bloques semanales organizados por docente.</p></div></div><small>${items.length} bloques</small></header>
+      ${tabla(['Día','Horario','Docente','Curso / sección','Turno'], items.map(x => `<tr><td><strong>${h(x.dia)}</strong></td><td>${h(x.horaInicio)} – ${h(x.horaFin)}</td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)}</td><td>${h(x.turno)}</td></tr>`))}</section>`;
+    }
+
+    if (vistaDirector === 'actas') {
+      const items = filtrar(datosDirector.actas, ['docente','alumno','tipo','titulo','fecha']);
+      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-file-signature"></i></span><div><h3>Historial de actas</h3><p>Documentos generados por todos los docentes.</p></div></div><small>${items.length} actas</small></header>
+      ${tabla(['Fecha','Docente','Estudiante','Tipo','Título'], items.slice(0,500).map(x => `<tr><td>${h(x.fecha)}</td><td>${h(x.docente)}</td><td>${h(x.alumno)}</td><td><span class="director-status is-info">${h(x.tipo)}</span></td><td>${h(x.titulo)}</td></tr>`))}</section>`;
+    }
+
+    if (vistaDirector === 'auditoria') {
+      const items = filtrar(datosDirector.auditoria, ['docente','actorNombre','alumno','accion','origen','estadoAnterior','estadoNuevo']);
+      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Auditoría administrativa</h3><p>Cambios de asistencia realizados desde la web y Telegram.</p></div></div><small>${items.length} movimientos</small></header>
+      ${tabla(['Fecha y hora','Docente','Estudiante','Origen','Cambio'], items.slice(0,600).map(x => `<tr><td>${h(x.registradoEn)}</td><td><strong>${h(x.docente)}</strong><small>${h(x.actorNombre || '')}</small></td><td>${h(x.alumno)}</td><td>${h(x.origen)}</td><td>${h(x.estadoAnterior || '—')} → <strong>${h(x.estadoNuevo || '—')}</strong></td></tr>`))}</section>`;
+    }
+
+    content.innerHTML = html;
+    content.querySelectorAll('[data-open-teacher]').forEach(button => {
+      button.addEventListener('click', () => {
+        filtroDocenteDirector = button.dataset.openTeacher;
+        const select = document.getElementById('director-filter-teacher');
+        if (select) select.value = filtroDocenteDirector;
+        vistaDirector = 'docentes';
+        document.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b.dataset.directorView === 'docentes'));
+        renderPanelDirector();
+      });
+    });
+  }
+
+  crearPanelDirector();
+
+  const originalAplicarPerfil = aplicarPerfilDocente;
+  aplicarPerfilDocente = function(profesor) {
+    originalAplicarPerfil(profesor);
+    aplicarAccesoPorRol();
+  };
+
+  const originalCargarDatos = cargarDatosPersistentes;
+  cargarDatosPersistentes = async function() {
+    if (esDirector()) {
+      await cargarPanelDirector(false);
+      return;
+    }
+    return originalCargarDatos();
+  };
+
+  window.addEventListener('DOMContentLoaded', () => {
+    crearPanelDirector();
+    if (profesorActual) aplicarAccesoPorRol();
+  });
+
+
 })();
 
 /* EDUGESTION_AUDIT_PANEL_V1_START */
@@ -3856,318 +4170,3 @@ Archivo enviado directamente desde EduGestión.`);
   });
 })();
 /* EDUGESTION_USER_GUIDE_V1_END */
-
-
-/* =========================================================
-   PANEL DEL DIRECTOR — SOLO LECTURA
-   ========================================================= */
-(() => {
-  const DIRECTOR_IDS = {
-    tab: 'tab-historial-administrativo',
-    section: 'section-historial-administrativo'
-  };
-  let datosDirector = null;
-  let vistaDirector = 'resumen';
-  let filtroDocenteDirector = '';
-  let busquedaDirector = '';
-
-  function h(valor = '') {
-    return String(valor).replace(/[&<>'"]/g, c => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
-    }[c]));
-  }
-
-  function esDirector() {
-    return String(profesorActual?.rol || '').toLowerCase() === 'director';
-  }
-
-  function crearPanelDirector() {
-    if (document.getElementById(DIRECTOR_IDS.tab)) return;
-    const nav = document.getElementById('app-nav');
-    const main = document.getElementById('app-main');
-    if (!nav || !main) return;
-
-    const tab = document.createElement('button');
-    tab.id = DIRECTOR_IDS.tab;
-    tab.type = 'button';
-    tab.className = 'nav-item director-only-nav';
-    tab.setAttribute('aria-selected', 'false');
-    tab.dataset.title = 'Panel de dirección';
-    tab.dataset.description = 'Consulta institucional consolidada y de solo lectura.';
-    tab.innerHTML = '<i class="fa-solid fa-building-shield"></i><span>Historial administrativo</span>';
-    nav.appendChild(tab);
-
-    const section = document.createElement('section');
-    section.id = DIRECTOR_IDS.section;
-    section.className = 'hidden director-dashboard';
-    section.innerHTML = `
-      <header class="platform-hero director-hero">
-        <div class="platform-hero__copy">
-          <span class="platform-hero__eyebrow"><i class="fa-solid fa-lock"></i> Acceso exclusivo de dirección</span>
-          <h2>Panel administrativo institucional</h2>
-          <p>Supervisa la actividad académica de todos los docentes sin modificar ningún registro.</p>
-          <div class="platform-hero__badges">
-            <span><i class="fa-solid fa-eye"></i> Solo lectura</span>
-            <span><i class="fa-solid fa-users-gear"></i> Todos los docentes</span>
-            <span><i class="fa-solid fa-shield-halved"></i> Acceso restringido</span>
-          </div>
-        </div>
-        <div class="platform-hero__icon"><i class="fa-solid fa-chart-line"></i></div>
-      </header>
-
-      <section class="director-toolbar">
-        <div class="director-toolbar__identity">
-          <span><i class="fa-solid fa-user-tie"></i></span>
-          <div><small>Cuenta autorizada</small><strong id="director-account-name">Dirección</strong></div>
-        </div>
-        <div class="director-toolbar__filters">
-          <label><span>Docente</span><select id="director-filter-teacher"><option value="">Todos los docentes</option></select></label>
-          <label class="director-search"><span>Buscar</span><div><i class="fa-solid fa-magnifying-glass"></i><input id="director-search" type="search" placeholder="Docente, estudiante, materia o sección"></div></label>
-          <button id="director-refresh" type="button"><i class="fa-solid fa-rotate"></i><span>Actualizar</span></button>
-        </div>
-      </section>
-
-      <nav class="director-view-tabs" aria-label="Vistas del panel director">
-        <button class="is-active" data-director-view="resumen" type="button"><i class="fa-solid fa-gauge-high"></i><span>Resumen</span></button>
-        <button data-director-view="docentes" type="button"><i class="fa-solid fa-chalkboard-user"></i><span>Docentes</span></button>
-        <button data-director-view="asistencia" type="button"><i class="fa-solid fa-user-check"></i><span>Asistencia</span></button>
-        <button data-director-view="notas" type="button"><i class="fa-solid fa-square-poll-vertical"></i><span>Notas y evaluaciones</span></button>
-        <button data-director-view="estudiantes" type="button"><i class="fa-solid fa-users"></i><span>Estudiantes</span></button>
-        <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span></button>
-        <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
-        <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
-      </nav>
-
-      <div id="director-loading" class="director-state">
-        <i class="fa-solid fa-circle-notch fa-spin"></i>
-        <strong>Cargando información institucional…</strong>
-        <span>Consultando los registros de todos los docentes.</span>
-      </div>
-      <div id="director-content" class="director-content hidden"></div>
-    `;
-    main.appendChild(section);
-
-    tab.addEventListener('click', abrirPanelDirector);
-    section.querySelector('#director-refresh')?.addEventListener('click', () => cargarPanelDirector(true));
-    section.querySelector('#director-filter-teacher')?.addEventListener('change', event => {
-      filtroDocenteDirector = event.target.value;
-      renderPanelDirector();
-    });
-    section.querySelector('#director-search')?.addEventListener('input', event => {
-      busquedaDirector = String(event.target.value || '').trim().toLowerCase();
-      renderPanelDirector();
-    });
-    section.querySelectorAll('[data-director-view]').forEach(button => {
-      button.addEventListener('click', () => {
-        vistaDirector = button.dataset.directorView;
-        section.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b === button));
-        renderPanelDirector();
-      });
-    });
-  }
-
-  function aplicarAccesoPorRol() {
-    crearPanelDirector();
-    const director = esDirector();
-    document.body.classList.toggle('director-session', director);
-    document.querySelectorAll('#app-nav .nav-item').forEach(item => {
-      const soloDirector = item.id === DIRECTOR_IDS.tab;
-      item.classList.toggle('role-hidden', director ? !soloDirector : soloDirector);
-    });
-    document.querySelectorAll('#app-main > section').forEach(section => {
-      if (director && section.id !== DIRECTOR_IDS.section) section.classList.add('hidden');
-    });
-    const sidebarLabel = document.querySelector('.sidebar-label');
-    const portalLabel = document.querySelector('.sidebar-brand__text small');
-    if (sidebarLabel) sidebarLabel.textContent = director ? 'Supervisión institucional' : 'Espacio de trabajo';
-    if (portalLabel) portalLabel.textContent = director ? 'Panel de dirección' : 'Portal docente';
-    if (profesorMateria) profesorMateria.textContent = director ? 'Acceso institucional · Solo lectura' : (profesorActual?.materia || 'Sin materia asignada');
-    if (director) {
-      document.getElementById('director-account-name').textContent = profesorActual?.nombre || 'Dirección';
-      abrirPanelDirector();
-    }
-  }
-
-  async function abrirPanelDirector() {
-    if (!esDirector()) {
-      mostrarToast('Esta sección es exclusiva de la dirección.', 'warning', 'Acceso restringido');
-      return;
-    }
-    document.querySelectorAll('.nav-item').forEach(item => {
-      item.classList.remove('is-active');
-      item.setAttribute('aria-selected', 'false');
-    });
-    document.querySelectorAll('#app-main > section').forEach(section => section.classList.add('hidden'));
-    document.getElementById(DIRECTOR_IDS.tab)?.classList.add('is-active');
-    document.getElementById(DIRECTOR_IDS.tab)?.setAttribute('aria-selected', 'true');
-    document.getElementById(DIRECTOR_IDS.section)?.classList.remove('hidden');
-    if (pageTitle) pageTitle.textContent = 'Panel de dirección';
-    if (pageDescription) pageDescription.textContent = 'Consulta consolidada de todos los docentes · acceso de solo lectura.';
-    window.scrollTo({top: 0, behavior: 'smooth'});
-    await cargarPanelDirector(false);
-  }
-
-  async function cargarPanelDirector(forzar = false) {
-    if (!esDirector() || (datosDirector && !forzar)) {
-      renderPanelDirector();
-      return;
-    }
-    const loading = document.getElementById('director-loading');
-    const content = document.getElementById('director-content');
-    const refresh = document.getElementById('director-refresh');
-    loading?.classList.remove('hidden');
-    content?.classList.add('hidden');
-    refresh?.classList.add('is-loading');
-    try {
-      datosDirector = await apiRequest('obtenerPanelDirector');
-      llenarFiltroDocentes();
-      renderPanelDirector();
-      if (forzar) mostrarToast('La información institucional fue actualizada.', 'success', 'Panel actualizado');
-    } catch (error) {
-      if (content) {
-        content.innerHTML = `<div class="director-empty"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar el panel</strong><span>${h(error.message || 'Error de conexión.')}</span></div>`;
-        content.classList.remove('hidden');
-      }
-      mostrarToast(error.message || 'No se pudo cargar la información.', 'error', 'Panel no disponible');
-    } finally {
-      loading?.classList.add('hidden');
-      refresh?.classList.remove('is-loading');
-    }
-  }
-
-  function llenarFiltroDocentes() {
-    const select = document.getElementById('director-filter-teacher');
-    if (!select || !datosDirector) return;
-    const actual = select.value;
-    select.innerHTML = '<option value="">Todos los docentes</option>' +
-      (datosDirector.docentes || []).map(d => `<option value="${h(d.id)}">${h(d.nombre)} · ${h(d.materia)}</option>`).join('');
-    if ([...select.options].some(o => o.value === actual)) select.value = actual;
-  }
-
-  function filtrar(lista, campos = []) {
-    return (lista || []).filter(item => {
-      if (filtroDocenteDirector && String(item.idProfesor || item.id) !== filtroDocenteDirector) return false;
-      if (!busquedaDirector) return true;
-      const bolsa = campos.map(c => String(item[c] || '')).join(' ').toLowerCase();
-      return bolsa.includes(busquedaDirector);
-    });
-  }
-
-  function metric(icon, value, label, note = '') {
-    return `<article class="director-metric"><span><i class="fa-solid ${icon}"></i></span><div><strong>${h(value)}</strong><small>${h(label)}</small>${note ? `<em>${h(note)}</em>` : ''}</div></article>`;
-  }
-
-  function tabla(headers, rows, empty = 'No hay registros para los filtros seleccionados.') {
-    if (!rows.length) return `<div class="director-empty"><i class="fa-solid fa-inbox"></i><strong>Sin resultados</strong><span>${h(empty)}</span></div>`;
-    return `<div class="director-table-wrap"><table class="director-table"><thead><tr>${headers.map(x => `<th>${h(x)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
-  }
-
-  function renderPanelDirector() {
-    const content = document.getElementById('director-content');
-    if (!content || !datosDirector) return;
-    content.classList.remove('hidden');
-    const r = datosDirector.resumen || {};
-    let html = '';
-
-    if (vistaDirector === 'resumen') {
-      const docentes = filtrar(datosDirector.docentes, ['nombre','materia','usuario','seccion','turno']);
-      html = `
-        <section class="director-metrics">
-          ${metric('fa-chalkboard-user', r.docentes || 0, 'Docentes registrados', `${r.docentesActivos || 0} activos`)}
-          ${metric('fa-users', r.estudiantes || 0, 'Estudiantes registrados')}
-          ${metric('fa-user-check', `${r.porcentajeAsistencia || 0}%`, 'Asistencia institucional', `${r.registrosAsistencia || 0} marcaciones`)}
-          ${metric('fa-square-poll-vertical', r.evaluaciones || 0, 'Evaluaciones planificadas')}
-          ${metric('fa-calendar-week', r.horarios || 0, 'Bloques de horario')}
-          ${metric('fa-file-signature', r.actas || 0, 'Actas registradas')}
-        </section>
-        <section class="director-card">
-          <header><div><span><i class="fa-solid fa-chart-column"></i></span><div><h3>Rendimiento por docente</h3><p>Resumen comparativo de actividad académica.</p></div></div><small>Solo lectura</small></header>
-          <div class="director-teacher-grid">
-            ${docentes.map(d => `
-              <article class="director-teacher-card">
-                <div class="director-teacher-card__head"><span>${h((d.nombre || 'D').charAt(0))}</span><div><strong>${h(d.nombre)}</strong><small>${h(d.materia || 'Sin materia')}</small></div><em class="${d.activo ? 'is-active' : 'is-inactive'}">${d.activo ? 'Activo' : 'Inactivo'}</em></div>
-                <div class="director-progress"><div><span>Asistencia</span><strong>${h(d.porcentajeAsistencia)}%</strong></div><progress max="100" value="${Number(d.porcentajeAsistencia) || 0}"></progress></div>
-                <dl><div><dt>Estudiantes</dt><dd>${h(d.estudiantes)}</dd></div><div><dt>Evaluaciones</dt><dd>${h(d.evaluaciones)}</dd></div><div><dt>Horario</dt><dd>${h(d.bloquesHorario)}</dd></div><div><dt>Actas</dt><dd>${h(d.actas)}</dd></div></dl>
-                <button type="button" data-open-teacher="${h(d.id)}"><i class="fa-solid fa-eye"></i> Ver información</button>
-              </article>`).join('') || '<div class="director-empty"><span>No hay docentes para mostrar.</span></div>'}
-          </div>
-        </section>`;
-    }
-
-    if (vistaDirector === 'docentes') {
-      const items = filtrar(datosDirector.docentes, ['nombre','materia','usuario','email','seccion','turno']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-chalkboard-user"></i></span><div><h3>Directorio de docentes</h3><p>Cuentas y actividad institucional.</p></div></div><small>${items.length} docentes</small></header>
-      ${tabla(['Docente','Asignación','Estudiantes','Asistencia','Evaluaciones','Actividad'], items.map(d => `<tr><td><strong>${h(d.nombre)}</strong><small>@${h(d.usuario)}</small></td><td>${h(d.materia)}<small>${h(d.seccion)} · ${h(d.turno)}</small></td><td>${h(d.estudiantes)}</td><td><strong>${h(d.porcentajeAsistencia)}%</strong><small>${h(d.registrosAsistencia)} registros</small></td><td>${h(d.evaluaciones)}<small>${h(d.puntosPlanificados)} puntos</small></td><td>${d.activo ? '<span class="director-status is-ok">Activo</span>' : '<span class="director-status is-off">Inactivo</span>'}</td></tr>`))}</section>`;
-    }
-
-    if (vistaDirector === 'asistencia') {
-      const items = filtrar(datosDirector.asistencia, ['docente','alumno','materia','ano','seccion','turno','estado','fecha']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-user-check"></i></span><div><h3>Control de asistencia por docente</h3><p>Marcaciones consolidadas de toda la institución.</p></div></div><small>${items.length} registros</small></header>
-      ${tabla(['Fecha','Docente','Estudiante','Clase','Estado'], items.slice(0,500).map(x => `<tr><td>${h(x.fecha)}</td><td><strong>${h(x.docente)}</strong><small>${h(x.materia)}</small></td><td>${h(x.alumno)}</td><td>${h(x.ano)} · ${h(x.seccion)} · ${h(x.turno)}</td><td><span class="director-status director-status--${h(String(x.estado || '').toLowerCase())}">${h(x.estado)}</span></td></tr>`))}</section>`;
-    }
-
-    if (vistaDirector === 'notas') {
-      const items = filtrar(datosDirector.evaluaciones, ['docente','actividad','ano','seccion','fecha','puntos']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-square-poll-vertical"></i></span><div><h3>Control de notas y evaluaciones</h3><p>Consulta las evaluaciones y ponderaciones planificadas por cada docente. Este panel no modifica calificaciones.</p></div></div><small>${items.length} evaluaciones</small></header>
-      ${tabla(['Fecha','Docente','Curso / sección','Evaluación','Ponderación'], items.slice(0,500).map(x => `<tr><td>${h(x.fecha)}</td><td><strong>${h(x.docente)}</strong></td><td>${h(x.ano)} · ${h(x.seccion)}</td><td>${h(x.actividad)}</td><td><strong>${h(x.puntos)} puntos</strong></td></tr>`), 'Todavía no existen evaluaciones planificadas.')}</section>`;
-    }
-
-    if (vistaDirector === 'estudiantes') {
-      const items = filtrar(datosDirector.estudiantes, ['docente','nombre','cedula','ano','seccion','turno','representante']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-users"></i></span><div><h3>Estudiantes por docente</h3><p>Matrícula registrada en cada cuenta docente.</p></div></div><small>${items.length} estudiantes</small></header>
-      ${tabla(['Estudiante','Docente responsable','Curso','Representante','Contacto'], items.slice(0,700).map(x => `<tr><td><strong>${h(x.nombre)}</strong><small>${h(x.cedula || 'Sin cédula')}</small></td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)} · ${h(x.turno)}</td><td>${h(x.representante || 'No registrado')}</td><td>${h(x.telefonoRepresentante || x.emailRepresentante || '—')}</td></tr>`))}</section>`;
-    }
-
-    if (vistaDirector === 'horarios') {
-      const items = filtrar(datosDirector.horarios, ['docente','dia','horaInicio','horaFin','ano','seccion','turno']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-calendar-week"></i></span><div><h3>Horarios institucionales</h3><p>Bloques semanales organizados por docente.</p></div></div><small>${items.length} bloques</small></header>
-      ${tabla(['Día','Horario','Docente','Curso / sección','Turno'], items.map(x => `<tr><td><strong>${h(x.dia)}</strong></td><td>${h(x.horaInicio)} – ${h(x.horaFin)}</td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)}</td><td>${h(x.turno)}</td></tr>`))}</section>`;
-    }
-
-    if (vistaDirector === 'actas') {
-      const items = filtrar(datosDirector.actas, ['docente','alumno','tipo','titulo','fecha']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-file-signature"></i></span><div><h3>Historial de actas</h3><p>Documentos generados por todos los docentes.</p></div></div><small>${items.length} actas</small></header>
-      ${tabla(['Fecha','Docente','Estudiante','Tipo','Título'], items.slice(0,500).map(x => `<tr><td>${h(x.fecha)}</td><td>${h(x.docente)}</td><td>${h(x.alumno)}</td><td><span class="director-status is-info">${h(x.tipo)}</span></td><td>${h(x.titulo)}</td></tr>`))}</section>`;
-    }
-
-    if (vistaDirector === 'auditoria') {
-      const items = filtrar(datosDirector.auditoria, ['docente','actorNombre','alumno','accion','origen','estadoAnterior','estadoNuevo']);
-      html = `<section class="director-card"><header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Auditoría administrativa</h3><p>Cambios de asistencia realizados desde la web y Telegram.</p></div></div><small>${items.length} movimientos</small></header>
-      ${tabla(['Fecha y hora','Docente','Estudiante','Origen','Cambio'], items.slice(0,600).map(x => `<tr><td>${h(x.registradoEn)}</td><td><strong>${h(x.docente)}</strong><small>${h(x.actorNombre || '')}</small></td><td>${h(x.alumno)}</td><td>${h(x.origen)}</td><td>${h(x.estadoAnterior || '—')} → <strong>${h(x.estadoNuevo || '—')}</strong></td></tr>`))}</section>`;
-    }
-
-    content.innerHTML = html;
-    content.querySelectorAll('[data-open-teacher]').forEach(button => {
-      button.addEventListener('click', () => {
-        filtroDocenteDirector = button.dataset.openTeacher;
-        const select = document.getElementById('director-filter-teacher');
-        if (select) select.value = filtroDocenteDirector;
-        vistaDirector = 'docentes';
-        document.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b.dataset.directorView === 'docentes'));
-        renderPanelDirector();
-      });
-    });
-  }
-
-  crearPanelDirector();
-
-  const originalAplicarPerfil = aplicarPerfilDocente;
-  aplicarPerfilDocente = function(profesor) {
-    originalAplicarPerfil(profesor);
-    aplicarAccesoPorRol();
-  };
-
-  const originalCargarDatos = cargarDatosPersistentes;
-  cargarDatosPersistentes = async function() {
-    if (esDirector()) {
-      await cargarPanelDirector(false);
-      return;
-    }
-    return originalCargarDatos();
-  };
-
-  window.addEventListener('DOMContentLoaded', () => {
-    crearPanelDirector();
-    if (profesorActual) aplicarAccesoPorRol();
-  });
-})();
