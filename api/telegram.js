@@ -613,6 +613,16 @@ async function handleCallbackQuery(callbackQuery) {
     await showAttendanceConsultation(chatId, callbackQuery);
     return;
   }
+  if (data.startsWith('consult:open:')) {
+    const index = Number(data.split(':')[2]);
+    await showAttendanceDetail(chatId, callbackQuery, index);
+    return;
+  }
+  if (data.startsWith('consult:edit:')) {
+    const index = Number(data.split(':')[2]);
+    await openClass(chatId, callbackQuery, index);
+    return;
+  }
   if (data === 'students:soon') {
     await showSoonMessage(chatId, 'Mis estudiantes', 'Fase 3.2');
     return;
@@ -679,7 +689,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.1-attendance-consult-ready',
+        status: 'phase3.1.1-consult-loop-fixed',
       });
     }
 
