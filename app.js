@@ -3270,7 +3270,8 @@ const SESSION_KEY = 'edugestion_session_v2';
   }
 
   function crearModalCompartirInforme() {
-    if (document.getElementById('stats-share-modal')) return;
+    // Reconstruye el modal para evitar que quede en pantalla una versión antigua sin el botón directo.
+    document.getElementById('stats-share-modal')?.remove();
     const modal = document.createElement('div');
     modal.id = 'stats-share-modal';
     modal.className = 'stats-share-modal hidden';
@@ -3281,6 +3282,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       <div class="stats-share-dialog">
         <button id="stats-share-close" class="stats-share-close" type="button" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
         <div class="stats-share-heading"><span><i class="fa-solid fa-share-nodes"></i></span><div><h3 id="stats-share-title">Compartir informe PDF</h3><p id="stats-share-file">Informe preparado</p></div></div>
+        <button id="stats-share-direct-telegram" class="stats-share-direct-telegram" type="button"><i class="fa-brands fa-telegram"></i><span><strong>Enviar a mi Telegram vinculado</strong><small>EduGestión enviará este PDF directamente al chat vinculado.</small></span></button>
         <button id="stats-share-native" class="stats-share-native" type="button"><i class="fa-solid fa-mobile-screen-button"></i><span><strong>Compartir archivo</strong><small>Envía el PDF como archivo adjunto desde tu dispositivo.</small></span></button>
         <div class="stats-share-divider"><span>O usa un acceso rápido</span></div>
         <div class="stats-share-channels">
@@ -3297,6 +3299,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.body.appendChild(modal);
 
     document.getElementById('stats-share-close')?.addEventListener('click', cerrarModalCompartirInforme);
+    document.getElementById('stats-share-direct-telegram')?.addEventListener('click', enviarInformeTelegramVinculado);
     document.getElementById('stats-share-native')?.addEventListener('click', compartirArchivoNativo);
     document.getElementById('stats-share-download')?.addEventListener('click', descargarInformeCompartirPendiente);
     document.getElementById('stats-share-copy')?.addEventListener('click', copiarMensajeInforme);
@@ -3305,6 +3308,10 @@ const SESSION_KEY = 'edugestion_session_v2';
   }
 
   function abrirModalCompartirInforme() {
+    // Si el navegador conservó un modal de una fase anterior, lo reemplaza automáticamente.
+    if (!document.getElementById('stats-share-direct-telegram')) {
+      crearModalCompartirInforme();
+    }
     const modal = document.getElementById('stats-share-modal');
     if (!modal || !informeCompartirPendiente) return;
     const nombre = document.getElementById('stats-share-file');
@@ -3353,6 +3360,84 @@ const SESSION_KEY = 'edugestion_session_v2';
     } finally {
       if (boton) {
         boton.disabled = false;
+        boton.innerHTML = contenidoAnterior;
+      }
+    }
+  }
+
+  function endpointEnvioInformeTelegram() {
+    const host = String(window.location.hostname || '').toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost'
+      ? 'https://edugestion-a2xh.vercel.app/api/informe'
+      : '/api/informe';
+  }
+
+  function periodoInformeCompartido() {
+    const desde = document.getElementById(IDS.from)?.value || '';
+    const hasta = document.getElementById(IDS.to)?.value || '';
+    return desde && hasta ? `${desde} al ${hasta}` : desde || hasta || 'Periodo seleccionado';
+  }
+
+  function seccionInformeCompartido() {
+    const control = document.getElementById(IDS.classFilter);
+    if (!control?.value) return 'Todas las secciones';
+    return control.options?.[control.selectedIndex]?.textContent?.trim() || control.value;
+  }
+
+  async function enviarInformeTelegramVinculado() {
+    if (!informeCompartirPendiente) return;
+    if (!String(sessionToken || '').trim()) {
+      if (typeof mostrarToast === 'function') mostrarToast('Tu sesión docente no está disponible. Inicia sesión nuevamente.', 'error', 'Sesión requerida');
+      return;
+    }
+
+    const boton = document.getElementById('stats-share-direct-telegram');
+    const contenidoAnterior = boton?.innerHTML || '';
+    if (boton) {
+      boton.disabled = true;
+      boton.classList.add('is-loading');
+      boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i><span><strong>Enviando al Telegram vinculado…</strong><small>No cierres esta ventana.</small></span>';
+    }
+
+    try {
+      const formulario = new FormData();
+      formulario.append('token', String(sessionToken));
+      formulario.append('pdf', informeCompartirPendiente.file, informeCompartirPendiente.archivo);
+      formulario.append('archivo', informeCompartirPendiente.archivo);
+      formulario.append('mensaje', `${informeCompartirPendiente.mensaje}
+
+Archivo enviado directamente desde EduGestión.`);
+      formulario.append('periodo', periodoInformeCompartido());
+      formulario.append('seccion', seccionInformeCompartido());
+
+      const respuesta = await fetch(endpointEnvioInformeTelegram(), {
+        method: 'POST',
+        body: formulario
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok || datos.ok !== true) {
+        const error = new Error(datos.error || 'No se pudo enviar el informe por Telegram.');
+        error.code = datos.code || 'REPORT_SEND_ERROR';
+        throw error;
+      }
+
+      cerrarModalCompartirInforme();
+      const destino = datos.destino ? ` a ${datos.destino}` : '';
+      if (typeof mostrarToast === 'function') mostrarToast(`El PDF fue enviado${destino}.`, 'success', 'Informe enviado');
+      if (datos.warning && typeof mostrarToast === 'function') {
+        setTimeout(() => mostrarToast(datos.warning, 'warning', 'Aviso de auditoría'), 450);
+      }
+    } catch (error) {
+      console.error('No se pudo enviar el informe al Telegram vinculado:', error);
+      let mensaje = error.message || 'No se pudo enviar el informe por Telegram.';
+      if (error.code === 'TELEGRAM_NOT_LINKED') mensaje = 'Tu cuenta docente no tiene un Telegram vinculado. Vincúlalo desde el botón superior de Telegram.';
+      if (error.code === 'PDF_TOO_LARGE') mensaje = 'El PDF es demasiado pesado. Reduce el periodo o utiliza Descargar PDF.';
+      if (error.code === 'SESSION_REQUIRED' || error.code === 'UNAUTHORIZED') mensaje = 'La sesión venció. Inicia sesión nuevamente y repite el envío.';
+      if (typeof mostrarToast === 'function') mostrarToast(mensaje, 'error', 'No se pudo enviar');
+    } finally {
+      if (boton) {
+        boton.disabled = false;
+        boton.classList.remove('is-loading');
         boton.innerHTML = contenidoAnterior;
       }
     }
@@ -3420,4 +3505,5 @@ const SESSION_KEY = 'edugestion_session_v2';
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crearInterfazEstadisticas, { once: true });
   else crearInterfazEstadisticas();
 })();
+/* EDUGESTION_REPORT_TELEGRAM_SEND_V1_READY */
 /* EDUGESTION_STATS_PANEL_V1_END */
