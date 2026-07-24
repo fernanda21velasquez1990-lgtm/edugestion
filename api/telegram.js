@@ -299,6 +299,7 @@ function mainMenuKeyboard(linked = true) {
       { text: '👤 Mi cuenta', callback_data: 'account:status' },
     ]);
     rows.push([
+      { text: '🩺 Diagnóstico', callback_data: 'system:diagnostic' },
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -1527,6 +1528,48 @@ async function cancelRecordCreation(chatId, source) {
   });
 }
 
+async function showSystemDiagnostic(chatId, source) {
+  const result = await callEduGestion('botDiagnosticoSistema', {
+    telegramId: teacherTelegramId(source),
+  });
+
+  const modules = result.modulos || {};
+  const totals = result.totales || {};
+  const warnings = Array.isArray(result.advertencias) ? result.advertencias : [];
+
+  const statusLine = key => modules[key] ? '✅' : '❌';
+  const warningText = warnings.length
+    ? `
+
+<b>Advertencias</b>
+${warnings.map(item => `• ${escapeHtml(item)}`).join('\n')}`
+    : '\n\n✅ No se detectaron advertencias.';
+
+  await sendMessage(
+    chatId,
+    `🩺 <b>Diagnóstico de EduGestión</b>
+
+Estado general: <b>${result.salud === 'correcto' ? 'Correcto' : 'Con advertencias'}</b>
+Versión: <code>${escapeHtml(result.version || '')}</code>
+
+${statusLine('telegram')} Telegram vinculado
+${statusLine('configuracion')} Configuración
+${statusLine('estudiantes')} Estudiantes: <b>${Number(totals.estudiantes || 0)}</b>
+${statusLine('asistencia')} Asistencias: <b>${Number(totals.asistencia || 0)}</b>
+${statusLine('planificacion')} Planificaciones: <b>${Number(totals.planificacion || 0)}</b>
+${statusLine('horarios')} Horarios: <b>${Number(totals.horarios || 0)}</b>
+${statusLine('actas')} Actas: <b>${Number(totals.actas || 0)}</b>${warningText}`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔄 Ejecutar nuevamente', callback_data: 'system:diagnostic' }],
+          [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+        ],
+      },
+    },
+  );
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -1608,6 +1651,11 @@ async function handleMessage(message) {
 
   if (/^\/actas(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showRecordsMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showSystemDiagnostic(chatId, message);
     return;
   }
 
@@ -1749,6 +1797,11 @@ async function handleCallbackQuery(callbackQuery) {
   if (data.startsWith('records:open:')) {
     const index = Number(data.split(':')[2]);
     await showRecordDetail(chatId, callbackQuery, index);
+    return;
+  }
+
+  if (data === 'system:diagnostic') {
+    await showSystemDiagnostic(chatId, callbackQuery);
     return;
   }
 
@@ -1895,7 +1948,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.5B-records-create-ready',
+        status: 'phase4.0A-diagnostic-ready',
       });
     }
 
