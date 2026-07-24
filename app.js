@@ -3714,3 +3714,216 @@ Archivo enviado directamente desde EduGestión.`);
 })();
 /* EDUGESTION_REPORT_TELEGRAM_SEND_V1_READY */
 /* EDUGESTION_STATS_PANEL_V1_END */
+
+
+/* EDUGESTION_FASE_2_2_HISTORIAL_ADMIN_START */
+(() => {
+  const ROLES = new Set(['admin', 'administrador', 'direccion', 'dirección', 'secretaria', 'secretaría']);
+  const ids = {
+    tab: 'tab-historial-administrativo',
+    section: 'section-historial-administrativo',
+    body: 'admin-history-body',
+    cards: 'admin-history-cards',
+    teacher: 'admin-history-teacher',
+    status: 'admin-history-status',
+    sectionFilter: 'admin-history-section',
+    from: 'admin-history-from',
+    to: 'admin-history-to',
+    search: 'admin-history-search',
+    apply: 'admin-history-apply',
+    reset: 'admin-history-reset',
+    refresh: 'admin-history-refresh'
+  };
+  let datos = [];
+  let cargandoAdmin = false;
+
+  const esRolAdmin = profesor => ROLES.has(String(profesor?.rol || '').trim().toLowerCase());
+  const seguroAdmin = valor => String(valor ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function ocultarSeccionesAdmin() {
+    document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.add('hidden'));
+    document.querySelectorAll('#app-nav .nav-item').forEach(tab => {
+      tab.classList.remove('is-active');
+      tab.setAttribute('aria-selected', 'false');
+    });
+  }
+
+  function abrirPanelAdmin() {
+    ocultarSeccionesAdmin();
+    document.getElementById(ids.tab)?.classList.add('is-active');
+    document.getElementById(ids.tab)?.setAttribute('aria-selected', 'true');
+    document.getElementById(ids.section)?.classList.remove('hidden');
+    if (pageTitle) pageTitle.textContent = 'Historial administrativo';
+    if (pageDescription) pageDescription.textContent = 'Consulta los informes enviados por todos los docentes autorizados.';
+    cargarHistorialAdmin();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function crearPanelAdmin() {
+    if (!esRolAdmin(profesorActual)) return;
+    if (document.getElementById(ids.tab)) return;
+
+    const nav = document.getElementById('app-nav');
+    const main = document.getElementById('app-main');
+    if (!nav || !main) return;
+
+    const tab = document.createElement('button');
+    tab.id = ids.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item admin-only-tab';
+    tab.setAttribute('aria-selected', 'false');
+    tab.innerHTML = '<i class="fa-solid fa-shield-halved"></i><span>Historial administrativo</span>';
+    tab.addEventListener('click', abrirPanelAdmin);
+    nav.appendChild(tab);
+
+    const section = document.createElement('section');
+    section.id = ids.section;
+    section.className = 'hidden max-w-[1480px] mx-auto space-y-6 admin-history-panel';
+    section.innerHTML = `
+      <section class="admin-history-hero">
+        <div>
+          <span><i class="fa-solid fa-building-shield"></i> Dirección y Secretaría</span>
+          <h2>Historial institucional de informes</h2>
+          <p>Supervisa los envíos realizados por los docentes sin modificar sus registros.</p>
+        </div>
+        <button id="${ids.refresh}" type="button"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+      </section>
+
+      <section class="admin-history-summary">
+        <article><strong id="admin-history-total">0</strong><span>Total</span></article>
+        <article><strong id="admin-history-sent">0</strong><span>Enviados</span></article>
+        <article><strong id="admin-history-errors">0</strong><span>Errores</span></article>
+        <article><strong id="admin-history-teachers">0</strong><span>Docentes</span></article>
+      </section>
+
+      <section class="admin-history-filters">
+        <label><span>Docente</span><select id="${ids.teacher}"><option value="">Todos los docentes</option></select></label>
+        <label><span>Estado</span><select id="${ids.status}"><option value="">Todos</option><option value="enviado">Enviado</option><option value="error">Error</option></select></label>
+        <label><span>Sección</span><input id="${ids.sectionFilter}" placeholder="Ej.: 1ero · Sección A"></label>
+        <label><span>Desde</span><input id="${ids.from}" type="date"></label>
+        <label><span>Hasta</span><input id="${ids.to}" type="date"></label>
+        <label class="admin-history-search"><span>Buscar</span><input id="${ids.search}" type="search" placeholder="Archivo, periodo, docente o destino"></label>
+        <div class="admin-history-filter-actions">
+          <button id="${ids.apply}" type="button"><i class="fa-solid fa-filter"></i> Aplicar</button>
+          <button id="${ids.reset}" type="button"><i class="fa-solid fa-eraser"></i> Restablecer</button>
+        </div>
+      </section>
+
+      <section class="admin-history-table-card">
+        <div class="admin-history-table-head">
+          <div><span>Consulta institucional</span><h3>Registros de envío</h3></div>
+          <small id="admin-history-visible">0 registros</small>
+        </div>
+        <div class="admin-history-loading hidden" id="admin-history-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Consultando servidor…</div>
+        <div class="admin-history-table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Docente</th><th>Archivo</th><th>Periodo / Sección</th><th>Destino</th><th>Estado</th></tr></thead>
+            <tbody id="${ids.body}"></tbody>
+          </table>
+        </div>
+        <div class="admin-history-cards" id="${ids.cards}"></div>
+      </section>`;
+    main.appendChild(section);
+
+    document.getElementById(ids.refresh)?.addEventListener('click', () => cargarHistorialAdmin());
+    document.getElementById(ids.apply)?.addEventListener('click', () => cargarHistorialAdmin());
+    document.getElementById(ids.reset)?.addEventListener('click', () => {
+      [ids.teacher, ids.status, ids.sectionFilter, ids.from, ids.to, ids.search].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      cargarHistorialAdmin();
+    });
+  }
+
+  function filtrosAdmin() {
+    return {
+      idProfesor: document.getElementById(ids.teacher)?.value || '',
+      estado: document.getElementById(ids.status)?.value || '',
+      seccion: document.getElementById(ids.sectionFilter)?.value || '',
+      fechaDesde: document.getElementById(ids.from)?.value || '',
+      fechaHasta: document.getElementById(ids.to)?.value || '',
+      texto: document.getElementById(ids.search)?.value || '',
+      limite: 750
+    };
+  }
+
+  function fechaAdmin(valor) {
+    const f = new Date(valor);
+    return Number.isNaN(f.getTime()) ? 'Sin fecha' : f.toLocaleString('es-ES', {
+      day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
+    });
+  }
+
+  async function cargarHistorialAdmin() {
+    if (cargandoAdmin || !esRolAdmin(profesorActual)) return;
+    cargandoAdmin = true;
+    document.getElementById('admin-history-loading')?.classList.remove('hidden');
+    try {
+      const r = await apiRequest('obtenerHistorialInformesAdministrativo', filtrosAdmin());
+      datos = Array.isArray(r.historial) ? r.historial : [];
+      const select = document.getElementById(ids.teacher);
+      const seleccionado = select?.value || '';
+      if (select && Array.isArray(r.docentes)) {
+        select.innerHTML = '<option value="">Todos los docentes</option>' + r.docentes.map(d =>
+          `<option value="${seguroAdmin(d.id)}">${seguroAdmin(d.nombre)}</option>`).join('');
+        select.value = seleccionado;
+      }
+      renderAdmin(r.resumen || {});
+    } catch (error) {
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo cargar el historial administrativo.', 'error', 'Consulta no disponible');
+    } finally {
+      cargandoAdmin = false;
+      document.getElementById('admin-history-loading')?.classList.add('hidden');
+    }
+  }
+
+  function renderAdmin(resumen) {
+    const set = (id, valor) => { const n = document.getElementById(id); if (n) n.textContent = String(valor ?? 0); };
+    set('admin-history-total', resumen.total ?? datos.length);
+    set('admin-history-sent', resumen.enviados ?? datos.filter(x => String(x.estado || 'enviado').toLowerCase() !== 'error').length);
+    set('admin-history-errors', resumen.errores ?? datos.filter(x => String(x.estado || '').toLowerCase() === 'error').length);
+    set('admin-history-teachers', resumen.docentes ?? new Set(datos.map(x => x.idProfesor)).size);
+    set('admin-history-visible', `${datos.length} registro${datos.length === 1 ? '' : 's'}`);
+
+    const body = document.getElementById(ids.body);
+    const cards = document.getElementById(ids.cards);
+    if (!datos.length) {
+      if (body) body.innerHTML = '<tr><td colspan="6"><div class="admin-history-empty"><i class="fa-regular fa-folder-open"></i><span>No hay registros para los filtros seleccionados.</span></div></td></tr>';
+      if (cards) cards.innerHTML = '<div class="admin-history-empty"><i class="fa-regular fa-folder-open"></i><span>No hay registros para los filtros seleccionados.</span></div>';
+      return;
+    }
+
+    if (body) body.innerHTML = datos.map(item => {
+      const error = String(item.estado || 'enviado').toLowerCase() === 'error';
+      return `<tr>
+        <td>${seguroAdmin(fechaAdmin(item.registradoEn))}</td>
+        <td><strong>${seguroAdmin(item.docente || 'Docente')}</strong></td>
+        <td><span class="admin-history-file">${seguroAdmin(item.archivo || 'Informe.pdf')}</span></td>
+        <td>${seguroAdmin(item.periodo || '—')}<small>${seguroAdmin(item.seccion || '—')}</small></td>
+        <td>${seguroAdmin(item.destino || item.canal || 'Telegram')}</td>
+        <td><b class="${error ? 'is-error' : 'is-sent'}">${error ? 'Error' : 'Enviado'}</b></td>
+      </tr>`;
+    }).join('');
+
+    if (cards) cards.innerHTML = datos.map(item => {
+      const error = String(item.estado || 'enviado').toLowerCase() === 'error';
+      return `<article>
+        <header><strong>${seguroAdmin(item.docente || 'Docente')}</strong><b class="${error ? 'is-error' : 'is-sent'}">${error ? 'Error' : 'Enviado'}</b></header>
+        <h4>${seguroAdmin(item.archivo || 'Informe.pdf')}</h4>
+        <p>${seguroAdmin(item.periodo || '—')} · ${seguroAdmin(item.seccion || '—')}</p>
+        <footer><span><i class="fa-regular fa-clock"></i> ${seguroAdmin(fechaAdmin(item.registradoEn))}</span><span><i class="fa-brands fa-telegram"></i> ${seguroAdmin(item.destino || 'Telegram')}</span></footer>
+      </article>`;
+    }).join('');
+  }
+
+  const aplicarOriginalAdmin = aplicarPerfilDocente;
+  aplicarPerfilDocente = function(profesor) {
+    aplicarOriginalAdmin(profesor);
+    setTimeout(crearPanelAdmin, 0);
+  };
+
+  if (document.readyState !== 'loading') setTimeout(crearPanelAdmin, 0);
+  else document.addEventListener('DOMContentLoaded', () => setTimeout(crearPanelAdmin, 0), { once:true });
+})();
+/* EDUGESTION_FASE_2_2_HISTORIAL_ADMIN_END */
