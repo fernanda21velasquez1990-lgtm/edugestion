@@ -300,6 +300,9 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '🩺 Diagnóstico', callback_data: 'system:diagnostic' },
+      { text: '🔐 Seguridad', callback_data: 'system:security' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -1570,6 +1573,54 @@ ${statusLine('actas')} Actas: <b>${Number(totals.actas || 0)}</b>${warningText}`
   );
 }
 
+async function showSecurityStatus(chatId, source) {
+  const result = await callEduGestion('botEstadoSeguridad', {
+    telegramId: teacherTelegramId(source),
+  });
+
+  const checks = result.controles || {};
+  const icon = value => value ? '✅' : '❌';
+  const warnings = Array.isArray(result.advertencias) ? result.advertencias : [];
+
+  const backupText = result.ultimoRespaldo
+    ? escapeHtml(result.ultimoRespaldo)
+    : 'No registrado';
+
+  const warningText = warnings.length
+    ? `
+
+<b>Atención</b>
+${warnings.map(item => `• ${escapeHtml(item)}`).join('\n')}`
+    : '\n\n✅ No se detectaron problemas de seguridad.';
+
+  await sendMessage(
+    chatId,
+    `🔐 <b>Seguridad y respaldo</b>
+
+Estado: <b>${result.salud === 'correcto' ? 'Correcto' : 'Con advertencias'}</b>
+
+${icon(checks.botSecret)} Secreto del bot configurado
+${icon(checks.spreadsheetId)} Base de datos vinculada
+${icon(checks.passwordPepper)} Protección de contraseñas
+${icon(checks.telegramVinculado)} Telegram vinculado
+${icon(checks.institucionConfigurada)} Institución configurada
+${icon(checks.sesionesTemporales)} Sesiones temporales
+${icon(checks.aislamientoDocente)} Aislamiento por docente
+
+Último respaldo: <b>${backupText}</b>${warningText}
+
+Para crear un respaldo, ejecuta <code>crearRespaldoManualEduGestion</code> desde Google Apps Script.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔄 Revisar nuevamente', callback_data: 'system:security' }],
+          [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+        ],
+      },
+    },
+  );
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -1656,6 +1707,11 @@ async function handleMessage(message) {
 
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
+    return;
+  }
+
+  if (/^\/seguridad(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showSecurityStatus(chatId, message);
     return;
   }
 
@@ -1804,6 +1860,10 @@ async function handleCallbackQuery(callbackQuery) {
     await showSystemDiagnostic(chatId, callbackQuery);
     return;
   }
+  if (data === 'system:security') {
+    await showSecurityStatus(chatId, callbackQuery);
+    return;
+  }
 
   if (data === 'account:status') {
     await showAccountStatus(chatId, callbackQuery);
@@ -1948,7 +2008,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase4.0A-diagnostic-ready',
+        status: 'phase4.0B-security-backup-ready',
       });
     }
 
