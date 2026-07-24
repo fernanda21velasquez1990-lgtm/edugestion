@@ -4836,3 +4836,38 @@ body.stats-share-open { overflow: hidden; }
 .stats-share-direct-telegram + .stats-share-native { margin-top: 10px; }
 /* EDUGESTION_REPORT_TELEGRAM_SEND_V1_END */
 
+
+
+/* EDUGESTION_REPORT_HISTORY_V1_START */
+.stats-share-result { display:flex; align-items:flex-start; gap:12px; margin-top:18px; padding:14px; border:1px solid #a9e2c4; border-radius:16px; background:#effcf5; color:#17653c; }
+.stats-share-result.hidden { display:none !important; }
+.stats-share-result > span { display:grid; width:38px; height:38px; flex:0 0 auto; place-items:center; border-radius:12px; background:#fff; color:#18a05d; box-shadow:0 6px 16px rgba(24,160,93,.13); }
+.stats-share-result strong,.stats-share-result small,.stats-share-result em { display:block; }
+.stats-share-result strong { font-size:.88rem; font-weight:900; }
+.stats-share-result small { margin-top:3px; color:#397759; font-size:.73rem; line-height:1.35; }
+.stats-share-result em { margin-top:5px; color:#709681; font-size:.66rem; font-style:normal; font-weight:750; }
+.stats-share-history { margin-top:18px; padding-top:16px; border-top:1px solid #e1eaf0; }
+.stats-share-history-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.stats-share-history-head span { color:#8195a6; font-size:.62rem; font-weight:900; letter-spacing:.09em; text-transform:uppercase; }
+.stats-share-history-head h4 { margin:2px 0 0; color:#21455e; font-size:.92rem; font-weight:900; }
+.stats-share-history-head > i { color:#2c8ec3; }
+.stats-share-history-list { display:grid; gap:8px; }
+.stats-share-history-empty { display:flex; align-items:center; gap:9px; padding:12px; border:1px dashed #cddde8; border-radius:13px; color:#7890a2; font-size:.72rem; }
+.stats-share-history-item { display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:9px; padding:10px; border:1px solid #dfe9ef; border-radius:13px; background:#fbfdfe; }
+.stats-share-history-icon { display:grid; width:32px; height:32px; place-items:center; border-radius:10px; }
+.stats-share-history-item.is-sent .stats-share-history-icon { background:#eafaf2; color:#18a05d; }
+.stats-share-history-item.is-error .stats-share-history-icon { background:#fff0ef; color:#df554d; }
+.stats-share-history-item strong,.stats-share-history-item small,.stats-share-history-item em { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stats-share-history-item strong { color:#29495f; font-size:.72rem; font-weight:850; }
+.stats-share-history-item small { margin-top:2px; color:#7c91a1; font-size:.63rem; }
+.stats-share-history-item em { margin-top:2px; color:#608096; font-size:.61rem; font-style:normal; }
+.stats-share-history-item > b { padding:5px 7px; border-radius:99px; font-size:.58rem; font-weight:900; text-transform:uppercase; }
+.stats-share-history-item.is-sent > b { background:#eafaf2; color:#16814c; }
+.stats-share-history-item.is-error > b { background:#fff0ef; color:#c94740; }
+@media (max-width:560px) {
+  .stats-share-modal { padding:8px; align-items:end; }
+  .stats-share-dialog { width:100%; max-height:94vh; border-radius:22px 22px 12px 12px; }
+  .stats-share-history-item { grid-template-columns:32px minmax(0,1fr); }
+  .stats-share-history-item > b { grid-column:2; justify-self:start; }
+}
+/* EDUGESTION_REPORT_HISTORY_V1_END */

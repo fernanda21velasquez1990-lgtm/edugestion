@@ -2696,6 +2696,75 @@ const SESSION_KEY = 'edugestion_session_v2';
   let cargando = false;
   let catalogoSecciones = [];
   let informeCompartirPendiente = null;
+  const INFORME_HISTORIAL_MAX = 10;
+
+  function claveHistorialInformesTelegram() {
+    const docente = profesorActual?.id || profesorActual?.usuario || 'docente';
+    return `edugestion_historial_informes_telegram_${docente}`;
+  }
+
+  function leerHistorialInformesTelegram() {
+    try {
+      const datos = JSON.parse(localStorage.getItem(claveHistorialInformesTelegram()) || '[]');
+      return Array.isArray(datos) ? datos.slice(0, INFORME_HISTORIAL_MAX) : [];
+    } catch (error) {
+      console.warn('No se pudo leer el historial de informes:', error);
+      return [];
+    }
+  }
+
+  function guardarRegistroInformeTelegram(registro) {
+    const historial = leerHistorialInformesTelegram();
+    historial.unshift({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      fechaIso: new Date().toISOString(),
+      archivo: informeCompartirPendiente?.archivo || 'Informe de asistencia.pdf',
+      periodo: periodoInformeCompartido(),
+      seccion: seccionInformeCompartido(),
+      estado: 'enviado',
+      destino: 'Telegram vinculado',
+      ...registro
+    });
+    try {
+      localStorage.setItem(claveHistorialInformesTelegram(), JSON.stringify(historial.slice(0, INFORME_HISTORIAL_MAX)));
+    } catch (error) {
+      console.warn('No se pudo guardar el historial de informes:', error);
+    }
+    renderHistorialInformesTelegram();
+  }
+
+  function fechaHoraHistorial(valor) {
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return 'Sin fecha';
+    return fecha.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderHistorialInformesTelegram() {
+    const contenedor = document.getElementById('stats-share-history-list');
+    if (!contenedor) return;
+    const historial = leerHistorialInformesTelegram();
+    if (!historial.length) {
+      contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-regular fa-clock"></i><span>Aún no hay envíos registrados en este dispositivo.</span></div>';
+      return;
+    }
+    contenedor.innerHTML = historial.map(item => {
+      const enviado = item.estado === 'enviado';
+      return `<article class="stats-share-history-item ${enviado ? 'is-sent' : 'is-error'}">
+        <span class="stats-share-history-icon"><i class="fa-solid ${enviado ? 'fa-circle-check' : 'fa-circle-xmark'}"></i></span>
+        <div><strong>${seguro(item.archivo || 'Informe de asistencia.pdf')}</strong><small>${seguro(fechaHoraHistorial(item.fechaIso))} · ${seguro(item.periodo || 'Periodo seleccionado')}</small><em>${seguro(item.destino || item.mensaje || (enviado ? 'Telegram vinculado' : 'No enviado'))}</em></div>
+        <b>${enviado ? 'Enviado' : 'Error'}</b>
+      </article>`;
+    }).join('');
+  }
+
+  function mostrarResultadoEnvioTelegram(datos = {}) {
+    const panel = document.getElementById('stats-share-result');
+    if (!panel) return;
+    panel.className = 'stats-share-result is-success';
+    panel.innerHTML = `<span><i class="fa-solid fa-circle-check"></i></span><div><strong>Informe enviado correctamente</strong><small>El PDF fue entregado a ${seguro(datos.destino || 'Telegram vinculado')}.</small><em>${seguro(fechaHoraHistorial(datos.sentAt || new Date().toISOString()))}</em></div>`;
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 
   const seguro = (valor = '') => {
     if (typeof escaparHTML === 'function') return escaparHTML(valor);
@@ -3282,6 +3351,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       <div class="stats-share-dialog">
         <button id="stats-share-close" class="stats-share-close" type="button" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
         <div class="stats-share-heading"><span><i class="fa-solid fa-share-nodes"></i></span><div><h3 id="stats-share-title">Compartir informe PDF</h3><p id="stats-share-file">Informe preparado</p></div></div>
+        <div id="stats-share-result" class="stats-share-result hidden"></div>
         <button id="stats-share-direct-telegram" class="stats-share-direct-telegram" type="button"><i class="fa-brands fa-telegram"></i><span><strong>Enviar a mi Telegram vinculado</strong><small>EduGestión enviará este PDF directamente al chat vinculado.</small></span></button>
         <button id="stats-share-native" class="stats-share-native" type="button"><i class="fa-solid fa-mobile-screen-button"></i><span><strong>Compartir archivo</strong><small>Envía el PDF como archivo adjunto desde tu dispositivo.</small></span></button>
         <div class="stats-share-divider"><span>O usa un acceso rápido</span></div>
@@ -3295,6 +3365,10 @@ const SESSION_KEY = 'edugestion_session_v2';
           <button id="stats-share-download" type="button"><i class="fa-solid fa-download"></i> Descargar PDF</button>
           <button id="stats-share-copy" type="button"><i class="fa-regular fa-copy"></i> Copiar mensaje</button>
         </div>
+        <section class="stats-share-history" aria-labelledby="stats-share-history-title">
+          <div class="stats-share-history-head"><div><span>Registro local</span><h4 id="stats-share-history-title">Historial de envíos</h4></div><i class="fa-solid fa-clock-rotate-left"></i></div>
+          <div id="stats-share-history-list" class="stats-share-history-list"></div>
+        </section>
       </div>`;
     document.body.appendChild(modal);
 
@@ -3316,6 +3390,9 @@ const SESSION_KEY = 'edugestion_session_v2';
     if (!modal || !informeCompartirPendiente) return;
     const nombre = document.getElementById('stats-share-file');
     if (nombre) nombre.textContent = informeCompartirPendiente.archivo;
+    const resultado = document.getElementById('stats-share-result');
+    if (resultado) { resultado.className = 'stats-share-result hidden'; resultado.innerHTML = ''; }
+    renderHistorialInformesTelegram();
     const nativo = document.getElementById('stats-share-native');
     const puedeCompartir = Boolean(navigator.share && navigator.canShare?.({ files: [informeCompartirPendiente.file] }));
     nativo?.classList.toggle('hidden', !puedeCompartir);
@@ -3421,7 +3498,13 @@ Archivo enviado directamente desde EduGestión.`);
         throw error;
       }
 
-      cerrarModalCompartirInforme();
+      guardarRegistroInformeTelegram({
+        estado: 'enviado',
+        destino: datos.destino || 'Telegram vinculado',
+        mensajeId: datos.mensajeId || '',
+        fechaIso: datos.sentAt || new Date().toISOString()
+      });
+      mostrarResultadoEnvioTelegram(datos);
       const destino = datos.destino ? ` a ${datos.destino}` : '';
       if (typeof mostrarToast === 'function') mostrarToast(`El PDF fue enviado${destino}.`, 'success', 'Informe enviado');
       if (datos.warning && typeof mostrarToast === 'function') {
@@ -3433,6 +3516,7 @@ Archivo enviado directamente desde EduGestión.`);
       if (error.code === 'TELEGRAM_NOT_LINKED') mensaje = 'Tu cuenta docente no tiene un Telegram vinculado. Vincúlalo desde el botón superior de Telegram.';
       if (error.code === 'PDF_TOO_LARGE') mensaje = 'El PDF es demasiado pesado. Reduce el periodo o utiliza Descargar PDF.';
       if (error.code === 'SESSION_REQUIRED' || error.code === 'UNAUTHORIZED') mensaje = 'La sesión venció. Inicia sesión nuevamente y repite el envío.';
+      guardarRegistroInformeTelegram({ estado: 'error', destino: '', mensaje, codigo: error.code || 'REPORT_SEND_ERROR' });
       if (typeof mostrarToast === 'function') mostrarToast(mensaje, 'error', 'No se pudo enviar');
     } finally {
       if (boton) {

@@ -1,4 +1,4 @@
-// EduGestión Fase 1.8.1 — CORS para envío local y público
+// EduGestión Fase 1.9 — envío, confirmación e historial local
 const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_PDF_BYTES = 3_900_000;
 const MAX_CAPTION_LENGTH = 900;
@@ -126,7 +126,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion envío de informes',
-        status: 'phase1.8.1-cors-ready',
+        status: 'phase1.9-history-ready',
       }, 200, request);
     }
 
@@ -197,6 +197,7 @@ export default {
         archivo: filename,
         tamanoBytes: pdf.size,
         mensajeId: String(telegramResult.message_id || ''),
+        sentAt: new Date().toISOString(),
         warning: auditWarning,
       }, 200, request);
     } catch (error) {
