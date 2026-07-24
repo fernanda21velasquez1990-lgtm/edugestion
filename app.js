@@ -4040,12 +4040,20 @@ Archivo enviado directamente desde EduGestión.`);
     document.body.appendChild(escenarioPdf);
 
     const opciones = {
-      margin: [0.35, 0.35, 0.4, 0.35],
+      margin: [0.28, 0.28, 0.32, 0.28],
       filename: nombreArchivoAdmin('pdf'),
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' },
-      pagebreak: { mode: ['css', 'legacy'] }
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: 980,
+        width: 980,
+        backgroundColor: '#ffffff'
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.admin-history-pdf__summary'] }
     };
 
     html2pdf().set(opciones).from(contenedor).save()

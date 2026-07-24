@@ -5034,7 +5034,7 @@ body.stats-share-open { overflow: hidden; }
   display:flex;
   gap:10px;
   align-items:center;
-  width:1050px;
+  width:980px;
   max-width:100%;
   margin:0 auto 14px;
   padding:12px 16px;
@@ -5054,9 +5054,9 @@ body.stats-share-open { overflow: hidden; }
   position:relative;
   left:auto;
   top:auto;
-  width:1050px;
+  width:980px;
   margin:0 auto;
-  padding:30px;
+  padding:22px;
   color:#172033;
   background:#fff;
   box-shadow:0 18px 50px rgba(18,50,82,.18);
@@ -5066,7 +5066,7 @@ body.stats-share-open { overflow: hidden; }
   display:flex;
   justify-content:space-between;
   align-items:center;
-  padding:20px 22px;
+  padding:16px 18px;
   color:#fff;
   background:linear-gradient(135deg,#123252,#2563a5);
   border-radius:14px;
@@ -5079,7 +5079,7 @@ body.stats-share-open { overflow: hidden; }
 }
 .admin-history-pdf__header h1 {
   margin:0;
-  font-size:25px;
+  font-size:22px;
 }
 .admin-history-pdf__header p {
   margin:6px 0 0;
@@ -5088,8 +5088,8 @@ body.stats-share-open { overflow: hidden; }
 }
 .admin-history-pdf__brand {
   display:flex;
-  width:48px;
-  height:48px;
+  width:42px;
+  height:42px;
   align-items:center;
   justify-content:center;
   border:2px solid rgba(255,255,255,.5);
@@ -5099,11 +5099,11 @@ body.stats-share-open { overflow: hidden; }
 .admin-history-pdf__summary {
   display:grid;
   grid-template-columns:repeat(4,1fr);
-  gap:10px;
-  margin:15px 0;
+  gap:8px;
+  margin:12px 0;
 }
 .admin-history-pdf__summary div {
-  padding:12px;
+  padding:9px;
   border:1px solid #d7e5f2;
   border-radius:10px;
   text-align:center;
@@ -5114,12 +5114,12 @@ body.stats-share-open { overflow: hidden; }
 }
 .admin-history-pdf__summary strong {
   color:#1d4f86;
-  font-size:19px;
+  font-size:17px;
 }
 .admin-history-pdf__summary span {
   margin-top:3px;
   color:#667085;
-  font-size:8px;
+  font-size:7.2px;
   font-weight:700;
   text-transform:uppercase;
 }
@@ -5129,16 +5129,16 @@ body.stats-share-open { overflow: hidden; }
   table-layout:fixed;
 }
 .admin-history-pdf th {
-  padding:9px 7px;
+  padding:7px 5px;
   color:#fff;
   background:#1d4f86;
-  font-size:8px;
+  font-size:7.2px;
   text-align:left;
 }
 .admin-history-pdf td {
-  padding:8px 7px;
+  padding:6px 5px;
   border:1px solid #dce7f0;
-  font-size:8px;
+  font-size:7.2px;
   vertical-align:top;
   word-break:break-word;
 }
@@ -5155,7 +5155,7 @@ body.stats-share-open { overflow: hidden; }
   padding-top:8px;
   border-top:1px solid #d7e5f2;
   color:#667085;
-  font-size:8px;
+  font-size:7.2px;
 }
 @media (max-width:700px) {
   .admin-history-hero-actions {
@@ -5190,3 +5190,62 @@ body.stats-share-open { overflow: hidden; }
   }
 }
 /* EDUGESTION_FASE_2_3_1_PDF_FIX_END */
+
+
+/* EDUGESTION_FASE_2_3_2_PDF_COMPLETE_FIX */
+.admin-history-pdf {
+  overflow: visible !important;
+  box-sizing: border-box;
+}
+.admin-history-pdf__header,
+.admin-history-pdf__summary,
+.admin-history-pdf table,
+.admin-history-pdf__footer {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.admin-history-pdf__header {
+  overflow: hidden;
+}
+.admin-history-pdf__header > div:first-child {
+  min-width: 0;
+  padding-right: 12px;
+}
+.admin-history-pdf__brand {
+  flex: 0 0 42px;
+}
+.admin-history-pdf table {
+  table-layout: fixed;
+  overflow: visible;
+}
+.admin-history-pdf th:nth-child(1),
+.admin-history-pdf td:nth-child(1) { width: 15%; }
+.admin-history-pdf th:nth-child(2),
+.admin-history-pdf td:nth-child(2) { width: 13%; }
+.admin-history-pdf th:nth-child(3),
+.admin-history-pdf td:nth-child(3) { width: 21%; }
+.admin-history-pdf th:nth-child(4),
+.admin-history-pdf td:nth-child(4) { width: 20%; }
+.admin-history-pdf th:nth-child(5),
+.admin-history-pdf td:nth-child(5) { width: 19%; }
+.admin-history-pdf th:nth-child(6),
+.admin-history-pdf td:nth-child(6) { width: 12%; }
+.admin-history-pdf td,
+.admin-history-pdf th {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+.admin-history-pdf__footer {
+  gap: 20px;
+}
+.admin-history-pdf__footer span:last-child {
+  text-align: right;
+}
+@media print {
+  .admin-history-pdf {
+    box-shadow: none;
+  }
+}
+/* EDUGESTION_FASE_2_3_2_PDF_COMPLETE_FIX_END */
