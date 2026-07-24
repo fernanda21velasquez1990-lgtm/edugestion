@@ -101,7 +101,15 @@ function mainMenuKeyboard(linked = true) {
   if (linked) {
     rows.push([
       { text: '✅ Pasar asistencia', callback_data: 'attendance:start' },
-      { text: '📅 Clases de hoy', callback_data: 'classes:today' },
+      { text: '📋 Consultar asistencia', callback_data: 'attendance:consult' },
+    ]);
+    rows.push([
+      { text: '👨‍🎓 Mis estudiantes', callback_data: 'students:soon' },
+      { text: '📅 Planificación', callback_data: 'planning:soon' },
+    ]);
+    rows.push([
+      { text: '📊 Estadísticas', callback_data: 'stats:soon' },
+      { text: '📄 Generar informe', callback_data: 'reports:soon' },
     ]);
     rows.push([
       { text: '👤 Mi cuenta', callback_data: 'account:status' },
@@ -350,6 +358,18 @@ async function cancelAttendance(chatId, source) {
   await sendMessage(chatId, '❌ Registro de asistencia cancelado.', { reply_markup: mainMenuKeyboard(true) });
 }
 
+async function showAttendanceConsultation(chatId, source) {
+  await showTodayClasses(chatId, source);
+}
+
+async function showSoonMessage(chatId, title, phase) {
+  await sendMessage(
+    chatId,
+    `🚧 <b>${escapeHtml(title)}</b>\n\nEsta opción se activará en la ${escapeHtml(phase)}.\n\nPor ahora puedes seguir usando asistencia, clases de hoy, mi cuenta y ayuda.`,
+    { reply_markup: mainMenuKeyboard(true) },
+  );
+}
+
 async function showAccountStatus(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   if (!profile) {
@@ -458,6 +478,26 @@ async function handleCallbackQuery(callbackQuery) {
     await showTodayClasses(chatId, callbackQuery);
     return;
   }
+  if (data === 'attendance:consult') {
+    await showAttendanceConsultation(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'students:soon') {
+    await showSoonMessage(chatId, 'Mis estudiantes', 'Fase 3.2');
+    return;
+  }
+  if (data === 'planning:soon') {
+    await showSoonMessage(chatId, 'Planificación', 'Fase 3.3');
+    return;
+  }
+  if (data === 'stats:soon') {
+    await showSoonMessage(chatId, 'Estadísticas', 'Fase 3.4');
+    return;
+  }
+  if (data === 'reports:soon') {
+    await showSoonMessage(chatId, 'Generar informe', 'Fase 3.4');
+    return;
+  }
   if (data.startsWith('class:open:')) {
     const index = Number(data.split(':')[2]);
     await openClass(chatId, callbackQuery, index);
@@ -508,7 +548,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase1.2-ready',
+        status: 'phase3.0A-menu-safe-ready',
       });
     }
 
