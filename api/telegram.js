@@ -109,7 +109,7 @@ function mainMenuKeyboard(linked = true) {
       { text: '📅 Planificación', callback_data: 'planning:menu' },
     ]);
     rows.push([
-      { text: '📊 Estadísticas', callback_data: 'stats:soon' },
+      { text: '📊 Estadísticas', callback_data: 'stats:menu' },
       { text: '📄 Generar informe', callback_data: 'reports:soon' },
     ]);
     rows.push([
@@ -215,6 +215,29 @@ function planningDetailKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '📅 Volver a planificación', callback_data: 'planning:menu' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function statsMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📅 Hoy', callback_data: 'stats:day' },
+        { text: '🗓 Semana', callback_data: 'stats:week' },
+      ],
+      [{ text: '📆 Mes', callback_data: 'stats:month' }],
+      [{ text: '⚠️ Más ausencias', callback_data: 'stats:ranking' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function statsResultKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📊 Volver a estadísticas', callback_data: 'stats:menu' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
     ],
   };
@@ -813,6 +836,95 @@ ${urgency ? `Recordatorio: <b>${escapeHtml(urgency)}</b>` : ''}`,
   );
 }
 
+function formatRangeLabel(range = {}) {
+  const start = formatPlanningDate(range.inicio || '');
+  const end = formatPlanningDate(range.fin || '');
+  return start === end ? start : `${start} al ${end}`;
+}
+
+async function showStatsMenu(chatId, source) {
+  const profile = await linkedProfile(teacherTelegramId(source));
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📊 <b>Estadísticas de asistencia</b>
+
+Selecciona el periodo que deseas consultar:`,
+    { reply_markup: statsMenuKeyboard() },
+  );
+}
+
+async function showStatsResult(chatId, source, period) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botEstadisticasAsistencia', {
+    telegramId,
+    periodo: period,
+  });
+  const summary = result.resumen || {};
+  const labels = {
+    dia: 'Resumen de hoy',
+    semana: 'Resumen semanal',
+    mes: 'Resumen mensual',
+  };
+
+  await sendMessage(
+    chatId,
+    `📊 <b>${labels[result.periodo] || 'Resumen de asistencia'}</b>
+Periodo: ${escapeHtml(formatRangeLabel(result.rango || {}))}
+
+Registros: <b>${Number(summary.total || 0)}</b>
+Estudiantes: <b>${Number(summary.estudiantes || 0)}</b>
+Secciones: <b>${Number(summary.secciones || 0)}</b>
+
+🟢 Presentes: <b>${Number(summary.presentes || 0)}</b>
+🔴 Ausentes: <b>${Number(summary.ausentes || 0)}</b>
+🟠 Tardanzas: <b>${Number(summary.tardanzas || 0)}</b>
+🟣 Justificadas: <b>${Number(summary.justificadas || 0)}</b>
+
+Asistencia efectiva: <b>${Number(summary.porcentajeAsistencia || 0).toFixed(2)}%</b>`,
+    { reply_markup: statsResultKeyboard() },
+  );
+}
+
+async function showAbsenceRanking(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botRankingAusencias', {
+    telegramId,
+    periodo: 'mes',
+  });
+  const ranking = Array.isArray(result.ranking) ? result.ranking : [];
+
+  if (!ranking.length) {
+    await sendMessage(
+      chatId,
+      `⚠️ <b>Estudiantes con más ausencias</b>
+
+No hay ausencias ni tardanzas registradas durante el periodo ${escapeHtml(formatRangeLabel(result.rango || {}))}.`,
+      { reply_markup: statsResultKeyboard() },
+    );
+    return;
+  }
+
+  const body = ranking.map((item, index) =>
+    `${index + 1}. <b>${escapeHtml(item.alumno || 'Estudiante')}</b>
+${escapeHtml(item.ano || '')} · Sección ${escapeHtml(item.seccion || '')}
+🔴 Ausencias: <b>${Number(item.ausentes || 0)}</b> · 🟠 Tardanzas: <b>${Number(item.tardanzas || 0)}</b>`
+  ).join('\n\n');
+
+  await sendMessage(
+    chatId,
+    `⚠️ <b>Estudiantes con más ausencias</b>
+Periodo: ${escapeHtml(formatRangeLabel(result.rango || {}))}
+
+${body}`,
+    { reply_markup: statsResultKeyboard() },
+  );
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -839,7 +951,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -879,6 +991,11 @@ async function handleMessage(message) {
 
   if (/^\/planificacion(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showPlanningMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/estadisticas(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showStatsMenu(chatId, message);
     return;
   }
 
@@ -1016,8 +1133,24 @@ async function handleCallbackQuery(callbackQuery) {
     await showPlanningDetail(chatId, callbackQuery, index);
     return;
   }
-  if (data === 'stats:soon') {
-    await showSoonMessage(chatId, 'Estadísticas', 'Fase 3.4');
+  if (data === 'stats:menu') {
+    await showStatsMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'stats:day') {
+    await showStatsResult(chatId, callbackQuery, 'dia');
+    return;
+  }
+  if (data === 'stats:week') {
+    await showStatsResult(chatId, callbackQuery, 'semana');
+    return;
+  }
+  if (data === 'stats:month') {
+    await showStatsResult(chatId, callbackQuery, 'mes');
+    return;
+  }
+  if (data === 'stats:ranking') {
+    await showAbsenceRanking(chatId, callbackQuery);
     return;
   }
   if (data === 'reports:soon') {
@@ -1074,7 +1207,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.3-planning-ready',
+        status: 'phase3.4A-stats-ready',
       });
     }
 
