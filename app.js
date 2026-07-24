@@ -4033,7 +4033,12 @@ Archivo enviado directamente desde EduGestión.`);
         <span>Consulta de solo lectura</span>
       </div>`;
 
-    document.body.appendChild(contenedor);
+    const escenarioPdf = document.createElement('div');
+    escenarioPdf.className = 'admin-history-pdf-stage';
+    escenarioPdf.innerHTML = '<div class="admin-history-pdf-stage__status"><i class="fa-solid fa-circle-notch fa-spin"></i><strong>Generando PDF administrativo...</strong><span>No cierres esta ventana.</span></div>';
+    escenarioPdf.appendChild(contenedor);
+    document.body.appendChild(escenarioPdf);
+
     const opciones = {
       margin: [0.35, 0.35, 0.4, 0.35],
       filename: nombreArchivoAdmin('pdf'),
@@ -4051,7 +4056,7 @@ Archivo enviado directamente desde EduGestión.`);
         console.error(error);
         if (typeof mostrarToast === 'function') mostrarToast('No se pudo generar el PDF administrativo.', 'error', 'Error de exportación');
       })
-      .finally(() => contenedor.remove());
+      .finally(() => escenarioPdf.remove());
   }
 
   const aplicarOriginalAdmin = aplicarPerfilDocente;
