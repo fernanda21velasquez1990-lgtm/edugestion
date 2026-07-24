@@ -295,7 +295,10 @@ function mainMenuKeyboard(linked = true) {
       { text: '📄 Generar informe', callback_data: 'reports:menu' },
     ]);
     rows.push([
+      { text: '📝 Actas', callback_data: 'records:menu' },
       { text: '👤 Mi cuenta', callback_data: 'account:status' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -440,6 +443,45 @@ function reportsResultKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '📄 Generar otro informe', callback_data: 'reports:menu' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function recordsMenuKeyboard(types = []) {
+  const rows = [
+    [{ text: '📚 Ver actas recientes', callback_data: 'records:list' }],
+  ];
+
+  if (Array.isArray(types) && types.length) {
+    const buttons = types.slice(0, 6).map((type, index) => ({
+      text: `🏷 ${type}`.slice(0, 50),
+      callback_data: `records:type:${index}`,
+    }));
+    for (let i = 0; i < buttons.length; i += 2) {
+      rows.push(buttons.slice(i, i + 2));
+    }
+  }
+
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function recordsListKeyboard(items = []) {
+  const rows = items.slice(0, 30).map((item, index) => [{
+    text: `${item.fecha || 'Sin fecha'} · ${item.alumno || 'Estudiante'} · ${item.titulo || 'Acta'}`.slice(0, 60),
+    callback_data: `records:open:${index}`,
+  }]);
+
+  rows.push([{ text: '📝 Volver a actas', callback_data: 'records:menu' }]);
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function recordDetailKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📝 Volver a actas', callback_data: 'records:menu' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
     ],
   };
@@ -1219,6 +1261,96 @@ El envío quedó registrado en el historial de EduGestión.`,
   }
 }
 
+const recordsTypeCache = new Map();
+
+async function showRecordsMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botListarActas', {
+    telegramId,
+    limite: 30,
+  });
+
+  const types = Array.isArray(result.tipos) ? result.tipos : [];
+  recordsTypeCache.set(String(chatId), types);
+
+  await sendMessage(
+    chatId,
+    `📝 <b>Actas académicas</b>
+
+Total registrado: <b>${Number(result.total || 0)}</b>
+
+Consulta las actas creadas para tus estudiantes.`,
+    { reply_markup: recordsMenuKeyboard(types) },
+  );
+}
+
+async function showRecordsList(chatId, source, type = '') {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botListarActas', {
+    telegramId,
+    limite: 30,
+    tipo: type,
+  });
+
+  const items = Array.isArray(result.actas) ? result.actas : [];
+  recordsTypeCache.set(String(chatId), Array.isArray(result.tipos) ? result.tipos : []);
+
+  if (!items.length) {
+    await sendMessage(
+      chatId,
+      `📝 <b>Actas académicas</b>
+
+No hay actas registradas${type ? ` del tipo <b>${escapeHtml(type)}</b>` : ''}.`,
+      { reply_markup: recordsMenuKeyboard(result.tipos || []) },
+    );
+    return;
+  }
+
+  const body = items.map((item, index) =>
+    `${index + 1}. <b>${escapeHtml(item.titulo || 'Acta')}</b>
+Estudiante: ${escapeHtml(item.alumno || 'No registrado')}
+Fecha: ${escapeHtml(formatPlanningDate(item.fecha))}
+Tipo: ${escapeHtml(item.tipo || 'general')}`
+  ).join('\n\n');
+
+  await sendMessage(
+    chatId,
+    `📝 <b>Actas${type ? ` · ${escapeHtml(type)}` : ' recientes'}</b>
+
+${body}
+
+Selecciona un acta para ver el contenido completo:`,
+    { reply_markup: recordsListKeyboard(items) },
+  );
+}
+
+async function showRecordDetail(chatId, source, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetalleActa', {
+    telegramId,
+    indice: Number(index),
+  });
+
+  const item = result.acta || {};
+  const email = item.emailRepresentante
+    ? escapeHtml(item.emailRepresentante)
+    : 'No registrado';
+
+  await sendMessage(
+    chatId,
+    `📝 <b>${escapeHtml(item.titulo || 'Acta')}</b>
+
+Estudiante: <b>${escapeHtml(item.alumno || 'No registrado')}</b>
+Fecha: <b>${escapeHtml(formatPlanningDate(item.fecha))}</b>
+Tipo: ${escapeHtml(item.tipo || 'general')}
+Correo del representante: ${email}
+
+<b>Contenido</b>
+${escapeHtml(item.mensaje || 'Sin contenido registrado.')}`,
+    { reply_markup: recordDetailKeyboard() },
+  );
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -1245,7 +1377,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -1295,6 +1427,11 @@ async function handleMessage(message) {
 
   if (/^\/informe(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showReportsMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/actas(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showRecordsMenu(chatId, message);
     return;
   }
 
@@ -1375,6 +1512,27 @@ async function handleCallbackQuery(callbackQuery) {
     await showLinkInstructions(chatId);
     return;
   }
+  if (data === 'records:menu') {
+    await showRecordsMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'records:list') {
+    await showRecordsList(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('records:type:')) {
+    const index = Number(data.split(':')[2]);
+    const types = recordsTypeCache.get(String(chatId)) || [];
+    const type = types[index] || '';
+    await showRecordsList(chatId, callbackQuery, type);
+    return;
+  }
+  if (data.startsWith('records:open:')) {
+    const index = Number(data.split(':')[2]);
+    await showRecordDetail(chatId, callbackQuery, index);
+    return;
+  }
+
   if (data === 'account:status') {
     await showAccountStatus(chatId, callbackQuery);
     return;
@@ -1518,7 +1676,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.4B-pdf-reports-ready',
+        status: 'phase3.5A-records-ready',
       });
     }
 
