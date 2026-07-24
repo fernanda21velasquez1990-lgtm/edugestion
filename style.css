@@ -5995,3 +5995,116 @@ body.stats-share-open { overflow: hidden; }
   }
 }
 
+
+
+/* =========================================================
+   ACTAS — CORRECCIÓN DE DISTRIBUCIÓN COMPACTA
+   Elimina espacios vacíos y alinea todos los paneles arriba.
+   ========================================================= */
+#section-actas.actas-module {
+  display: block;
+}
+
+#section-actas.actas-module.hidden {
+  display: none;
+}
+
+#section-actas .actas-layout {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 255px) minmax(0, 1fr);
+  gap: 20px !important;
+  align-items: start !important;
+}
+
+#section-actas .actas-type-panel {
+  width: 100% !important;
+  min-width: 0;
+  align-self: start;
+}
+
+#section-actas #form-actas.actas-form {
+  display: grid !important;
+  width: 100% !important;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 20px !important;
+  align-items: start !important;
+}
+
+#section-actas .actas-form__main,
+#section-actas .actas-actions {
+  width: 100% !important;
+  min-width: 0;
+}
+
+#section-actas .actas-form__main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px !important;
+}
+
+#section-actas .actas-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px !important;
+}
+
+#section-actas .actas-type-panel,
+#section-actas .actas-actions {
+  top: 96px;
+}
+
+#section-actas .actas-card,
+#section-actas .actas-action-card {
+  margin: 0 !important;
+}
+
+#section-actas .actas-hero {
+  margin-bottom: 20px;
+}
+
+#section-actas .actas-type-panel {
+  max-height: calc(100vh - 125px);
+  overflow: auto;
+}
+
+#section-actas #menu-tipos-actas .btn-acta-menu {
+  min-height: 43px;
+}
+
+@media (max-width: 1180px) {
+  #section-actas .actas-layout {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  #section-actas #form-actas.actas-form {
+    grid-template-columns: 1fr;
+  }
+
+  #section-actas .actas-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  #section-actas .actas-layout {
+    grid-template-columns: 1fr;
+  }
+
+  #section-actas .actas-type-panel {
+    position: static;
+    max-height: none;
+  }
+
+  #section-actas #menu-tipos-actas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  #section-actas .actas-actions,
+  #section-actas #menu-tipos-actas {
+    grid-template-columns: 1fr;
+  }
+}
