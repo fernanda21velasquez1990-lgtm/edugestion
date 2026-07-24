@@ -2427,6 +2427,8 @@ const SESSION_KEY = 'edugestion_session_v2';
   let vistaDirector = 'resumen';
   let filtroDocenteDirector = '';
   let busquedaDirector = '';
+  let seccionDirector = '';
+  let alumnoDirector = '';
 
   function h(valor = '') {
     return String(valor).replace(/[&<>'"]/g, c => ({
@@ -2509,6 +2511,8 @@ const SESSION_KEY = 'edugestion_session_v2';
     section.querySelector('#director-filter-teacher')?.addEventListener('change', event => {
       filtroDocenteDirector = event.target.value;
       busquedaDirector = '';
+      seccionDirector = '';
+      alumnoDirector = '';
       const input = document.getElementById('director-search');
       if (input) input.value = '';
       renderPanelDirector();
@@ -2717,6 +2721,191 @@ const SESSION_KEY = 'edugestion_session_v2';
     }).join('')}</div>`;
   }
 
+
+  function normalizarClaveAlumno(item = {}) {
+    const cedula = String(item.cedula || '').replace(/\D/g, '');
+    if (cedula) return `cedula:${cedula}`;
+    const nombre = String(item.nombre || item.alumno || '').trim().toLowerCase();
+    const ano = String(item.ano || '').trim().toLowerCase();
+    const seccion = String(item.seccion || '').trim().toLowerCase();
+    return `nombre:${nombre}|${ano}|${seccion}`;
+  }
+
+  function fechaValida(valor) {
+    if (!valor) return null;
+    const texto = String(valor).trim();
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(texto) ? texto : null;
+    if (iso) {
+      const d = new Date(`${iso}T12:00:00`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const partes = texto.split(/[\/\-]/).map(Number);
+    if (partes.length === 3) {
+      const [a,b,c] = partes;
+      const d = a > 1900 ? new Date(a,b-1,c,12) : new Date(c,b-1,a,12);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(texto);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function dentroDeDias(fecha, dias) {
+    const d = fechaValida(fecha);
+    if (!d) return false;
+    const ahora = new Date();
+    const inicio = new Date(ahora);
+    inicio.setHours(0,0,0,0);
+    inicio.setDate(inicio.getDate() - (dias - 1));
+    return d >= inicio && d <= ahora;
+  }
+
+  function registrosAlumno(lista, alumno) {
+    const clave = normalizarClaveAlumno(alumno);
+    return (lista || []).filter(item => {
+      if (alumno.id && item.idAlumno && String(item.idAlumno) === String(alumno.id)) return true;
+      return normalizarClaveAlumno({
+        cedula: item.cedula,
+        nombre: item.alumno || item.nombre,
+        ano: item.ano,
+        seccion: item.seccion
+      }) === clave;
+    });
+  }
+
+  function resumenAsistenciaAlumno(alumno) {
+    const registros = registrosAlumno(datosDirector?.asistencia || [], alumno);
+    const contar = lista => {
+      const total = lista.length;
+      const presentes = lista.filter(r => String(r.estado || '').toLowerCase() === 'presente').length;
+      const tardanzas = lista.filter(r => String(r.estado || '').toLowerCase() === 'tardanza').length;
+      const ausentes = lista.filter(r => String(r.estado || '').toLowerCase() === 'ausente').length;
+      const justificadas = lista.filter(r => ['justificada','justificado'].includes(String(r.estado || '').toLowerCase())).length;
+      const efectivas = presentes + tardanzas;
+      return {
+        total, presentes, tardanzas, ausentes, justificadas,
+        porcentaje: total ? Math.round((efectivas / total) * 1000) / 10 : 0
+      };
+    };
+    return {
+      total: contar(registros),
+      semana: contar(registros.filter(r => dentroDeDias(r.fecha, 7))),
+      mes: contar(registros.filter(r => dentroDeDias(r.fecha, 30))),
+      registros
+    };
+  }
+
+  function resumenNotasAlumno(alumno) {
+    const notas = registrosAlumno(datosDirector?.calificaciones || [], alumno);
+    const porMateria = new Map();
+    notas.forEach(n => {
+      const materia = String(n.materia || 'Sin materia');
+      const nota = Number(n.nota);
+      const maxima = Number(n.notaMaxima || 20);
+      if (!Number.isFinite(nota) || !Number.isFinite(maxima) || maxima <= 0) return;
+      if (!porMateria.has(materia)) porMateria.set(materia, []);
+      porMateria.get(materia).push({nota, maxima, porcentaje: nota / maxima * 100, fecha:n.fecha, actividad:n.actividad});
+    });
+    const materias = [...porMateria.entries()].map(([materia, items]) => ({
+      materia,
+      promedio: Math.round(items.reduce((s,x)=>s+x.porcentaje,0) / items.length * 10) / 10,
+      evaluaciones: items.length
+    })).sort((a,b)=>a.materia.localeCompare(b.materia,'es'));
+    const promedio = materias.length
+      ? Math.round(materias.reduce((s,x)=>s+x.promedio,0) / materias.length * 10) / 10
+      : null;
+    return { notas, materias, promedio };
+  }
+
+  function riesgoAlumno(alumno) {
+    const asistencia = resumenAsistenciaAlumno(alumno);
+    const actas = registrosAlumno(datosDirector?.actas || [], alumno);
+    const notas = resumenNotasAlumno(alumno);
+    let puntos = 0;
+    if (asistencia.mes.total && asistencia.mes.porcentaje < 80) puntos += 3;
+    else if (asistencia.mes.total && asistencia.mes.porcentaje < 90) puntos += 1;
+    puntos += Math.min(actas.length * 2, 6);
+    if (notas.promedio !== null && notas.promedio < 60) puntos += 3;
+    return {
+      puntos,
+      nivel: puntos >= 6 ? 'Alto' : puntos >= 3 ? 'Medio' : 'Bajo',
+      asistencia,
+      actas,
+      notas
+    };
+  }
+
+  function alumnosDeSeccion(clave) {
+    const [ano,seccion,turno] = String(clave || '').split('|');
+    return (datosDirector?.estudiantes || []).filter(a => {
+      if (filtroDocenteDirector && String(a.idProfesor || '') !== String(filtroDocenteDirector)) return false;
+      return String(a.ano || '') === ano && String(a.seccion || '') === seccion && String(a.turno || '') === turno;
+    });
+  }
+
+  function detalleAlumnoHtml(alumno) {
+    const asistencia = resumenAsistenciaAlumno(alumno);
+    const notas = resumenNotasAlumno(alumno);
+    const actas = registrosAlumno(datosDirector?.actas || [], alumno);
+    const materias = [...new Set(
+      (datosDirector?.asistencia || [])
+        .filter(r => registrosAlumno([r], alumno).length)
+        .map(r => String(r.materia || '').trim())
+        .filter(Boolean)
+    )].sort((a,b)=>a.localeCompare(b,'es'));
+    const riesgo = riesgoAlumno(alumno);
+
+    const materiasNotas = notas.materias.length
+      ? notas.materias.map(m => `<article><strong>${h(m.materia)}</strong><span>${h(m.promedio)}%</span><small>${h(m.evaluaciones)} evaluaciones</small><progress max="100" value="${Number(m.promedio)||0}"></progress></article>`).join('')
+      : `<div class="student-no-data"><i class="fa-solid fa-circle-info"></i><span>No hay calificaciones registradas todavía. El promedio aparecerá cuando se use la hoja Calificaciones.</span></div>`;
+
+    return `<section class="director-student-detail">
+      <header>
+        <div class="director-student-detail__identity">
+          <span>${h((alumno.nombre || 'A').charAt(0))}</span>
+          <div><small>Ficha de seguimiento</small><h3>${h(alumno.nombre)}</h3><p>${h(alumno.ano)} ${h(alumno.seccion)} · ${h(alumno.turno)}</p></div>
+        </div>
+        <div class="director-risk director-risk--${riesgo.nivel.toLowerCase()}"><small>Nivel de seguimiento</small><strong>${h(riesgo.nivel)}</strong></div>
+        <button type="button" data-close-student-detail><i class="fa-solid fa-xmark"></i></button>
+      </header>
+
+      <div class="director-student-overview">
+        <article><i class="fa-solid fa-calendar-week"></i><strong>${h(asistencia.semana.porcentaje)}%</strong><small>Asistencia semanal</small><em>${asistencia.semana.ausentes} ausencias</em></article>
+        <article><i class="fa-solid fa-calendar-days"></i><strong>${h(asistencia.mes.porcentaje)}%</strong><small>Asistencia mensual</small><em>${asistencia.mes.ausentes} ausencias</em></article>
+        <article><i class="fa-solid fa-chart-simple"></i><strong>${notas.promedio === null ? '—' : `${h(notas.promedio)}%`}</strong><small>Promedio general</small><em>${notas.notas.length} notas</em></article>
+        <article><i class="fa-solid fa-file-circle-exclamation"></i><strong>${h(actas.length)}</strong><small>Actas registradas</small><em>${actas.length ? 'Requiere revisión' : 'Sin actas'}</em></article>
+      </div>
+
+      <div class="director-student-columns">
+        <section class="director-card director-card--inner">
+          <header><div><span><i class="fa-solid fa-user-check"></i></span><div><h3>Asistencia reciente</h3><p>Últimas marcaciones del estudiante.</p></div></div><small>${asistencia.total.total} registros</small></header>
+          ${tabla(['Fecha','Materia','Estado'], asistencia.registros.slice(0,18).map(r => `<tr><td>${h(r.fecha)}</td><td>${h(r.materia || '—')}</td><td><span class="director-status director-status--${h(String(r.estado||'').toLowerCase())}">${h(r.estado)}</span></td></tr>`), 'No hay asistencia registrada.')}
+        </section>
+
+        <section class="director-card director-card--inner">
+          <header><div><span><i class="fa-solid fa-square-poll-vertical"></i></span><div><h3>Rendimiento por materia</h3><p>Promedios disponibles en el sistema.</p></div></div><small>${materias.length} materias</small></header>
+          <div class="director-subject-performance">${materiasNotas}</div>
+        </section>
+      </div>
+
+      <div class="director-student-columns">
+        <section class="director-card director-card--inner">
+          <header><div><span><i class="fa-solid fa-file-signature"></i></span><div><h3>Actas y comportamiento</h3><p>Antecedentes registrados por los docentes.</p></div></div><small>${actas.length} actas</small></header>
+          ${tabla(['Fecha','Docente','Tipo','Motivo'], actas.map(a => `<tr><td>${h(a.fecha)}</td><td>${h(a.docente)}</td><td><span class="director-status is-info">${h(a.tipo)}</span></td><td>${h(a.titulo || a.mensaje || '—')}</td></tr>`), 'Este estudiante no tiene actas registradas.')}
+        </section>
+
+        <section class="director-card director-card--inner">
+          <header><div><span><i class="fa-solid fa-address-book"></i></span><div><h3>Representante</h3><p>Información para seguimiento familiar.</p></div></div></header>
+          <div class="director-representative">
+            <div><small>Nombre</small><strong>${h(alumno.representante || 'No registrado')}</strong></div>
+            <div><small>Teléfono</small><strong>${h(alumno.telefonoRepresentante || 'No registrado')}</strong></div>
+            <div><small>Correo</small><strong>${h(alumno.emailRepresentante || 'No registrado')}</strong></div>
+            <div><small>Observaciones</small><strong>${h(alumno.observaciones || 'Sin observaciones')}</strong></div>
+          </div>
+        </section>
+      </div>
+    </section>`;
+  }
+
   function renderPanelDirector() {
     const content = document.getElementById('director-content');
     if (!content || !datosDirector) return;
@@ -2769,27 +2958,91 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     if (vistaDirector === 'estudiantes') {
-      const items = filtrar(datosDirector.estudiantes, ['docente','nombre','cedula','ano','seccion','turno','representante']);
+      const todos = filtrar(datosDirector.estudiantes, ['docente','nombre','cedula','ano','seccion','turno','representante']);
       const grupos = new Map();
-      items.forEach(x => {
-        const key = `${x.ano || ''}|${x.seccion || ''}|${x.turno || ''}`;
+      todos.forEach(a => {
+        const key = `${a.ano || ''}|${a.seccion || ''}|${a.turno || ''}`;
         if (!grupos.has(key)) grupos.set(key, []);
-        grupos.get(key).push(x);
+        grupos.get(key).push(a);
       });
-      const tarjetas = [...grupos.entries()].map(([key, alumnos]) => {
-        const [ano,seccion,turno] = key.split('|');
-        return `<button class="director-section-card" type="button" data-director-section="${h(key)}">
-          <span><i class="fa-solid fa-school"></i></span>
-          <div><strong>${h(ano || 'Curso')} ${h(seccion)}</strong><small>${h(turno || 'Sin turno')}</small></div>
-          <em>${alumnos.length} alumno${alumnos.length === 1 ? '' : 's'}</em>
-          <i class="fa-solid fa-chevron-right"></i>
-        </button>`;
-      }).join('');
-      html = `<section class="director-card">
-        <header><div><span><i class="fa-solid fa-users"></i></span><div><h3>Estudiantes y secciones del docente</h3><p>Selecciona una sección para filtrar su matrícula.</p></div></div><small>${items.length} estudiantes</small></header>
-        ${tarjetas ? `<div class="director-section-grid">${tarjetas}</div>` : ''}
-        ${tabla(['Estudiante','Docente responsable','Curso','Representante','Contacto'], items.slice(0,700).map(x => `<tr><td><strong>${h(x.nombre)}</strong><small>${h(x.cedula || 'Sin cédula')}</small></td><td>${h(x.docente)}</td><td>${h(x.ano)} · ${h(x.seccion)} · ${h(x.turno)}</td><td>${h(x.representante || 'No registrado')}</td><td>${h(x.telefonoRepresentante || x.emailRepresentante || '—')}</td></tr>`), filtroDocenteDirector ? 'Este docente todavía no tiene estudiantes registrados.' : 'Selecciona un docente para ver sus secciones y estudiantes.')}
-      </section>`;
+
+      const ranking = todos.map(a => ({alumno:a, ...riesgoAlumno(a)}));
+      const mejorAsistencia = [...ranking]
+        .filter(x => x.asistencia.mes.total > 0)
+        .sort((a,b)=>b.asistencia.mes.porcentaje-a.asistencia.mes.porcentaje)
+        .slice(0,5);
+      const seguimiento = [...ranking]
+        .filter(x => x.puntos > 0)
+        .sort((a,b)=>b.puntos-a.puntos)
+        .slice(0,8);
+      const conActas = ranking.filter(x => x.actas.length > 0).sort((a,b)=>b.actas.length-a.actas.length);
+
+      let cuerpo = '';
+      if (!seccionDirector) {
+        cuerpo = `
+          <section class="director-student-dashboard">
+            <div class="director-student-dashboard__top">
+              <article class="director-card">
+                <header><div><span><i class="fa-solid fa-trophy"></i></span><div><h3>Top de asistencia mensual</h3><p>Estudiantes con mejor asistencia registrada.</p></div></div></header>
+                <div class="director-ranking">${mejorAsistencia.length ? mejorAsistencia.map((x,i)=>`<button type="button" data-open-student="${h(normalizarClaveAlumno(x.alumno))}"><em>${i+1}</em><span><strong>${h(x.alumno.nombre)}</strong><small>${h(x.alumno.ano)} ${h(x.alumno.seccion)}</small></span><b>${h(x.asistencia.mes.porcentaje)}%</b></button>`).join('') : '<div class="student-no-data">No hay asistencia mensual suficiente.</div>'}</div>
+              </article>
+              <article class="director-card">
+                <header><div><span><i class="fa-solid fa-triangle-exclamation"></i></span><div><h3>Requieren seguimiento</h3><p>Ausencias, bajo promedio o actas registradas.</p></div></div></header>
+                <div class="director-ranking director-ranking--risk">${seguimiento.length ? seguimiento.map(x=>`<button type="button" data-open-student="${h(normalizarClaveAlumno(x.alumno))}"><em>${h(x.nivel)}</em><span><strong>${h(x.alumno.nombre)}</strong><small>${x.actas.length} actas · ${x.asistencia.mes.ausentes} ausencias</small></span><b>${x.notas.promedio === null ? '—' : `${h(x.notas.promedio)}%`}</b></button>`).join('') : '<div class="student-no-data">No hay estudiantes con alertas actuales.</div>'}</div>
+              </article>
+            </div>
+
+            <section class="director-card">
+              <header><div><span><i class="fa-solid fa-school"></i></span><div><h3>Alumnos por sección</h3><p>Primero selecciona una sección para ver todos sus estudiantes.</p></div></div><small>${grupos.size} secciones</small></header>
+              <div class="director-section-grid director-section-grid--students">
+                ${[...grupos.entries()].map(([key, alumnos]) => {
+                  const [ano,seccion,turno] = key.split('|');
+                  const alertas = alumnos.filter(a=>riesgoAlumno(a).puntos>0).length;
+                  return `<button class="director-section-card director-section-card--large" type="button" data-select-section="${h(key)}">
+                    <span><i class="fa-solid fa-people-group"></i></span>
+                    <div><strong>${h(ano || 'Curso')} ${h(seccion)}</strong><small>${h(turno || 'Sin turno')}</small></div>
+                    <em>${alumnos.length} alumnos</em>
+                    <b>${alertas ? `${alertas} alertas` : 'Sin alertas'}</b>
+                    <i class="fa-solid fa-chevron-right"></i>
+                  </button>`;
+                }).join('') || '<div class="director-empty">No existen secciones para este docente.</div>'}
+              </div>
+            </section>
+
+            <section class="director-card">
+              <header><div><span><i class="fa-solid fa-file-circle-exclamation"></i></span><div><h3>Alumnos con actas</h3><p>Lista prioritaria para seguimiento con representantes.</p></div></div><small>${conActas.length} estudiantes</small></header>
+              ${tabla(['Estudiante','Sección','Actas','Asistencia mensual','Representante'], conActas.map(x=>`<tr data-open-student-row="${h(normalizarClaveAlumno(x.alumno))}"><td><strong>${h(x.alumno.nombre)}</strong><small>${h(x.alumno.cedula || 'Sin cédula')}</small></td><td>${h(x.alumno.ano)} ${h(x.alumno.seccion)} · ${h(x.alumno.turno)}</td><td><span class="director-status is-info">${h(x.actas.length)} actas</span></td><td>${h(x.asistencia.mes.porcentaje)}%</td><td>${h(x.alumno.representante || 'No registrado')}<small>${h(x.alumno.telefonoRepresentante || '')}</small></td></tr>`), 'No hay estudiantes con actas.')}
+            </section>
+          </section>`;
+      } else {
+        const alumnos = alumnosDeSeccion(seccionDirector);
+        const [ano,seccion,turno] = seccionDirector.split('|');
+        cuerpo = `
+          <section class="director-card">
+            <header>
+              <div><span><i class="fa-solid fa-users"></i></span><div><h3>${h(ano)} ${h(seccion)} · ${h(turno)}</h3><p>Selecciona un estudiante para abrir su ficha completa.</p></div></div>
+              <button class="director-back-button" type="button" data-back-sections><i class="fa-solid fa-arrow-left"></i> Volver a secciones</button>
+            </header>
+            <div class="director-student-grid">
+              ${alumnos.map(a => {
+                const r = riesgoAlumno(a);
+                return `<button type="button" class="director-student-card" data-open-student="${h(normalizarClaveAlumno(a))}">
+                  <span>${h((a.nombre||'A').charAt(0))}</span>
+                  <div><strong>${h(a.nombre)}</strong><small>${h(a.cedula || 'Sin cédula')}</small></div>
+                  <dl><div><dt>Mes</dt><dd>${h(r.asistencia.mes.porcentaje)}%</dd></div><div><dt>Promedio</dt><dd>${r.notas.promedio === null ? '—' : `${h(r.notas.promedio)}%`}</dd></div><div><dt>Actas</dt><dd>${h(r.actas.length)}</dd></div></dl>
+                  <em class="risk-${r.nivel.toLowerCase()}">${h(r.nivel)}</em>
+                </button>`;
+              }).join('') || '<div class="director-empty">No hay alumnos en esta sección.</div>'}
+            </div>
+          </section>`;
+      }
+
+      if (alumnoDirector) {
+        const alumno = todos.find(a => normalizarClaveAlumno(a) === alumnoDirector);
+        if (alumno) cuerpo += detalleAlumnoHtml(alumno);
+      }
+
+      html = cuerpo;
     }
 
     if (vistaDirector === 'horarios') {
@@ -2823,6 +3076,40 @@ const SESSION_KEY = 'edugestion_session_v2';
         if (input) input.value = `${ano} ${seccion} ${turno}`.trim();
         vistaDirector = 'estudiantes';
         document.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b.dataset.directorView === 'estudiantes'));
+        renderPanelDirector();
+      });
+    });
+
+
+    content.querySelectorAll('[data-select-section]').forEach(button => {
+      button.addEventListener('click', () => {
+        seccionDirector = button.dataset.selectSection || '';
+        alumnoDirector = '';
+        renderPanelDirector();
+      });
+    });
+
+    content.querySelectorAll('[data-back-sections]').forEach(button => {
+      button.addEventListener('click', () => {
+        seccionDirector = '';
+        alumnoDirector = '';
+        renderPanelDirector();
+      });
+    });
+
+    content.querySelectorAll('[data-open-student], [data-open-student-row]').forEach(element => {
+      element.addEventListener('click', () => {
+        alumnoDirector = element.dataset.openStudent || element.dataset.openStudentRow || '';
+        const alumno = (datosDirector?.estudiantes || []).find(a => normalizarClaveAlumno(a) === alumnoDirector);
+        if (alumno) seccionDirector = `${alumno.ano || ''}|${alumno.seccion || ''}|${alumno.turno || ''}`;
+        renderPanelDirector();
+        setTimeout(() => document.querySelector('.director-student-detail')?.scrollIntoView({behavior:'smooth',block:'start'}), 50);
+      });
+    });
+
+    content.querySelectorAll('[data-close-student-detail]').forEach(button => {
+      button.addEventListener('click', () => {
+        alumnoDirector = '';
         renderPanelDirector();
       });
     });
