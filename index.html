@@ -737,9 +737,24 @@
        </div>
       </div>
      </section>
-     <section class="hidden max-w-[1400px] mx-auto space-y-6" id="section-actas">
-      <div class="flex flex-col lg:flex-row gap-6">
-       <div class="w-full lg:w-1/4 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 h-fit">
+     <section class="hidden max-w-[1400px] mx-auto space-y-6 actas-module" id="section-actas">
+       <header class="actas-hero">
+        <div class="actas-hero__content">
+         <span class="actas-hero__eyebrow"><i class="fa-solid fa-file-shield"></i> Documentación institucional</span>
+         <h2>Gestión de actas</h2>
+         <p>Genera, organiza y notifica documentos escolares con una estructura clara, segura y profesional.</p>
+         <div class="actas-hero__meta">
+          <span><i class="fa-solid fa-layer-group"></i> 10 tipos de acta</span>
+          <span><i class="fa-solid fa-user-shield"></i> Datos protegidos</span>
+          <span><i class="fa-solid fa-file-pdf"></i> Exportación PDF</span>
+         </div>
+        </div>
+        <div class="actas-hero__icon" aria-hidden="true">
+         <i class="fa-solid fa-file-signature"></i>
+        </div>
+       </header>
+      <div class="flex flex-col lg:flex-row gap-6 actas-layout">
+       <aside class="w-full lg:w-1/4 bg-white p-4 rounded-3xl shadow-sm border border-gray-100 h-fit actas-type-panel">
         <div class="text-center mb-6 border-b border-gray-100 pb-4">
          <div class="bg-indigo-50 text-indigo-600 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 text-xl">
           <i class="fa-solid fa-folder-open">
@@ -803,8 +818,8 @@
         </div>
        </div>
        <form class="w-full lg:w-3/4 flex flex-col lg:flex-row gap-6" id="form-actas">
-        <div class="w-full lg:w-2/3 space-y-6">
-         <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 border-t-4 border-t-indigo-500">
+        <div class="w-full lg:w-2/3 space-y-6 actas-form__main">
+         <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 border-t-4 border-t-indigo-500 actas-card actas-card--header">
           <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-4">
            <i class="fa-solid fa-building-columns mr-1">
            </i>
@@ -843,7 +858,7 @@
            </div>
           </div>
          </div>
-         <div class="bg-blue-50/50 p-6 rounded-3xl border border-blue-100">
+         <div class="bg-blue-50/50 p-6 rounded-3xl border border-blue-100 actas-card actas-card--student">
           <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest mb-4">
            <i class="fa-solid fa-user-graduate mr-1">
            </i>
@@ -934,7 +949,7 @@
            </div>
           </div>
          </div>
-         <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+         <div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 actas-card actas-card--development">
           <div class="hidden acta-plantilla space-y-4" id="plantilla-reunion">
            <div>
             <label class="block text-[10px] font-bold text-gray-500 mb-1 uppercase">
@@ -1074,7 +1089,7 @@
            </div>
           </div>
          </div>
-         <div class="bg-orange-50/50 p-6 rounded-3xl border border-orange-100">
+         <div class="bg-orange-50/50 p-6 rounded-3xl border border-orange-100 actas-card actas-card--signatures">
           <h4 class="text-xs font-black text-orange-600 uppercase tracking-widest mb-4">
            <i class="fa-solid fa-pen-nib mr-1">
            </i>
@@ -1097,15 +1112,20 @@
           </div>
          </div>
         </div>
-        <div class="w-full lg:w-1/3 space-y-6">
-         <div class="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-3">
+        <aside class="w-full lg:w-1/3 space-y-6 actas-actions">
+         <div class="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col gap-3 actas-action-card actas-action-card--primary">
+           <div class="actas-action-card__icon"><i class="fa-solid fa-file-circle-check"></i></div>
+           <div>
+            <h4>Documento final</h4>
+            <p>Genera el acta completa y su versión PDF lista para archivar o imprimir.</p>
+           </div>
           <button class="w-full px-4 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm transition shadow-md uppercase tracking-wide text-center" id="btn-acta-guardar" type="submit">
            <i class="fa-solid fa-file-pdf">
            </i>
            Generar Doc Final y PDF
           </button>
          </div>
-         <div class="bg-[#f8f9fa] p-5 rounded-3xl border border-gray-200">
+         <div class="bg-[#f8f9fa] p-5 rounded-3xl border border-gray-200 actas-action-card actas-action-card--guide">
           <h4 class="text-xs font-black text-gray-600 uppercase tracking-widest mb-4 border-b border-gray-300 pb-2">
            Gu&iacute;a de Acta
           </h4>
@@ -1113,7 +1133,13 @@
            Reportar situaciones disciplinarias.
           </p>
          </div>
-         <button class="w-full px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition shadow-md text-center" id="btn-acta-whatsapp" type="button">
+         <div class="actas-action-card actas-action-card--whatsapp">
+           <div class="actas-action-card__icon"><i class="fa-brands fa-whatsapp"></i></div>
+           <div>
+            <h4>Alerta WhatsApp</h4>
+            <p>Envía una notificación al representante del estudiante seleccionado.</p>
+           </div>
+          <button class="w-full px-4 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition shadow-md text-center" id="btn-acta-whatsapp" type="button">
           <i class="fa-brands fa-whatsapp text-lg">
           </i>
           Alerta WhatsApp
