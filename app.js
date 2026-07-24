@@ -3786,7 +3786,11 @@ Archivo enviado directamente desde EduGestión.`);
           <h2>Historial institucional de informes</h2>
           <p>Supervisa los envíos realizados por los docentes sin modificar sus registros.</p>
         </div>
-        <button id="${ids.refresh}" type="button"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        <div class="admin-history-hero-actions">
+          <button id="admin-history-export-csv" type="button"><i class="fa-solid fa-file-csv"></i> CSV</button>
+          <button id="admin-history-export-pdf" type="button"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+          <button id="${ids.refresh}" type="button"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        </div>
       </section>
 
       <section class="admin-history-summary">
@@ -3826,6 +3830,8 @@ Archivo enviado directamente desde EduGestión.`);
     main.appendChild(section);
 
     document.getElementById(ids.refresh)?.addEventListener('click', () => cargarHistorialAdmin());
+    document.getElementById('admin-history-export-csv')?.addEventListener('click', exportarHistorialAdminCSV);
+    document.getElementById('admin-history-export-pdf')?.addEventListener('click', exportarHistorialAdminPDF);
     document.getElementById(ids.apply)?.addEventListener('click', () => cargarHistorialAdmin());
     document.getElementById(ids.reset)?.addEventListener('click', () => {
       [ids.teacher, ids.status, ids.sectionFilter, ids.from, ids.to, ids.search].forEach(id => {
@@ -3919,6 +3925,133 @@ Archivo enviado directamente desde EduGestión.`);
         <footer><span><i class="fa-regular fa-clock"></i> ${seguroAdmin(fechaAdmin(item.registradoEn))}</span><span><i class="fa-brands fa-telegram"></i> ${seguroAdmin(item.destino || 'Telegram')}</span></footer>
       </article>`;
     }).join('');
+  }
+
+
+  function nombreArchivoAdmin(extension) {
+    const hoy = new Date();
+    const fecha = [
+      hoy.getFullYear(),
+      String(hoy.getMonth() + 1).padStart(2, '0'),
+      String(hoy.getDate()).padStart(2, '0')
+    ].join('-');
+    return `Historial_Administrativo_Informes_${fecha}.${extension}`;
+  }
+
+  function descargarArchivoAdmin(contenido, tipo, nombre) {
+    const blob = contenido instanceof Blob ? contenido : new Blob([contenido], { type: tipo });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombre;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  function valorCSVAdmin(valor) {
+    const texto = String(valor ?? '').replace(/\r?\n/g, ' ').trim();
+    return `"${texto.replace(/"/g, '""')}"`;
+  }
+
+  function exportarHistorialAdminCSV() {
+    if (!datos.length) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay registros visibles para exportar.', 'warning', 'Exportación vacía');
+      return;
+    }
+
+    const encabezados = ['Fecha', 'Docente', 'Archivo', 'Periodo', 'Sección', 'Destino', 'Canal', 'Estado', 'Tamaño (bytes)', 'Mensaje ID'];
+    const filas = datos.map(item => [
+      fechaAdmin(item.registradoEn),
+      item.docente || 'Docente',
+      item.archivo || 'Informe.pdf',
+      item.periodo || '',
+      item.seccion || '',
+      item.destino || '',
+      item.canal || 'Telegram',
+      String(item.estado || 'Enviado').toUpperCase(),
+      item.tamanoBytes || 0,
+      item.mensajeId || ''
+    ].map(valorCSVAdmin).join(';'));
+
+    const contenido = '\uFEFF' + [encabezados.map(valorCSVAdmin).join(';'), ...filas].join('\r\n');
+    descargarArchivoAdmin(contenido, 'text/csv;charset=utf-8', nombreArchivoAdmin('csv'));
+    if (typeof mostrarToast === 'function') mostrarToast(`${datos.length} registros exportados en CSV.`, 'success', 'Archivo descargado');
+  }
+
+  function exportarHistorialAdminPDF() {
+    if (!datos.length) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay registros visibles para exportar.', 'warning', 'Exportación vacía');
+      return;
+    }
+    if (typeof html2pdf !== 'function') {
+      if (typeof mostrarToast === 'function') mostrarToast('La librería para generar PDF no está disponible.', 'error', 'No se generó el PDF');
+      return;
+    }
+
+    const resumen = {
+      total: datos.length,
+      enviados: datos.filter(x => String(x.estado || 'enviado').toLowerCase() !== 'error').length,
+      errores: datos.filter(x => String(x.estado || '').toLowerCase() === 'error').length,
+      docentes: new Set(datos.map(x => String(x.idProfesor || '').trim() || `nombre:${String(x.docente || 'Docente').trim().toLowerCase()}`)).size
+    };
+
+    const contenedor = document.createElement('div');
+    contenedor.className = 'admin-history-pdf';
+    contenedor.innerHTML = `
+      <div class="admin-history-pdf__header">
+        <div>
+          <small>EDUGESTIÓN · DIRECCIÓN Y SECRETARÍA</small>
+          <h1>Historial administrativo de informes</h1>
+          <p>Generado el ${seguroAdmin(new Date().toLocaleString('es-ES'))}</p>
+        </div>
+        <div class="admin-history-pdf__brand">EG</div>
+      </div>
+      <div class="admin-history-pdf__summary">
+        <div><strong>${resumen.total}</strong><span>Total</span></div>
+        <div><strong>${resumen.enviados}</strong><span>Enviados</span></div>
+        <div><strong>${resumen.errores}</strong><span>Errores</span></div>
+        <div><strong>${resumen.docentes}</strong><span>Docentes</span></div>
+      </div>
+      <table>
+        <thead><tr><th>Fecha</th><th>Docente</th><th>Archivo</th><th>Periodo / Sección</th><th>Destino</th><th>Estado</th></tr></thead>
+        <tbody>${datos.map(item => {
+          const error = String(item.estado || 'enviado').toLowerCase() === 'error';
+          return `<tr>
+            <td>${seguroAdmin(fechaAdmin(item.registradoEn))}</td>
+            <td>${seguroAdmin(item.docente || 'Docente')}</td>
+            <td>${seguroAdmin(item.archivo || 'Informe.pdf')}</td>
+            <td>${seguroAdmin(item.periodo || '—')}<br><small>${seguroAdmin(item.seccion || '—')}</small></td>
+            <td>${seguroAdmin(item.destino || item.canal || 'Telegram')}</td>
+            <td>${error ? 'ERROR' : 'ENVIADO'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+      <div class="admin-history-pdf__footer">
+        <span>Documento generado por EduGestión</span>
+        <span>Consulta de solo lectura</span>
+      </div>`;
+
+    document.body.appendChild(contenedor);
+    const opciones = {
+      margin: [0.35, 0.35, 0.4, 0.35],
+      filename: nombreArchivoAdmin('pdf'),
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    };
+
+    html2pdf().set(opciones).from(contenedor).save()
+      .then(() => {
+        if (typeof mostrarToast === 'function') mostrarToast(`${datos.length} registros exportados en PDF.`, 'success', 'PDF generado');
+      })
+      .catch(error => {
+        console.error(error);
+        if (typeof mostrarToast === 'function') mostrarToast('No se pudo generar el PDF administrativo.', 'error', 'Error de exportación');
+      })
+      .finally(() => contenedor.remove());
   }
 
   const aplicarOriginalAdmin = aplicarPerfilDocente;
