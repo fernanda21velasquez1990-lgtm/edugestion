@@ -3958,6 +3958,78 @@ Archivo enviado directamente desde EduGestión.`);
   }
 
 
+
+  function renderResumenDocentesAdmin() {
+    const contenedor = document.getElementById('admin-history-teacher-summary');
+    const contador = document.getElementById('admin-history-teacher-summary-count');
+    if (!contenedor) return;
+
+    const mapa = new Map();
+
+    datos.forEach(item => {
+      const idProfesor = String(item.idProfesor || '').trim();
+      const nombreDocente = String(item.docente || 'Docente').trim();
+      const clave = idProfesor || `nombre:${nombreDocente.toLowerCase()}`;
+
+      if (!mapa.has(clave)) {
+        mapa.set(clave, {
+          docente: nombreDocente || 'Docente',
+          total: 0,
+          enviados: 0,
+          errores: 0,
+          ultima: ''
+        });
+      }
+
+      const fila = mapa.get(clave);
+      fila.total += 1;
+
+      if (String(item.estado || 'enviado').toLowerCase() === 'error') {
+        fila.errores += 1;
+      } else {
+        fila.enviados += 1;
+      }
+
+      const fecha = String(item.registradoEn || '');
+      if (!fila.ultima || fecha > fila.ultima) fila.ultima = fecha;
+    });
+
+    const resumen = [...mapa.values()].sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      return a.docente.localeCompare(b.docente, 'es', { sensitivity: 'base' });
+    });
+
+    if (contador) {
+      contador.textContent = `${resumen.length} docente${resumen.length === 1 ? '' : 's'}`;
+    }
+
+    if (!resumen.length) {
+      contenedor.innerHTML = `
+        <div class="admin-history-empty">
+          <i class="fa-regular fa-user"></i>
+          <span>No hay actividad docente para mostrar.</span>
+        </div>`;
+      return;
+    }
+
+    contenedor.innerHTML = resumen.map(item => `
+      <article>
+        <div class="admin-history-teacher-avatar">
+          ${seguroAdmin(String(item.docente || 'D').charAt(0).toUpperCase())}
+        </div>
+        <div class="admin-history-teacher-copy">
+          <strong>${seguroAdmin(item.docente)}</strong>
+          <small>Último envío: ${seguroAdmin(fechaAdmin(item.ultima))}</small>
+        </div>
+        <div class="admin-history-teacher-metrics">
+          <span><b>${item.total}</b>Total</span>
+          <span><b>${item.enviados}</b>Enviados</span>
+          <span><b>${item.errores}</b>Errores</span>
+        </div>
+      </article>
+    `).join('');
+  }
+
   function nombreArchivoAdmin(extension) {
     const hoy = new Date();
     const fecha = [
