@@ -5025,3 +5025,41 @@ Archivo enviado directamente desde EduGestión.`);
   }
 })();
 /* EDUGESTION_USER_GUIDE_V2_END */
+
+
+/* EDUGESTION_HORARIO_HERO_FIX_V1_20260724 */
+(() => {
+  function agregarCintilloHorario() {
+    const section = document.getElementById('section-horario');
+    if (!section || section.querySelector('.schedule-institutional-hero')) return;
+
+    const hero = document.createElement('header');
+    hero.className = 'platform-hero platform-hero--schedule schedule-institutional-hero';
+    hero.innerHTML = `
+      <div class="platform-hero__copy">
+        <span class="platform-hero__eyebrow">
+          <i class="fa-solid fa-clock"></i>
+          Organización semanal
+        </span>
+        <h2>Horario del docente</h2>
+        <p>Organiza tus bloques de clase por día, año, sección y turno desde una agenda clara y adaptable.</p>
+        <div class="platform-hero__badges">
+          <span><i class="fa-solid fa-calendar-days"></i> Agenda semanal</span>
+          <span><i class="fa-solid fa-school"></i> Cursos y secciones</span>
+          <span><i class="fa-solid fa-mobile-screen"></i> Adaptado a celular</span>
+        </div>
+      </div>
+      <div class="platform-hero__icon">
+        <i class="fa-solid fa-calendar-week"></i>
+      </div>
+    `;
+
+    section.insertBefore(hero, section.firstElementChild);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', agregarCintilloHorario, { once: true });
+  } else {
+    agregarCintilloHorario();
+  }
+})();
