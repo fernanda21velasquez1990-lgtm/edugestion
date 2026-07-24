@@ -1,4 +1,4 @@
-// EduGestión Fase 1.9 — envío, confirmación e historial local
+// EduGestión Fase 2.1 — envío e historial persistente en servidor
 const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_PDF_BYTES = 3_900_000;
 const MAX_CAPTION_LENGTH = 900;
@@ -126,7 +126,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion envío de informes',
-        status: 'phase1.9-history-ready',
+        status: 'phase2.1-server-history-ready',
       }, 200, request);
     }
 
@@ -134,6 +134,7 @@ export default {
       return jsonResponse({ ok: false, error: 'Método no permitido' }, 405, request);
     }
 
+    let auditContext = null;
     try {
       const contentType = request.headers.get('content-type') || '';
       if (!contentType.includes('multipart/form-data')) {
@@ -147,6 +148,7 @@ export default {
       const caption = trimText(form.get('mensaje'), MAX_CAPTION_LENGTH) || 'Informe de asistencia generado por EduGestión.';
       const periodo = trimText(form.get('periodo'), 80);
       const seccion = trimText(form.get('seccion'), 80) || 'Todas las secciones';
+      auditContext = { token, archivo: filename, periodo, seccion, tamanoBytes: pdf instanceof File ? pdf.size : 0 };
 
       if (!token) {
         return jsonResponse({ ok: false, code: 'SESSION_REQUIRED', error: 'La sesión docente no está disponible.' }, 401, request);
@@ -183,6 +185,9 @@ export default {
           seccion,
           mensajeId: String(telegramResult.message_id || ''),
           tamanoBytes: pdf.size,
+          estado: 'enviado',
+          codigo: '',
+          detalle: '',
         });
       } catch (auditError) {
         console.error('El informe se envió, pero no se pudo registrar la auditoría:', auditError);
@@ -202,6 +207,22 @@ export default {
       }, 200, request);
     } catch (error) {
       console.error('No se pudo enviar el informe:', error);
+      if (auditContext?.token) {
+        try {
+          await callEduGestion('botRegistrarEnvioInforme', {
+            token: auditContext.token,
+            archivo: auditContext.archivo,
+            periodo: auditContext.periodo,
+            seccion: auditContext.seccion,
+            tamanoBytes: auditContext.tamanoBytes,
+            estado: 'error',
+            codigo: error?.code || 'REPORT_SEND_ERROR',
+            detalle: error?.message || 'No se pudo enviar el informe por Telegram.',
+          });
+        } catch (auditError) {
+          console.error('Tampoco se pudo registrar el error del informe:', auditError);
+        }
+      }
       return jsonResponse({
         ok: false,
         code: error?.code || 'REPORT_SEND_ERROR',

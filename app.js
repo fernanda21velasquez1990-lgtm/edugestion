@@ -2696,41 +2696,56 @@ const SESSION_KEY = 'edugestion_session_v2';
   let cargando = false;
   let catalogoSecciones = [];
   let informeCompartirPendiente = null;
-  const INFORME_HISTORIAL_MAX = 50;
-
-  function claveHistorialInformesTelegram() {
-    const docente = profesorActual?.id || profesorActual?.usuario || 'docente';
-    return `edugestion_historial_informes_telegram_${docente}`;
-  }
+  const INFORME_HISTORIAL_MAX = 100;
+  let historialInformesTelegram = [];
+  let historialInformesCargando = false;
 
   function leerHistorialInformesTelegram() {
-    try {
-      const datos = JSON.parse(localStorage.getItem(claveHistorialInformesTelegram()) || '[]');
-      return Array.isArray(datos) ? datos.slice(0, INFORME_HISTORIAL_MAX) : [];
-    } catch (error) {
-      console.warn('No se pudo leer el historial de informes:', error);
-      return [];
-    }
+    return Array.isArray(historialInformesTelegram)
+      ? historialInformesTelegram.slice(0, INFORME_HISTORIAL_MAX)
+      : [];
   }
 
-  function guardarRegistroInformeTelegram(registro) {
-    const historial = leerHistorialInformesTelegram();
-    historial.unshift({
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      fechaIso: new Date().toISOString(),
-      archivo: informeCompartirPendiente?.archivo || 'Informe de asistencia.pdf',
-      periodo: periodoInformeCompartido(),
-      seccion: seccionInformeCompartido(),
-      estado: 'enviado',
-      destino: 'Telegram vinculado',
-      ...registro
-    });
-    try {
-      localStorage.setItem(claveHistorialInformesTelegram(), JSON.stringify(historial.slice(0, INFORME_HISTORIAL_MAX)));
-    } catch (error) {
-      console.warn('No se pudo guardar el historial de informes:', error);
+  function normalizarRegistroInformeServidor(item = {}) {
+    return {
+      id: String(item.id || ''),
+      fechaIso: String(item.registradoEn || item.fechaIso || ''),
+      archivo: String(item.archivo || 'Informe de asistencia.pdf'),
+      periodo: String(item.periodo || 'Periodo seleccionado'),
+      seccion: String(item.seccion || 'Todas las secciones'),
+      estado: String(item.estado || 'enviado').toLowerCase() === 'error' ? 'error' : 'enviado',
+      destino: String(item.destino || ''),
+      mensajeId: String(item.mensajeId || ''),
+      tamanoBytes: Number(item.tamanoBytes || 0),
+      codigo: String(item.codigo || ''),
+      mensaje: String(item.detalle || item.mensaje || '')
+    };
+  }
+
+  async function cargarHistorialInformesTelegram({ silencioso = false } = {}) {
+    if (historialInformesCargando || !String(sessionToken || '').trim()) return;
+    historialInformesCargando = true;
+    const contenedor = document.getElementById('stats-share-history-list');
+    if (contenedor && !silencioso) {
+      contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Cargando historial del servidor…</span></div>';
     }
-    renderHistorialInformesTelegram();
+    try {
+      const respuesta = await apiRequest('obtenerHistorialInformes', { limite: INFORME_HISTORIAL_MAX });
+      historialInformesTelegram = Array.isArray(respuesta.historial)
+        ? respuesta.historial.map(normalizarRegistroInformeServidor)
+        : [];
+      renderHistorialInformesTelegram();
+    } catch (error) {
+      console.error('No se pudo cargar el historial de informes:', error);
+      if (contenedor) {
+        contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-solid fa-triangle-exclamation"></i><span>No se pudo consultar el historial del servidor.</span></div>';
+      }
+      if (!silencioso && typeof mostrarToast === 'function') {
+        mostrarToast(error.message || 'No se pudo consultar el historial.', 'error', 'Historial no disponible');
+      }
+    } finally {
+      historialInformesCargando = false;
+    }
   }
 
   function fechaHoraHistorial(valor) {
@@ -2775,17 +2790,28 @@ const SESSION_KEY = 'edugestion_session_v2';
     asignar('stats-history-errors', errores);
   }
 
-  function eliminarRegistroHistorialTelegram(id) {
-    const historial = leerHistorialInformesTelegram().filter(item => String(item.id) !== String(id));
-    try { localStorage.setItem(claveHistorialInformesTelegram(), JSON.stringify(historial)); } catch (error) {}
-    renderHistorialInformesTelegram();
+  async function eliminarRegistroHistorialTelegram(id) {
+    if (!id || !confirm('¿Eliminar este registro del historial del servidor?')) return;
+    try {
+      await apiRequest('eliminarRegistroInforme', { id });
+      historialInformesTelegram = historialInformesTelegram.filter(item => String(item.id) !== String(id));
+      renderHistorialInformesTelegram();
+      if (typeof mostrarToast === 'function') mostrarToast('El registro fue eliminado del servidor.', 'success', 'Registro eliminado');
+    } catch (error) {
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo eliminar el registro.', 'error', 'No se eliminó');
+    }
   }
 
-  function limpiarHistorialInformesTelegram() {
-    if (!confirm('¿Eliminar todo el historial local de envíos de este docente?')) return;
-    try { localStorage.removeItem(claveHistorialInformesTelegram()); } catch (error) {}
-    renderHistorialInformesTelegram();
-    if (typeof mostrarToast === 'function') mostrarToast('El historial local fue eliminado.', 'success', 'Historial limpio');
+  async function limpiarHistorialInformesTelegram() {
+    if (!confirm('¿Eliminar todo tu historial de informes guardado en el servidor?')) return;
+    try {
+      await apiRequest('limpiarHistorialInformes');
+      historialInformesTelegram = [];
+      renderHistorialInformesTelegram();
+      if (typeof mostrarToast === 'function') mostrarToast('El historial del servidor fue eliminado.', 'success', 'Historial limpio');
+    } catch (error) {
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo limpiar el historial.', 'error', 'No se eliminó');
+    }
   }
 
   async function reenviarRegistroHistorialTelegram(id) {
@@ -2815,7 +2841,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         <b>${enviado ? 'Enviado' : 'Error'}</b>
         <div class="stats-share-history-actions">
           <button type="button" data-history-action="resend" data-history-id="${seguro(item.id || '')}" title="Reenviar el informe actual"><i class="fa-solid fa-paper-plane"></i><span>Reenviar</span></button>
-          <button type="button" data-history-action="delete" data-history-id="${seguro(item.id || '')}" title="Eliminar registro"><i class="fa-solid fa-trash-can"></i><span>Eliminar</span></button>
+          <button type="button" data-history-action="delete" data-history-id="${seguro(item.id || '')}" title="Eliminar registro del servidor"><i class="fa-solid fa-trash-can"></i><span>Eliminar</span></button>
         </div>
       </article>`;
     }).join('');
@@ -3432,7 +3458,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         <section class="stats-share-history" aria-labelledby="stats-share-history-title">
           <div class="stats-share-history-head">
             <div><span>Panel de control · Fase 2.0</span><h4 id="stats-share-history-title">Historial completo de envíos</h4></div>
-            <button id="stats-history-clear" type="button" title="Eliminar todo el historial"><i class="fa-solid fa-trash-can"></i> Limpiar</button>
+            <div class="stats-history-head-actions"><button id="stats-history-refresh" type="button" title="Actualizar desde el servidor"><i class="fa-solid fa-rotate"></i> Actualizar</button><button id="stats-history-clear" type="button" title="Eliminar todo el historial"><i class="fa-solid fa-trash-can"></i> Limpiar</button></div>
           </div>
           <div class="stats-share-history-summary">
             <article><strong id="stats-history-total">0</strong><span>Total</span></article>
@@ -3447,7 +3473,7 @@ const SESSION_KEY = 'edugestion_session_v2';
           </div>
           <div class="stats-share-history-count"><span>Registros visibles</span><b id="stats-history-visible-count">0 de 0</b></div>
           <div id="stats-share-history-list" class="stats-share-history-list"></div>
-          <p class="stats-share-history-note"><i class="fa-solid fa-circle-info"></i> El historial se guarda localmente en este dispositivo. “Reenviar” envía nuevamente el informe que está preparado en el modal.</p>
+          <p class="stats-share-history-note"><i class="fa-solid fa-circle-info"></i> El historial se guarda en el servidor y estará disponible desde cualquier dispositivo. “Reenviar” envía nuevamente el informe que está preparado en el modal.</p>
         </section>
       </div>`;
     document.body.appendChild(modal);
@@ -3457,6 +3483,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById('stats-share-native')?.addEventListener('click', compartirArchivoNativo);
     document.getElementById('stats-share-download')?.addEventListener('click', descargarInformeCompartirPendiente);
     document.getElementById('stats-share-copy')?.addEventListener('click', copiarMensajeInforme);
+    document.getElementById('stats-history-refresh')?.addEventListener('click', () => cargarHistorialInformesTelegram());
     document.getElementById('stats-history-clear')?.addEventListener('click', limpiarHistorialInformesTelegram);
     ['stats-history-search', 'stats-history-status', 'stats-history-date'].forEach(id => {
       document.getElementById(id)?.addEventListener(id === 'stats-history-search' ? 'input' : 'change', renderHistorialInformesTelegram);
@@ -3493,6 +3520,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     const resultado = document.getElementById('stats-share-result');
     if (resultado) { resultado.className = 'stats-share-result hidden'; resultado.innerHTML = ''; }
     renderHistorialInformesTelegram();
+    cargarHistorialInformesTelegram({ silencioso: historialInformesTelegram.length > 0 });
     const nativo = document.getElementById('stats-share-native');
     const puedeCompartir = Boolean(navigator.share && navigator.canShare?.({ files: [informeCompartirPendiente.file] }));
     nativo?.classList.toggle('hidden', !puedeCompartir);
@@ -3598,12 +3626,7 @@ Archivo enviado directamente desde EduGestión.`);
         throw error;
       }
 
-      guardarRegistroInformeTelegram({
-        estado: 'enviado',
-        destino: datos.destino || 'Telegram vinculado',
-        mensajeId: datos.mensajeId || '',
-        fechaIso: datos.sentAt || new Date().toISOString()
-      });
+      await cargarHistorialInformesTelegram({ silencioso: true });
       mostrarResultadoEnvioTelegram(datos);
       const destino = datos.destino ? ` a ${datos.destino}` : '';
       if (typeof mostrarToast === 'function') mostrarToast(`El PDF fue enviado${destino}.`, 'success', 'Informe enviado');
@@ -3616,7 +3639,7 @@ Archivo enviado directamente desde EduGestión.`);
       if (error.code === 'TELEGRAM_NOT_LINKED') mensaje = 'Tu cuenta docente no tiene un Telegram vinculado. Vincúlalo desde el botón superior de Telegram.';
       if (error.code === 'PDF_TOO_LARGE') mensaje = 'El PDF es demasiado pesado. Reduce el periodo o utiliza Descargar PDF.';
       if (error.code === 'SESSION_REQUIRED' || error.code === 'UNAUTHORIZED') mensaje = 'La sesión venció. Inicia sesión nuevamente y repite el envío.';
-      guardarRegistroInformeTelegram({ estado: 'error', destino: '', mensaje, codigo: error.code || 'REPORT_SEND_ERROR' });
+      await cargarHistorialInformesTelegram({ silencioso: true });
       if (typeof mostrarToast === 'function') mostrarToast(mensaje, 'error', 'No se pudo enviar');
     } finally {
       if (boton) {

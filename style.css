@@ -4913,3 +4913,23 @@ body.stats-share-open { overflow: hidden; }
   .stats-share-history-actions button { flex:1; justify-content:center; min-height:34px; }
 }
 /* EDUGESTION_FASE_2_0_HISTORIAL_TELEGRAM_END */
+
+
+/* ===== EDUGESTIÓN FASE 2.1 · HISTORIAL PERSISTENTE ===== */
+.stats-history-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.stats-history-head-actions button {
+  min-height: 36px;
+}
+@media (max-width: 640px) {
+  .stats-history-head-actions {
+    width: 100%;
+  }
+  .stats-history-head-actions button {
+    flex: 1 1 120px;
+  }
+}
