@@ -778,16 +778,53 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     buscarAlumnoAsistencia?.addEventListener('input', renderAsistencia);
 
-    btnTodosPresentes?.addEventListener('click', () => {
-      alumnosSeccion.forEach(alumno => { asistenciaTemporal[alumno.id] = 'Presente'; });
+    const ESTADOS_ASISTENCIA = Object.freeze(['Presente', 'Ausente', 'Tardanza', 'Justificada']);
+
+    function normalizarEstadoAsistencia(valor) {
+      const texto = String(valor || '').trim().toLowerCase();
+      if (texto === 'ausente') return 'Ausente';
+      if (texto === 'tardanza' || texto === 'tarde') return 'Tardanza';
+      if (texto === 'justificada' || texto === 'justificado' || texto === 'ausencia justificada') return 'Justificada';
+      return 'Presente';
+    }
+
+    function aplicarEstadoMasivo(estado) {
+      if (!ESTADOS_ASISTENCIA.includes(estado)) return;
+      alumnosSeccion.forEach(alumno => { asistenciaTemporal[alumno.id] = estado; });
       renderAsistencia();
       actualizarStatsSeccion();
+    }
+
+    function asegurarBotonesMasivosAvanzados() {
+      const contenedor = btnTodosPresentes?.parentElement;
+      if (!contenedor || document.getElementById('btn-todos-tardanza')) return;
+
+      const tardanza = document.createElement('button');
+      tardanza.type = 'button';
+      tardanza.id = 'btn-todos-tardanza';
+      tardanza.className = 'attendance-bulk-extra attendance-bulk-extra--late';
+      tardanza.innerHTML = '<i class="fa-solid fa-clock"></i><span>Todos con tardanza</span>';
+      tardanza.addEventListener('click', () => aplicarEstadoMasivo('Tardanza'));
+
+      const justificada = document.createElement('button');
+      justificada.type = 'button';
+      justificada.id = 'btn-todos-justificada';
+      justificada.className = 'attendance-bulk-extra attendance-bulk-extra--justified';
+      justificada.innerHTML = '<i class="fa-solid fa-file-circle-check"></i><span>Todos justificados</span>';
+      justificada.addEventListener('click', () => aplicarEstadoMasivo('Justificada'));
+
+      contenedor.appendChild(tardanza);
+      contenedor.appendChild(justificada);
+    }
+
+    asegurarBotonesMasivosAvanzados();
+
+    btnTodosPresentes?.addEventListener('click', () => {
+      aplicarEstadoMasivo('Presente');
     });
 
     btnTodosAusentes?.addEventListener('click', () => {
-      alumnosSeccion.forEach(alumno => { asistenciaTemporal[alumno.id] = 'Ausente'; });
-      renderAsistencia();
-      actualizarStatsSeccion();
+      aplicarEstadoMasivo('Ausente');
     });
 
     btnCargarListaFiltrada.onclick = cargarAlumnosDeSeccion;
@@ -851,7 +888,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         contadorAsistencia.textContent = `${alumnosSeccion.length} Alumnos`;
         alumnosSeccion.forEach(al => {
           estadisticasAlumnos[al.id] = { faltasSemana: 0, faltasMes: 0 };
-          if (!['Presente', 'Ausente'].includes(asistenciaTemporal[al.id])) asistenciaTemporal[al.id] = 'Presente';
+          asistenciaTemporal[al.id] = normalizarEstadoAsistencia(asistenciaTemporal[al.id]);
         });
         renderAsistencia();
         actualizarStatsSeccion();
@@ -888,11 +925,12 @@ const SESSION_KEY = 'edugestion_session_v2';
         porcentajeAsistencia.textContent = '0%';
         barPresentes.style.width = '0%';
         barAusentes.style.width = '0%';
+        actualizarResumenEstadosExtra({ tardanzas: 0, justificadas: 0 });
         return;
       }
 
       alumnosSeccion.forEach(alumno => {
-        if (!['Presente', 'Ausente'].includes(asistenciaTemporal[alumno.id])) asistenciaTemporal[alumno.id] = 'Presente';
+        asistenciaTemporal[alumno.id] = normalizarEstadoAsistencia(asistenciaTemporal[alumno.id]);
       });
 
       const termino = normalizarTextoAsistencia(buscarAlumnoAsistencia?.value || '');
@@ -909,34 +947,83 @@ const SESSION_KEY = 'edugestion_session_v2';
         return;
       }
 
+      const configuracionEstados = {
+        Presente: { icono: 'fa-check', texto: 'PRES', clase: 'is-present' },
+        Ausente: { icono: 'fa-xmark', texto: 'AUS', clase: 'is-absent' },
+        Tardanza: { icono: 'fa-clock', texto: 'TARD', clase: 'is-late' },
+        Justificada: { icono: 'fa-file-circle-check', texto: 'JUST', clase: 'is-justified' }
+      };
+
       visibles.forEach((al, indice) => {
         const idDom = `alumno-${String(al.id).replace(/[^a-zA-Z0-9_-]/g, '-')}-${indice}`;
         const nombre = escaparHTML(al.nombre || 'Estudiante');
         const cedula = escaparHTML(al.cedula || 'Sin cédula');
-        const estadoInicial = asistenciaTemporal[al.id] === 'Ausente' ? 'Ausente' : 'Presente';
-        const clasePresente = estadoInicial === 'Presente'
-          ? 'w-20 py-2 rounded-xl bg-green-500 text-white font-black text-xs shadow-sm transition'
-          : 'w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition';
-        const claseAusente = estadoInicial === 'Ausente'
-          ? 'w-20 py-2 rounded-xl bg-red-500 text-white font-black text-xs shadow-sm transition'
-          : 'w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition';
+        const estadoInicial = normalizarEstadoAsistencia(asistenciaTemporal[al.id]);
+        const botones = ESTADOS_ASISTENCIA.map(estado => {
+          const cfg = configuracionEstados[estado];
+          const activo = estadoInicial === estado ? ` ${cfg.clase}` : '';
+          const idBoton = `${estado.charAt(0).toLowerCase()}-${idDom}`;
+          return `<button id="${idBoton}" type="button" class="attendance-state-button${activo}" data-attendance-state="${estado}" aria-label="Marcar ${estado.toLowerCase()} a ${nombre}"><i class="fa-solid ${cfg.icono}"></i><span>${cfg.texto}</span></button>`;
+        }).join('');
+
         const d = document.createElement('div');
-        d.className = 'py-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 hover:bg-gray-50 px-2 rounded-xl transition';
-        d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-bold"><i class="fa-regular fa-calendar-check mr-1"></i>Registro del día</span></div></div></div><div class="flex gap-2 self-end sm:self-auto"><button id="p-${idDom}" type="button" class="${clasePresente}" aria-label="Marcar presente a ${nombre}"><i class="fa-solid fa-check mr-1"></i> PRES</button><button id="i-${idDom}" type="button" class="${claseAusente}" aria-label="Marcar ausente a ${nombre}"><i class="fa-solid fa-xmark mr-1"></i> AUS</button></div>`;
-        d.querySelector(`#p-${idDom}`).addEventListener('click', () => setA(al.id, 'Presente', idDom));
-        d.querySelector(`#i-${idDom}`).addEventListener('click', () => setA(al.id, 'Ausente', idDom));
+        d.className = 'attendance-student-row attendance-student-row--advanced';
+        d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span></div></div></div><div class="attendance-state-grid">${botones}</div>`;
+        d.querySelectorAll('[data-attendance-state]').forEach(boton => {
+          boton.addEventListener('click', () => setA(al.id, boton.dataset.attendanceState, idDom));
+        });
         listaAlumnosAsistencia.appendChild(d);
       });
     }
 
     window.setA = function(id, est, idDom = id) {
-      asistenciaTemporal[id] = est;
-      const p = document.getElementById(`p-${idDom}`);
-      const i = document.getElementById(`i-${idDom}`);
-      if (!p || !i) return;
-      if(est === 'Presente') { p.className="w-20 py-2 rounded-xl bg-green-500 text-white font-black text-xs shadow-sm transition"; i.className="w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition"; }
-      else { p.className="w-20 py-2 rounded-xl bg-gray-100 text-gray-400 hover:bg-gray-200 font-black text-xs transition"; i.className="w-20 py-2 rounded-xl bg-red-500 text-white font-black text-xs shadow-sm transition"; }
+      const estado = normalizarEstadoAsistencia(est);
+      asistenciaTemporal[id] = estado;
+      const fila = document.getElementById(`p-${idDom}`)?.closest('.attendance-student-row--advanced')
+        || document.querySelector(`#${CSS.escape(String(estado.charAt(0).toLowerCase() + '-' + idDom))}`)?.closest('.attendance-student-row--advanced');
+      if (fila) {
+        fila.querySelectorAll('[data-attendance-state]').forEach(boton => {
+          boton.classList.remove('is-present', 'is-absent', 'is-late', 'is-justified');
+          if (boton.dataset.attendanceState === estado) {
+            const mapa = { Presente: 'is-present', Ausente: 'is-absent', Tardanza: 'is-late', Justificada: 'is-justified' };
+            boton.classList.add(mapa[estado]);
+          }
+        });
+        const etiqueta = fila.querySelector('.attendance-current-state');
+        if (etiqueta) {
+          etiqueta.className = `attendance-current-state attendance-current-state--${estado.toLowerCase()}`;
+          etiqueta.textContent = estado;
+        }
+      } else {
+        renderAsistencia();
+      }
       actualizarStatsSeccion();
+    }
+
+    function asegurarResumenEstadosExtra() {
+      let contenedor = document.getElementById('attendance-extra-stats');
+      if (contenedor) return contenedor;
+
+      // Inserta los estados adicionales dentro del bloque de estadísticas del
+      // resumen lateral. Así nunca quedan flotando sobre la lista o el acta.
+      const bloqueEstadisticas = statAusentes?.closest('.space-y-3')
+        || statPresentes?.closest('.space-y-3');
+      if (!bloqueEstadisticas) return null;
+
+      contenedor = document.createElement('div');
+      contenedor.id = 'attendance-extra-stats';
+      contenedor.className = 'attendance-extra-stats';
+      contenedor.innerHTML = '<article><span class="attendance-extra-stats__icon attendance-extra-stats__icon--late"><i class="fa-solid fa-clock"></i></span><div><small>Tardanzas</small><strong id="stat-tardanzas">0</strong></div></article><article><span class="attendance-extra-stats__icon attendance-extra-stats__icon--justified"><i class="fa-solid fa-file-circle-check"></i></span><div><small>Justificadas</small><strong id="stat-justificadas">0</strong></div></article>';
+      bloqueEstadisticas.appendChild(contenedor);
+      return contenedor;
+    }
+
+    function actualizarResumenEstadosExtra({ tardanzas, justificadas }) {
+      asegurarResumenEstadosExtra();
+      const tard = document.getElementById('stat-tardanzas');
+      const just = document.getElementById('stat-justificadas');
+      if (tard) tard.textContent = String(tardanzas || 0);
+      if (just) just.textContent = String(justificadas || 0);
     }
 
     function actualizarStatsSeccion() {
@@ -947,18 +1034,28 @@ const SESSION_KEY = 'edugestion_session_v2';
         porcentajeAsistencia.textContent = '0%';
         barPresentes.style.width = '0%';
         barAusentes.style.width = '0%';
+        actualizarResumenEstadosExtra({ tardanzas: 0, justificadas: 0 });
         return;
       }
       let presentes = 0;
       let ausentes = 0;
+      let tardanzas = 0;
+      let justificadas = 0;
       alumnosSeccion.forEach(alumno => {
-        if (asistenciaTemporal[alumno.id] === 'Ausente') ausentes += 1;
+        const estado = normalizarEstadoAsistencia(asistenciaTemporal[alumno.id]);
+        asistenciaTemporal[alumno.id] = estado;
+        if (estado === 'Ausente') ausentes += 1;
+        else if (estado === 'Tardanza') tardanzas += 1;
+        else if (estado === 'Justificada') justificadas += 1;
         else presentes += 1;
       });
       statPresentes.textContent = presentes;
       statAusentes.textContent = ausentes;
-      const pctPresentes = Math.round((presentes / total) * 100);
-      const pctAusentes = 100 - pctPresentes;
+      actualizarResumenEstadosExtra({ tardanzas, justificadas });
+      const asistenciaEfectiva = presentes + tardanzas;
+      const noAsistencia = ausentes + justificadas;
+      const pctPresentes = Math.round((asistenciaEfectiva / total) * 100);
+      const pctAusentes = Math.round((noAsistencia / total) * 100);
       barPresentes.style.width = `${pctPresentes}%`;
       barAusentes.style.width = `${pctAusentes}%`;
       porcentajeAsistencia.textContent = `${pctPresentes}%`;
@@ -1011,7 +1108,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         btnGuardarAsistencia.disabled = true;
         btnGuardarAsistencia.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin mr-1"></i> Guardando asistencia...';
         try {
-          const payload = { materia: profesorActual.materia, ano: selectFiltroAno.value, seccion: selectFiltroSeccion.value, turno: selectFiltroTurno.value, fecha: fechaAsistencia.value, asistencia: asistenciaTemporal };
+          const payload = { materia: profesorActual.materia, ano: selectFiltroAno.value, seccion: selectFiltroSeccion.value, turno: selectFiltroTurno.value, fecha: fechaAsistencia.value, asistencia: asistenciaTemporal, origen: 'Web', modificadoPor: profesorActual.nombre || profesorActual.usuario || 'Docente' };
           await apiRequest('guardarAsistencia', payload);
           agendaResumenCache.delete(claveRegistroAgenda({
             ano: selectFiltroAno.value,
@@ -1868,7 +1965,11 @@ const SESSION_KEY = 'edugestion_session_v2';
         ? (document.getElementById('reg-alergias')?.value.trim() || 'Sí, por especificar')
         : 'No registradas';
 
-      const setText = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+      const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+      };
+
       setText('student-preview-name', nombre);
       setText('student-preview-course', `${anoText} · Sección ${seccion} · ${turno}`);
       setText('student-preview-representative', representante);
@@ -1880,6 +1981,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         .map(id => document.getElementById(id))
         .filter(Boolean)
         .filter(el => !el.closest('.student-conditional-field') || !el.closest('.student-conditional-field').classList.contains('is-hidden'));
+
       const completed = fields.filter(el => String(el.value || '').trim() !== '').length;
       const percent = fields.length ? Math.round((completed / fields.length) * 100) : 0;
       const bar = document.getElementById('student-form-progress-bar');
@@ -1968,3 +2070,1750 @@ const SESSION_KEY = 'edugestion_session_v2';
             window.open(url, '_blank');
         });
     }
+
+/* =====================================================
+   EDUGESTIÓN · VINCULACIÓN SEGURA CON TELEGRAM
+   Genera un código temporal de 6 dígitos desde la cuenta
+   autenticada del docente. No contiene tokens ni secretos.
+   ===================================================== */
+(() => {
+  const TELEGRAM_UI = {
+    buttonId: 'btn-telegram-link',
+    modalId: 'telegram-link-modal',
+    titleId: 'telegram-link-title',
+    contentId: 'telegram-link-content',
+    closeSelector: '[data-close-telegram-link="true"]'
+  };
+
+  let telegramCountdownTimer = null;
+
+  function escapeTelegramUi(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function telegramButton() {
+    return document.getElementById(TELEGRAM_UI.buttonId);
+  }
+
+  function telegramModal() {
+    return document.getElementById(TELEGRAM_UI.modalId);
+  }
+
+  function setTelegramButtonState(state = 'unknown') {
+    const button = telegramButton();
+    if (!button) return;
+    button.dataset.telegramState = state;
+    button.classList.toggle('is-linked', state === 'linked');
+    button.classList.toggle('is-pending', state === 'pending');
+    button.title = state === 'linked'
+      ? 'Telegram vinculado'
+      : state === 'pending'
+        ? 'Código de Telegram pendiente'
+        : 'Vincular Telegram';
+    button.setAttribute('aria-label', button.title);
+  }
+
+  function stopTelegramCountdown() {
+    if (telegramCountdownTimer) {
+      clearInterval(telegramCountdownTimer);
+      telegramCountdownTimer = null;
+    }
+  }
+
+  function closeTelegramModal() {
+    const modal = telegramModal();
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('telegram-modal-open');
+    stopTelegramCountdown();
+  }
+
+  function openTelegramModalShell() {
+    const modal = telegramModal();
+    if (!modal) return;
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('telegram-modal-open');
+    setTimeout(() => modal.querySelector(TELEGRAM_UI.closeSelector)?.focus(), 40);
+  }
+
+  function setTelegramModalContent(html, title = 'Telegram docente') {
+    const titleNode = document.getElementById(TELEGRAM_UI.titleId);
+    const contentNode = document.getElementById(TELEGRAM_UI.contentId);
+    if (titleNode) titleNode.textContent = title;
+    if (contentNode) contentNode.innerHTML = html;
+  }
+
+  function showTelegramLoading(message = 'Consultando tu vinculación…') {
+    setTelegramModalContent(`
+      <div class="telegram-link-loading">
+        <i class="fa-solid fa-circle-notch fa-spin"></i>
+        <p>${escapeTelegramUi(message)}</p>
+      </div>
+    `);
+  }
+
+  function showTelegramError(error) {
+    const message = error?.message || 'No fue posible completar la operación.';
+    setTelegramButtonState('unknown');
+    setTelegramModalContent(`
+      <div class="telegram-link-message is-error">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div>
+          <strong>No se pudo conectar con Telegram</strong>
+          <p>${escapeTelegramUi(message)}</p>
+        </div>
+      </div>
+      <div class="telegram-link-actions">
+        <button class="telegram-secondary-button" id="telegram-retry-status" type="button">
+          <i class="fa-solid fa-rotate-right"></i> Reintentar
+        </button>
+      </div>
+    `);
+    document.getElementById('telegram-retry-status')?.addEventListener('click', loadTelegramStatus);
+  }
+
+  function linkedTelegramView(data = {}) {
+    const name = data.telegramNombre || data.telegramUsuario || 'Cuenta de Telegram';
+    const username = data.telegramUsuario ? `@${String(data.telegramUsuario).replace(/^@/, '')}` : '';
+    setTelegramButtonState('linked');
+    setTelegramModalContent(`
+      <div class="telegram-link-success-icon"><i class="fa-brands fa-telegram"></i></div>
+      <div class="telegram-link-centered">
+        <span class="telegram-link-badge is-linked"><i class="fa-solid fa-circle-check"></i> Cuenta vinculada</span>
+        <h3>${escapeTelegramUi(name)}</h3>
+        ${username ? `<p class="telegram-link-username">${escapeTelegramUi(username)}</p>` : ''}
+        <p>Este Telegram ya puede consultar clases y registrar asistencia en nombre del docente autenticado.</p>
+      </div>
+      <div class="telegram-link-security-note">
+        <i class="fa-solid fa-shield-halved"></i>
+        <span>La contraseña de EduGestión nunca se comparte con Telegram.</span>
+      </div>
+      <div class="telegram-link-actions">
+        <button class="telegram-secondary-button" id="telegram-refresh-status" type="button">
+          <i class="fa-solid fa-rotate"></i> Actualizar estado
+        </button>
+        <button class="telegram-danger-button" id="telegram-unlink-account" type="button">
+          <i class="fa-solid fa-link-slash"></i> Desvincular
+        </button>
+      </div>
+    `, 'Telegram vinculado');
+    document.getElementById('telegram-refresh-status')?.addEventListener('click', loadTelegramStatus);
+    document.getElementById('telegram-unlink-account')?.addEventListener('click', unlinkTelegramAccount);
+  }
+
+  function unlinkedTelegramView() {
+    setTelegramButtonState('unknown');
+    setTelegramModalContent(`
+      <div class="telegram-link-intro-icon"><i class="fa-brands fa-telegram"></i></div>
+      <div class="telegram-link-centered">
+        <span class="telegram-link-badge"><i class="fa-solid fa-link"></i> Sin vincular</span>
+        <h3>Conecta tu cuenta docente</h3>
+        <p>Generaremos un código temporal de seis dígitos. El código vence en 10 minutos y solo puede utilizarse una vez.</p>
+      </div>
+      <ol class="telegram-link-steps">
+        <li><span>1</span><p>Pulsa <b>Generar código</b>.</p></li>
+        <li><span>2</span><p>Abre el bot <b>EduGestion Asistencia</b> en Telegram.</p></li>
+        <li><span>3</span><p>Envía <code>/vincular CÓDIGO</code>.</p></li>
+      </ol>
+      <div class="telegram-link-actions is-single">
+        <button class="telegram-primary-button" id="telegram-generate-code" type="button">
+          <i class="fa-solid fa-key"></i> Generar código temporal
+        </button>
+      </div>
+    `, 'Vincular Telegram');
+    document.getElementById('telegram-generate-code')?.addEventListener('click', generateTelegramCode);
+  }
+
+  function startTelegramCountdown(minutes = 10) {
+    stopTelegramCountdown();
+    const deadline = Date.now() + Math.max(1, Number(minutes) || 10) * 60 * 1000;
+    const label = document.getElementById('telegram-code-countdown');
+
+    const update = () => {
+      const remaining = Math.max(0, deadline - Date.now());
+      const totalSeconds = Math.ceil(remaining / 1000);
+      const mm = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+      const ss = String(totalSeconds % 60).padStart(2, '0');
+      if (label) label.textContent = `${mm}:${ss}`;
+      if (remaining <= 0) {
+        stopTelegramCountdown();
+        setTelegramButtonState('unknown');
+        const generateButton = document.getElementById('telegram-regenerate-code');
+        if (generateButton) generateButton.disabled = false;
+        const status = document.getElementById('telegram-code-status');
+        if (status) status.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> El código venció. Genera uno nuevo.';
+      }
+    };
+    update();
+    telegramCountdownTimer = setInterval(update, 1000);
+  }
+
+  async function copyTelegramCommand(command) {
+    try {
+      await navigator.clipboard.writeText(command);
+    } catch (error) {
+      const area = document.createElement('textarea');
+      area.value = command;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+    }
+    const button = document.getElementById('telegram-copy-command');
+    if (button) {
+      const previous = button.innerHTML;
+      button.innerHTML = '<i class="fa-solid fa-check"></i> Copiado';
+      setTimeout(() => { button.innerHTML = previous; }, 1600);
+    }
+    if (typeof mostrarToast === 'function') {
+      mostrarToast('Comando copiado. Pégalo en el bot de Telegram.', 'success', 'Código listo');
+    }
+  }
+
+  function codeTelegramView(data) {
+    const code = String(data.codigo || '').replace(/\D/g, '');
+    const command = `/vincular ${code}`;
+    setTelegramButtonState('pending');
+    setTelegramModalContent(`
+      <div class="telegram-link-code-header">
+        <span class="telegram-link-badge is-pending"><i class="fa-solid fa-hourglass-half"></i> Código temporal</span>
+        <p id="telegram-code-status"><i class="fa-regular fa-clock"></i> Vence en <b id="telegram-code-countdown">10:00</b></p>
+      </div>
+      <div class="telegram-link-code" aria-label="Código temporal de Telegram">${escapeTelegramUi(code)}</div>
+      <div class="telegram-link-command">
+        <code>${escapeTelegramUi(command)}</code>
+        <button id="telegram-copy-command" type="button" title="Copiar comando">
+          <i class="fa-regular fa-copy"></i> Copiar
+        </button>
+      </div>
+      <div class="telegram-link-security-note">
+        <i class="fa-solid fa-mobile-screen-button"></i>
+        <span>Abre <b>EduGestion Asistencia</b> en Telegram y envía el comando copiado.</span>
+      </div>
+      <div class="telegram-link-actions">
+        <button class="telegram-secondary-button" id="telegram-check-link" type="button">
+          <i class="fa-solid fa-rotate"></i> Ya lo envié, verificar
+        </button>
+        <button class="telegram-primary-button" id="telegram-regenerate-code" type="button">
+          <i class="fa-solid fa-key"></i> Generar otro
+        </button>
+      </div>
+    `, 'Código de vinculación');
+
+    document.getElementById('telegram-copy-command')?.addEventListener('click', () => copyTelegramCommand(command));
+    document.getElementById('telegram-check-link')?.addEventListener('click', loadTelegramStatus);
+    document.getElementById('telegram-regenerate-code')?.addEventListener('click', generateTelegramCode);
+    startTelegramCountdown(data.expiraEnMinutos || 10);
+  }
+
+  async function loadTelegramStatus() {
+    if (!sessionToken) return;
+    showTelegramLoading();
+    try {
+      const data = await apiRequest('estadoTelegram');
+      if (data.vinculado) linkedTelegramView(data);
+      else unlinkedTelegramView();
+    } catch (error) {
+      showTelegramError(error);
+    }
+  }
+
+  async function generateTelegramCode() {
+    showTelegramLoading('Generando un código seguro…');
+    try {
+      const data = await apiRequest('crearCodigoTelegram');
+      if (data.vinculado) linkedTelegramView(data);
+      else codeTelegramView(data);
+    } catch (error) {
+      showTelegramError(error);
+    }
+  }
+
+  async function unlinkTelegramAccount() {
+    const confirmed = window.confirm('¿Desvincular este Telegram de tu cuenta docente? El bot dejará de acceder a tus clases y asistencias.');
+    if (!confirmed) return;
+    showTelegramLoading('Desvinculando Telegram…');
+    try {
+      const data = await apiRequest('desvincularTelegram');
+      setTelegramButtonState('unknown');
+      unlinkedTelegramView();
+      if (typeof mostrarToast === 'function') {
+        mostrarToast(data.message || 'Telegram fue desvinculado.', 'success', 'Cuenta actualizada');
+      }
+    } catch (error) {
+      showTelegramError(error);
+    }
+  }
+
+  async function openTelegramLinkModal() {
+    openTelegramModalShell();
+    await loadTelegramStatus();
+  }
+
+  function createTelegramLinkUi() {
+    if (telegramButton()) return;
+    const changePasswordButton = document.getElementById('btn-change-password');
+    const headerActions = changePasswordButton?.parentElement;
+    if (!headerActions) return;
+
+    const button = document.createElement('button');
+    button.id = TELEGRAM_UI.buttonId;
+    button.type = 'button';
+    button.className = 'logout-button telegram-link-button';
+    button.title = 'Vincular Telegram';
+    button.setAttribute('aria-label', 'Vincular Telegram');
+    button.innerHTML = '<i class="fa-brands fa-telegram"></i><span class="telegram-link-indicator" aria-hidden="true"></span>';
+    headerActions.insertBefore(button, changePasswordButton);
+    button.addEventListener('click', openTelegramLinkModal);
+
+    const modal = document.createElement('div');
+    modal.id = TELEGRAM_UI.modalId;
+    modal.className = 'telegram-link-modal';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML = `
+      <div class="telegram-link-modal__backdrop" data-close-telegram-link="true"></div>
+      <section class="telegram-link-modal__card" role="dialog" aria-modal="true" aria-labelledby="${TELEGRAM_UI.titleId}">
+        <button class="telegram-link-modal__close" type="button" data-close-telegram-link="true" aria-label="Cerrar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div class="telegram-link-modal__brand"><i class="fa-brands fa-telegram"></i></div>
+        <h2 id="${TELEGRAM_UI.titleId}">Telegram docente</h2>
+        <div id="${TELEGRAM_UI.contentId}" class="telegram-link-modal__content"></div>
+      </section>`;
+    document.body.appendChild(modal);
+
+    modal.querySelectorAll(TELEGRAM_UI.closeSelector).forEach((node) => {
+      node.addEventListener('click', closeTelegramModal);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && modal.classList.contains('is-open')) closeTelegramModal();
+    });
+
+    if (typeof dashboardScreen !== 'undefined' && dashboardScreen) {
+      const observer = new MutationObserver(() => {
+        const loggedIn = !dashboardScreen.classList.contains('hidden') && Boolean(sessionToken);
+        if (loggedIn) loadTelegramStatus().catch(() => {});
+        else setTelegramButtonState('unknown');
+      });
+      observer.observe(dashboardScreen, { attributes: true, attributeFilter: ['class'] });
+      if (!dashboardScreen.classList.contains('hidden') && sessionToken) loadTelegramStatus().catch(() => {});
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createTelegramLinkUi, { once: true });
+  } else {
+    createTelegramLinkUi();
+  }
+})();
+
+/* EDUGESTION_AUDIT_PANEL_V1_START */
+(() => {
+  const IDS = Object.freeze({
+    tab: 'tab-auditoria',
+    section: 'section-auditoria',
+    body: 'auditoria-tabla-body',
+    cards: 'auditoria-mobile-list',
+    search: 'auditoria-buscar',
+    date: 'auditoria-fecha',
+    origin: 'auditoria-origen',
+    sectionFilter: 'auditoria-seccion',
+    count: 'auditoria-conteo',
+    empty: 'auditoria-vacio',
+    loading: 'auditoria-cargando'
+  });
+
+  let registrosAuditoria = [];
+  let cargandoAuditoria = false;
+
+  function htmlSeguro(valor = '') {
+    if (typeof escaparHTML === 'function') return escaparHTML(valor);
+    return String(valor).replace(/[&<>'"]/g, caracter => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[caracter]));
+  }
+
+  function crearInterfazAuditoria() {
+    if (document.getElementById(IDS.tab) || document.getElementById(IDS.section)) return;
+    const tabHorarioExistente = document.getElementById('tab-horario');
+    const navegacion = tabHorarioExistente?.parentElement;
+    const principal = document.getElementById('app-main');
+    if (!navegacion || !principal) return;
+
+    const tab = document.createElement('button');
+    tab.id = IDS.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item';
+    tab.setAttribute('aria-selected', 'false');
+    tab.dataset.title = 'Auditoría de asistencia';
+    tab.dataset.description = 'Consulta quién modificó cada registro, desde dónde y qué estado cambió.';
+    tab.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span>';
+    tabHorarioExistente.insertAdjacentElement('afterend', tab);
+
+    const section = document.createElement('section');
+    section.id = IDS.section;
+    section.className = 'hidden max-w-[1400px] mx-auto space-y-6 audit-panel';
+    section.innerHTML = `
+      <section class="audit-hero">
+        <div>
+          <span class="audit-eyebrow"><i class="fa-solid fa-shield-halved"></i> Trazabilidad segura</span>
+          <h2>Historial de cambios de asistencia</h2>
+          <p>Revisa las modificaciones realizadas desde EduGestión Web y desde el bot de Telegram.</p>
+        </div>
+        <div class="audit-hero__actions">
+          <button id="auditoria-exportar" type="button" class="audit-button audit-button--secondary">
+            <i class="fa-solid fa-file-csv"></i> Exportar CSV
+          </button>
+          <button id="auditoria-actualizar" type="button" class="audit-button audit-button--primary">
+            <i class="fa-solid fa-rotate"></i> Actualizar
+          </button>
+        </div>
+      </section>
+
+      <section class="audit-metrics" aria-label="Resumen de auditoría">
+        <article class="audit-metric audit-metric--total">
+          <span><i class="fa-solid fa-list-check"></i></span>
+          <div><strong id="auditoria-total">0</strong><small>Cambios registrados</small></div>
+        </article>
+        <article class="audit-metric audit-metric--web">
+          <span><i class="fa-solid fa-display"></i></span>
+          <div><strong id="auditoria-web">0</strong><small>Desde la web</small></div>
+        </article>
+        <article class="audit-metric audit-metric--telegram">
+          <span><i class="fa-brands fa-telegram"></i></span>
+          <div><strong id="auditoria-telegram">0</strong><small>Desde Telegram</small></div>
+        </article>
+        <article class="audit-metric audit-metric--today">
+          <span><i class="fa-regular fa-calendar-check"></i></span>
+          <div><strong id="auditoria-hoy">0</strong><small>Cambios de hoy</small></div>
+        </article>
+      </section>
+
+      <section class="audit-filter-card">
+        <div class="audit-filter-card__title">
+          <div>
+            <span><i class="fa-solid fa-filter"></i></span>
+            <div><strong>Filtros del historial</strong><small>Combina criterios para localizar un cambio específico.</small></div>
+          </div>
+          <button id="auditoria-limpiar" type="button"><i class="fa-solid fa-eraser"></i> Limpiar filtros</button>
+        </div>
+        <div class="audit-filters">
+          <label class="audit-search audit-field--wide">
+            <span>Buscar</span>
+            <div><i class="fa-solid fa-magnifying-glass"></i><input id="${IDS.search}" type="search" placeholder="Estudiante, materia, docente o acción"></div>
+          </label>
+          <label class="audit-field">
+            <span>Fecha de asistencia</span>
+            <input id="${IDS.date}" type="date">
+          </label>
+          <label class="audit-field">
+            <span>Origen</span>
+            <select id="${IDS.origin}">
+              <option value="">Todos</option>
+              <option value="Web">Web</option>
+              <option value="Telegram">Telegram</option>
+            </select>
+          </label>
+          <label class="audit-field">
+            <span>Sección</span>
+            <select id="${IDS.sectionFilter}"><option value="">Todas</option></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="audit-history-card">
+        <div class="audit-history-card__header">
+          <div>
+            <span class="audit-history-icon"><i class="fa-solid fa-timeline"></i></span>
+            <div><h3>Movimientos registrados</h3><p>Del más reciente al más antiguo.</p></div>
+          </div>
+          <span id="${IDS.count}" class="audit-count">0 registros</span>
+        </div>
+
+        <div id="${IDS.loading}" class="audit-status hidden">
+          <i class="fa-solid fa-circle-notch fa-spin"></i><strong>Cargando historial…</strong>
+          <span>Consultando los cambios guardados en la institución.</span>
+        </div>
+        <div id="${IDS.empty}" class="audit-status hidden">
+          <i class="fa-solid fa-inbox"></i><strong>No hay resultados</strong>
+          <span>Cambia los filtros o registra una modificación de asistencia.</span>
+        </div>
+
+        <div class="audit-table-wrap">
+          <table class="audit-table">
+            <thead><tr><th>Fecha y hora</th><th>Estudiante y clase</th><th>Origen y responsable</th><th>Cambio realizado</th></tr></thead>
+            <tbody id="${IDS.body}"></tbody>
+          </table>
+        </div>
+        <div id="${IDS.cards}" class="audit-mobile-list"></div>
+      </section>`;
+    principal.appendChild(section);
+
+    tab.addEventListener('click', abrirAuditoria);
+    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', cerrarAuditoria, { capture: true });
+    });
+    document.getElementById('auditoria-actualizar')?.addEventListener('click', () => cargarAuditoria(true));
+    document.getElementById('auditoria-exportar')?.addEventListener('click', exportarAuditoriaCsv);
+    document.getElementById('auditoria-limpiar')?.addEventListener('click', limpiarFiltrosAuditoria);
+    [IDS.search, IDS.date, IDS.origin, IDS.sectionFilter].forEach(id => {
+      const control = document.getElementById(id);
+      control?.addEventListener(id === IDS.search ? 'input' : 'change', renderAuditoria);
+    });
+  }
+
+  function cerrarAuditoria() {
+    document.getElementById(IDS.tab)?.classList.remove('is-active');
+    document.getElementById(IDS.tab)?.setAttribute('aria-selected', 'false');
+    document.getElementById(IDS.section)?.classList.add('hidden');
+  }
+
+  async function abrirAuditoria() {
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('is-active');
+      item.setAttribute('aria-selected', 'false');
+    });
+    document.querySelectorAll('#app-main > section').forEach(item => item.classList.add('hidden'));
+    const tab = document.getElementById(IDS.tab);
+    const section = document.getElementById(IDS.section);
+    tab?.classList.add('is-active');
+    tab?.setAttribute('aria-selected', 'true');
+    section?.classList.remove('hidden');
+    if (typeof pageTitle !== 'undefined' && pageTitle) pageTitle.textContent = 'Auditoría de asistencia';
+    if (typeof pageDescription !== 'undefined' && pageDescription) pageDescription.textContent = 'Consulta quién modificó cada registro, desde dónde y qué estado cambió.';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await cargarAuditoria(false);
+  }
+
+  function mostrarEstadoAuditoria(tipo) {
+    const loading = document.getElementById(IDS.loading);
+    const empty = document.getElementById(IDS.empty);
+    loading?.classList.toggle('hidden', tipo !== 'loading');
+    empty?.classList.toggle('hidden', tipo !== 'empty');
+  }
+
+  async function cargarAuditoria(forzar = false) {
+    if (cargandoAuditoria || (registrosAuditoria.length && !forzar)) {
+      renderAuditoria();
+      return;
+    }
+    if (typeof sessionToken === 'undefined' || !sessionToken) {
+      mostrarEstadoAuditoria('empty');
+      return;
+    }
+    cargandoAuditoria = true;
+    mostrarEstadoAuditoria('loading');
+    document.getElementById('auditoria-actualizar')?.classList.add('is-loading');
+    try {
+      const respuesta = await apiRequest('obtenerAuditoriaAsistencia', { limite: 300 });
+      registrosAuditoria = Array.isArray(respuesta.auditoria) ? respuesta.auditoria : [];
+      llenarSeccionesAuditoria();
+      actualizarMetricasAuditoria();
+      renderAuditoria();
+      if (forzar && typeof mostrarToast === 'function') mostrarToast('El historial se actualizó correctamente.', 'success', 'Auditoría actualizada');
+    } catch (error) {
+      console.error('No se pudo cargar la auditoría:', error);
+      registrosAuditoria = [];
+      renderAuditoria();
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo consultar el historial.', 'error', 'Error de auditoría');
+    } finally {
+      cargandoAuditoria = false;
+      document.getElementById('auditoria-actualizar')?.classList.remove('is-loading');
+    }
+  }
+
+  function llenarSeccionesAuditoria() {
+    const select = document.getElementById(IDS.sectionFilter);
+    if (!select) return;
+    const actual = select.value;
+    const opciones = [...new Set(registrosAuditoria.map(r => `${r.ano || ''}|${r.seccion || ''}|${r.turno || ''}`))]
+      .filter(valor => valor !== '||')
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas</option>' + opciones.map(valor => {
+      const [ano, seccion, turno] = valor.split('|');
+      return `<option value="${htmlSeguro(valor)}">${htmlSeguro(ano)} · Sección ${htmlSeguro(seccion)} · ${htmlSeguro(turno)}</option>`;
+    }).join('');
+    if (opciones.includes(actual)) select.value = actual;
+  }
+
+  function hoyIsoAuditoria() {
+    const ahora = new Date();
+    const local = new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function actualizarMetricasAuditoria() {
+    const hoy = hoyIsoAuditoria();
+    const total = registrosAuditoria.length;
+    const web = registrosAuditoria.filter(r => String(r.origen || '').toLowerCase() === 'web').length;
+    const telegram = registrosAuditoria.filter(r => String(r.origen || '').toLowerCase() === 'telegram').length;
+    const delDia = registrosAuditoria.filter(r => String(r.registradoEn || '').slice(0, 10) === hoy).length;
+    const asignar = (id, valor) => { const nodo = document.getElementById(id); if (nodo) nodo.textContent = String(valor); };
+    asignar('auditoria-total', total);
+    asignar('auditoria-web', web);
+    asignar('auditoria-telegram', telegram);
+    asignar('auditoria-hoy', delDia);
+  }
+
+  function registrosFiltradosAuditoria() {
+    const texto = String(document.getElementById(IDS.search)?.value || '').trim().toLowerCase();
+    const fecha = String(document.getElementById(IDS.date)?.value || '');
+    const origen = String(document.getElementById(IDS.origin)?.value || '');
+    const seccion = String(document.getElementById(IDS.sectionFilter)?.value || '');
+    return registrosAuditoria.filter(registro => {
+      if (fecha && String(registro.fecha || '') !== fecha) return false;
+      if (origen && String(registro.origen || '') !== origen) return false;
+      if (seccion && `${registro.ano || ''}|${registro.seccion || ''}|${registro.turno || ''}` !== seccion) return false;
+      if (texto) {
+        const bolsa = [registro.alumno, registro.materia, registro.docente, registro.actorNombre, registro.accion, registro.estadoAnterior, registro.estadoNuevo]
+          .map(valor => String(valor || '').toLowerCase()).join(' ');
+        if (!bolsa.includes(texto)) return false;
+      }
+      return true;
+    });
+  }
+
+  function claseEstadoAuditoria(estado) {
+    const normalizado = String(estado || '').toLowerCase();
+    if (normalizado === 'presente') return 'is-present';
+    if (normalizado === 'ausente') return 'is-absent';
+    if (normalizado === 'tardanza') return 'is-late';
+    if (normalizado === 'justificada') return 'is-justified';
+    return 'is-neutral';
+  }
+
+  function iconoOrigenAuditoria(origen) {
+    return String(origen || '').toLowerCase() === 'telegram' ? 'fa-brands fa-telegram' : 'fa-solid fa-display';
+  }
+
+  function fechaHoraAuditoria(valor) {
+    const texto = String(valor || '').trim();
+    if (!texto) return { fecha: '—', hora: '' };
+    const partes = texto.replace('T', ' ').split(' ');
+    const fecha = partes[0] || texto;
+    const hora = (partes[1] || '').slice(0, 8);
+    const [ano, mes, dia] = fecha.split('-');
+    return { fecha: dia && mes && ano ? `${dia}/${mes}/${ano}` : fecha, hora };
+  }
+
+  function renderAuditoria() {
+    const body = document.getElementById(IDS.body);
+    const cards = document.getElementById(IDS.cards);
+    if (!body || !cards) return;
+    const registros = registrosFiltradosAuditoria();
+    const count = document.getElementById(IDS.count);
+    if (count) count.textContent = `${registros.length} ${registros.length === 1 ? 'registro' : 'registros'}`;
+    mostrarEstadoAuditoria(registros.length ? 'ready' : 'empty');
+
+    body.innerHTML = registros.map(registro => {
+      const momento = fechaHoraAuditoria(registro.registradoEn);
+      const anterior = htmlSeguro(registro.estadoAnterior || 'Sin registro');
+      const nuevo = htmlSeguro(registro.estadoNuevo || 'Sin registro');
+      return `<tr>
+        <td><strong>${htmlSeguro(momento.fecha)}</strong><small>${htmlSeguro(momento.hora)}</small><span>Asistencia: ${htmlSeguro(registro.fecha || '—')}</span></td>
+        <td><strong>${htmlSeguro(registro.alumno || 'Estudiante')}</strong><small>${htmlSeguro(registro.materia || 'Materia')}</small><span>${htmlSeguro(registro.ano || '')} · Sección ${htmlSeguro(registro.seccion || '')} · ${htmlSeguro(registro.turno || '')}</span></td>
+        <td><span class="audit-origin audit-origin--${String(registro.origen || '').toLowerCase()}"><i class="${iconoOrigenAuditoria(registro.origen)}"></i>${htmlSeguro(registro.origen || 'Web')}</span><strong>${htmlSeguro(registro.actorNombre || registro.docente || 'Docente')}</strong><small>${htmlSeguro(registro.accion || 'Actualización')}</small></td>
+        <td><div class="audit-change"><span class="audit-state ${claseEstadoAuditoria(registro.estadoAnterior)}">${anterior}</span><i class="fa-solid fa-arrow-right"></i><span class="audit-state ${claseEstadoAuditoria(registro.estadoNuevo)}">${nuevo}</span></div></td>
+      </tr>`;
+    }).join('');
+
+    cards.innerHTML = registros.map(registro => {
+      const momento = fechaHoraAuditoria(registro.registradoEn);
+      return `<article class="audit-mobile-card">
+        <div class="audit-mobile-card__top"><div><strong>${htmlSeguro(registro.alumno || 'Estudiante')}</strong><span>${htmlSeguro(registro.materia || '')}</span></div><span class="audit-origin audit-origin--${String(registro.origen || '').toLowerCase()}"><i class="${iconoOrigenAuditoria(registro.origen)}"></i>${htmlSeguro(registro.origen || 'Web')}</span></div>
+        <div class="audit-mobile-card__class">${htmlSeguro(registro.ano || '')} · Sección ${htmlSeguro(registro.seccion || '')} · ${htmlSeguro(registro.turno || '')}</div>
+        <div class="audit-change"><span class="audit-state ${claseEstadoAuditoria(registro.estadoAnterior)}">${htmlSeguro(registro.estadoAnterior || 'Sin registro')}</span><i class="fa-solid fa-arrow-right"></i><span class="audit-state ${claseEstadoAuditoria(registro.estadoNuevo)}">${htmlSeguro(registro.estadoNuevo || 'Sin registro')}</span></div>
+        <footer><span><i class="fa-regular fa-clock"></i>${htmlSeguro(momento.fecha)} ${htmlSeguro(momento.hora)}</span><span>${htmlSeguro(registro.actorNombre || registro.docente || 'Docente')}</span></footer>
+      </article>`;
+    }).join('');
+  }
+
+  function limpiarFiltrosAuditoria() {
+    [IDS.search, IDS.date, IDS.origin, IDS.sectionFilter].forEach(id => {
+      const control = document.getElementById(id);
+      if (control) control.value = '';
+    });
+    renderAuditoria();
+  }
+
+  function exportarAuditoriaCsv() {
+    const registros = registrosFiltradosAuditoria();
+    if (!registros.length) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay registros para exportar.', 'warning', 'Exportación vacía');
+      return;
+    }
+    const columnas = ['registradoEn', 'fecha', 'alumno', 'materia', 'ano', 'seccion', 'turno', 'origen', 'actorNombre', 'accion', 'estadoAnterior', 'estadoNuevo'];
+    const escaparCsv = valor => `"${String(valor ?? '').replace(/"/g, '""')}"`;
+    const csv = [columnas.join(','), ...registros.map(r => columnas.map(c => escaparCsv(r[c])).join(','))].join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = `Auditoria_Asistencia_${hoyIsoAuditoria()}.csv`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
+    enlace.remove();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crearInterfazAuditoria, { once: true });
+  else crearInterfazAuditoria();
+})();
+/* EDUGESTION_AUDIT_PANEL_V1_END */
+
+/* EDUGESTION_STATS_PANEL_V1_START */
+(() => {
+  const IDS = Object.freeze({
+    tab: 'tab-estadisticas',
+    section: 'section-estadisticas',
+    from: 'estadisticas-desde',
+    to: 'estadisticas-hasta',
+    classFilter: 'estadisticas-seccion',
+    search: 'estadisticas-buscar',
+    apply: 'estadisticas-aplicar',
+    clear: 'estadisticas-limpiar',
+    refresh: 'estadisticas-actualizar',
+    export: 'estadisticas-exportar',
+    pdf: 'estadisticas-pdf',
+    share: 'estadisticas-compartir',
+    print: 'estadisticas-imprimir',
+    studentsBody: 'estadisticas-alumnos-body',
+    studentsCards: 'estadisticas-alumnos-cards',
+    sectionsBody: 'estadisticas-secciones-body',
+    dates: 'estadisticas-fechas',
+    loading: 'estadisticas-cargando',
+    empty: 'estadisticas-vacio',
+    studentCount: 'estadisticas-conteo-alumnos'
+  });
+
+  let estadisticasData = null;
+  let cargando = false;
+  let catalogoSecciones = [];
+  let informeCompartirPendiente = null;
+  const INFORME_HISTORIAL_MAX = 100;
+  let historialInformesTelegram = [];
+  let historialInformesCargando = false;
+
+  function leerHistorialInformesTelegram() {
+    return Array.isArray(historialInformesTelegram)
+      ? historialInformesTelegram.slice(0, INFORME_HISTORIAL_MAX)
+      : [];
+  }
+
+  function normalizarRegistroInformeServidor(item = {}) {
+    return {
+      id: String(item.id || ''),
+      fechaIso: String(item.registradoEn || item.fechaIso || ''),
+      archivo: String(item.archivo || 'Informe de asistencia.pdf'),
+      periodo: String(item.periodo || 'Periodo seleccionado'),
+      seccion: String(item.seccion || 'Todas las secciones'),
+      estado: String(item.estado || 'enviado').toLowerCase() === 'error' ? 'error' : 'enviado',
+      destino: String(item.destino || ''),
+      mensajeId: String(item.mensajeId || ''),
+      tamanoBytes: Number(item.tamanoBytes || 0),
+      codigo: String(item.codigo || ''),
+      mensaje: String(item.detalle || item.mensaje || '')
+    };
+  }
+
+  async function cargarHistorialInformesTelegram({ silencioso = false } = {}) {
+    if (historialInformesCargando || !String(sessionToken || '').trim()) return;
+    historialInformesCargando = true;
+    const contenedor = document.getElementById('stats-share-history-list');
+    if (contenedor && !silencioso) {
+      contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-solid fa-circle-notch fa-spin"></i><span>Cargando historial del servidor…</span></div>';
+    }
+    try {
+      const respuesta = await apiRequest('obtenerHistorialInformes', { limite: INFORME_HISTORIAL_MAX });
+      historialInformesTelegram = Array.isArray(respuesta.historial)
+        ? respuesta.historial.map(normalizarRegistroInformeServidor)
+        : [];
+      renderHistorialInformesTelegram();
+    } catch (error) {
+      console.error('No se pudo cargar el historial de informes:', error);
+      if (contenedor) {
+        contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-solid fa-triangle-exclamation"></i><span>No se pudo consultar el historial del servidor.</span></div>';
+      }
+      if (!silencioso && typeof mostrarToast === 'function') {
+        mostrarToast(error.message || 'No se pudo consultar el historial.', 'error', 'Historial no disponible');
+      }
+    } finally {
+      historialInformesCargando = false;
+    }
+  }
+
+  function fechaHoraHistorial(valor) {
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return 'Sin fecha';
+    return fecha.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function fechaIsoLocalHistorial(valor) {
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return '';
+    const local = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function filtrosHistorialTelegram() {
+    return {
+      texto: String(document.getElementById('stats-history-search')?.value || '').trim().toLowerCase(),
+      estado: String(document.getElementById('stats-history-status')?.value || ''),
+      fecha: String(document.getElementById('stats-history-date')?.value || '')
+    };
+  }
+
+  function historialFiltradoTelegram() {
+    const filtros = filtrosHistorialTelegram();
+    return leerHistorialInformesTelegram().filter(item => {
+      const textoItem = `${item.archivo || ''} ${item.periodo || ''} ${item.seccion || ''} ${item.destino || ''} ${item.mensaje || ''}`.toLowerCase();
+      if (filtros.texto && !textoItem.includes(filtros.texto)) return false;
+      if (filtros.estado && String(item.estado || '') !== filtros.estado) return false;
+      if (filtros.fecha && fechaIsoLocalHistorial(item.fechaIso) !== filtros.fecha) return false;
+      return true;
+    });
+  }
+
+  function actualizarResumenHistorialTelegram() {
+    const historial = leerHistorialInformesTelegram();
+    const enviados = historial.filter(item => item.estado === 'enviado').length;
+    const errores = historial.filter(item => item.estado === 'error').length;
+    const asignar = (id, valor) => { const nodo = document.getElementById(id); if (nodo) nodo.textContent = String(valor); };
+    asignar('stats-history-total', historial.length);
+    asignar('stats-history-sent', enviados);
+    asignar('stats-history-errors', errores);
+  }
+
+  async function eliminarRegistroHistorialTelegram(id) {
+    if (!id || !confirm('¿Eliminar este registro del historial del servidor?')) return;
+    try {
+      await apiRequest('eliminarRegistroInforme', { id });
+      historialInformesTelegram = historialInformesTelegram.filter(item => String(item.id) !== String(id));
+      renderHistorialInformesTelegram();
+      if (typeof mostrarToast === 'function') mostrarToast('El registro fue eliminado del servidor.', 'success', 'Registro eliminado');
+    } catch (error) {
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo eliminar el registro.', 'error', 'No se eliminó');
+    }
+  }
+
+  async function limpiarHistorialInformesTelegram() {
+    if (!confirm('¿Eliminar todo tu historial de informes guardado en el servidor?')) return;
+    try {
+      await apiRequest('limpiarHistorialInformes');
+      historialInformesTelegram = [];
+      renderHistorialInformesTelegram();
+      if (typeof mostrarToast === 'function') mostrarToast('El historial del servidor fue eliminado.', 'success', 'Historial limpio');
+    } catch (error) {
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo limpiar el historial.', 'error', 'No se eliminó');
+    }
+  }
+
+  async function reenviarRegistroHistorialTelegram(id) {
+    const registro = leerHistorialInformesTelegram().find(item => String(item.id) === String(id));
+    if (!registro || !informeCompartirPendiente) return;
+    if (typeof mostrarToast === 'function') mostrarToast('Se reenviará el informe que está preparado actualmente.', 'info', 'Reenvío iniciado');
+    await enviarInformeTelegramVinculado();
+  }
+
+  function renderHistorialInformesTelegram() {
+    const contenedor = document.getElementById('stats-share-history-list');
+    if (!contenedor) return;
+    const historialCompleto = leerHistorialInformesTelegram();
+    const historial = historialFiltradoTelegram();
+    actualizarResumenHistorialTelegram();
+    const contador = document.getElementById('stats-history-visible-count');
+    if (contador) contador.textContent = `${historial.length} de ${historialCompleto.length}`;
+    if (!historial.length) {
+      contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-regular fa-folder-open"></i><span>No hay registros que coincidan con los filtros seleccionados.</span></div>';
+      return;
+    }
+    contenedor.innerHTML = historial.map(item => {
+      const enviado = item.estado === 'enviado';
+      return `<article class="stats-share-history-item ${enviado ? 'is-sent' : 'is-error'}" data-history-id="${seguro(item.id || '')}">
+        <span class="stats-share-history-icon"><i class="fa-solid ${enviado ? 'fa-circle-check' : 'fa-circle-xmark'}"></i></span>
+        <div class="stats-share-history-copy"><strong>${seguro(item.archivo || 'Informe de asistencia.pdf')}</strong><small>${seguro(fechaHoraHistorial(item.fechaIso))} · ${seguro(item.periodo || 'Periodo seleccionado')}</small><em>${seguro(item.seccion || 'Todas las secciones')} · ${seguro(item.destino || item.mensaje || (enviado ? 'Telegram vinculado' : 'No enviado'))}</em></div>
+        <b>${enviado ? 'Enviado' : 'Error'}</b>
+        <div class="stats-share-history-actions">
+          <button type="button" data-history-action="resend" data-history-id="${seguro(item.id || '')}" title="Reenviar el informe actual"><i class="fa-solid fa-paper-plane"></i><span>Reenviar</span></button>
+          <button type="button" data-history-action="delete" data-history-id="${seguro(item.id || '')}" title="Eliminar registro del servidor"><i class="fa-solid fa-trash-can"></i><span>Eliminar</span></button>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  function mostrarResultadoEnvioTelegram(datos = {}) {
+    const panel = document.getElementById('stats-share-result');
+    if (!panel) return;
+    panel.className = 'stats-share-result is-success';
+    panel.innerHTML = `<span><i class="fa-solid fa-circle-check"></i></span><div><strong>Informe enviado correctamente</strong><small>El PDF fue entregado a ${seguro(datos.destino || 'Telegram vinculado')}.</small><em>${seguro(fechaHoraHistorial(datos.sentAt || new Date().toISOString()))}</em></div>`;
+    panel.classList.remove('hidden');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  const seguro = (valor = '') => {
+    if (typeof escaparHTML === 'function') return escaparHTML(valor);
+    return String(valor).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+  };
+
+  const numero = valor => Number.isFinite(Number(valor)) ? Number(valor) : 0;
+  const porcentaje = valor => `${numero(valor).toLocaleString('es-ES', { maximumFractionDigits: 2 })}%`;
+  const clasePorcentaje = valor => numero(valor) >= 90 ? 'is-high' : numero(valor) >= 70 ? 'is-medium' : 'is-low';
+
+  function hoyIso() {
+    const ahora = new Date();
+    const local = new Date(ahora.getTime() - ahora.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function primerDiaMesIso() {
+    const ahora = new Date();
+    const local = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    const ajustada = new Date(local.getTime() - local.getTimezoneOffset() * 60000);
+    return ajustada.toISOString().slice(0, 10);
+  }
+
+  function fechaLegible(valor) {
+    const partes = String(valor || '').split('-');
+    return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : String(valor || '—');
+  }
+
+  function crearInterfazEstadisticas() {
+    if (document.getElementById(IDS.tab) || document.getElementById(IDS.section)) return;
+    const tabAuditoria = document.getElementById('tab-auditoria');
+    const tabHorario = document.getElementById('tab-horario');
+    const referencia = tabAuditoria || tabHorario;
+    const navegacion = referencia?.parentElement;
+    const principal = document.getElementById('app-main');
+    if (!navegacion || !principal) return;
+
+    const tab = document.createElement('button');
+    tab.id = IDS.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item';
+    tab.setAttribute('aria-selected', 'false');
+    tab.dataset.title = 'Estadísticas de asistencia';
+    tab.dataset.description = 'Analiza asistencia, tardanzas, ausencias y justificaciones por periodo.';
+    tab.innerHTML = '<i class="fa-solid fa-chart-column"></i><span>Estadísticas</span>';
+    referencia.insertAdjacentElement('afterend', tab);
+
+    const section = document.createElement('section');
+    section.id = IDS.section;
+    section.className = 'hidden max-w-[1400px] mx-auto space-y-6 stats-panel';
+    section.innerHTML = `
+      <section class="stats-hero">
+        <div>
+          <span class="stats-eyebrow"><i class="fa-solid fa-chart-line"></i> Informe de asistencia</span>
+          <h2>Estadísticas e informes</h2>
+          <p>Consulta indicadores por periodo, estudiante y sección con datos sincronizados de EduGestión.</p>
+        </div>
+        <div class="stats-hero__actions">
+          <button id="${IDS.export}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
+          <button id="${IDS.pdf}" type="button" class="stats-button stats-button--secondary stats-button--pdf"><i class="fa-solid fa-file-pdf"></i> Generar PDF</button>
+          <button id="${IDS.share}" type="button" class="stats-button stats-button--secondary stats-button--share"><i class="fa-solid fa-share-nodes"></i> Compartir PDF</button>
+          <button id="${IDS.print}" type="button" class="stats-button stats-button--secondary"><i class="fa-solid fa-print"></i> Imprimir</button>
+          <button id="${IDS.refresh}" type="button" class="stats-button stats-button--primary"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        </div>
+      </section>
+
+      <section class="stats-filter-card">
+        <div class="stats-filter-card__title">
+          <div><span><i class="fa-solid fa-sliders"></i></span><div><strong>Periodo y filtros</strong><small>Selecciona el rango que deseas analizar.</small></div></div>
+          <button id="${IDS.clear}" type="button"><i class="fa-solid fa-eraser"></i> Restablecer</button>
+        </div>
+        <div class="stats-filters">
+          <label class="stats-field"><span>Desde</span><input id="${IDS.from}" type="date"></label>
+          <label class="stats-field"><span>Hasta</span><input id="${IDS.to}" type="date"></label>
+          <label class="stats-field stats-field--wide"><span>Sección</span><select id="${IDS.classFilter}"><option value="">Todas las secciones</option></select></label>
+          <label class="stats-search stats-field--wide"><span>Buscar estudiante</span><div><i class="fa-solid fa-magnifying-glass"></i><input id="${IDS.search}" type="search" placeholder="Nombre del estudiante"></div></label>
+          <button id="${IDS.apply}" type="button" class="stats-apply"><i class="fa-solid fa-filter-circle-dollar"></i> Aplicar filtros</button>
+        </div>
+      </section>
+
+      <section id="${IDS.loading}" class="stats-status hidden"><i class="fa-solid fa-circle-notch fa-spin"></i><strong>Calculando estadísticas…</strong><span>Estamos procesando los registros de asistencia.</span></section>
+      <section id="${IDS.empty}" class="stats-status hidden"><i class="fa-solid fa-chart-simple"></i><strong>No hay registros en este periodo</strong><span>Prueba otro rango de fechas o una sección diferente.</span></section>
+
+      <section class="stats-metrics" aria-label="Indicadores principales">
+        <article class="stats-metric stats-metric--total"><span><i class="fa-solid fa-clipboard-list"></i></span><div><strong id="stats-total">0</strong><small>Registros</small></div></article>
+        <article class="stats-metric stats-metric--present"><span><i class="fa-solid fa-user-check"></i></span><div><strong id="stats-presentes">0</strong><small>Presentes</small></div></article>
+        <article class="stats-metric stats-metric--absent"><span><i class="fa-solid fa-user-xmark"></i></span><div><strong id="stats-ausentes">0</strong><small>Ausentes</small></div></article>
+        <article class="stats-metric stats-metric--late"><span><i class="fa-solid fa-clock"></i></span><div><strong id="stats-tardanzas">0</strong><small>Tardanzas</small></div></article>
+        <article class="stats-metric stats-metric--justified"><span><i class="fa-solid fa-file-circle-check"></i></span><div><strong id="stats-justificadas">0</strong><small>Justificadas</small></div></article>
+        <article class="stats-metric stats-metric--rate"><span><i class="fa-solid fa-percent"></i></span><div><strong id="stats-porcentaje">0%</strong><small>Asistencia efectiva</small></div></article>
+      </section>
+
+      <section class="stats-overview-grid">
+        <article class="stats-score-card">
+          <div class="stats-card-title"><span><i class="fa-solid fa-gauge-high"></i></span><div><h3>Indicadores del periodo</h3><p>La asistencia efectiva suma presentes y tardanzas.</p></div></div>
+          <div class="stats-score-row"><div><strong>Asistencia efectiva</strong><small>Presentes + tardanzas</small></div><span id="stats-score-asistencia">0%</span></div>
+          <div class="stats-progress"><span id="stats-bar-asistencia"></span></div>
+          <div class="stats-score-row"><div><strong>Cumplimiento registrado</strong><small>Incluye ausencias justificadas</small></div><span id="stats-score-cumplimiento">0%</span></div>
+          <div class="stats-progress stats-progress--violet"><span id="stats-bar-cumplimiento"></span></div>
+          <div class="stats-breakdown" id="stats-breakdown"></div>
+        </article>
+
+        <article class="stats-daily-card">
+          <div class="stats-card-title"><span><i class="fa-regular fa-calendar-days"></i></span><div><h3>Evolución por fecha</h3><p>Distribución diaria de los estados registrados.</p></div></div>
+          <div id="${IDS.dates}" class="stats-daily-list"></div>
+        </article>
+      </section>
+
+      <section class="stats-table-card">
+        <div class="stats-table-card__header"><div><span><i class="fa-solid fa-graduation-cap"></i></span><div><h3>Rendimiento por estudiante</h3><p>Ordenado alfabéticamente.</p></div></div><span id="${IDS.studentCount}" class="stats-count">0 estudiantes</span></div>
+        <div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>Estudiante</th><th>Clase</th><th>P</th><th>A</th><th>T</th><th>J</th><th>Asistencia</th><th>Cumplimiento</th></tr></thead><tbody id="${IDS.studentsBody}"></tbody></table></div>
+        <div id="${IDS.studentsCards}" class="stats-mobile-list"></div>
+      </section>
+
+      <section class="stats-table-card">
+        <div class="stats-table-card__header"><div><span><i class="fa-solid fa-people-roof"></i></span><div><h3>Resumen por sección</h3><p>Comparación de cursos y turnos.</p></div></div></div>
+        <div class="stats-table-wrap"><table class="stats-table"><thead><tr><th>Sección</th><th>Registros</th><th>Presentes</th><th>Ausentes</th><th>Tardanzas</th><th>Justificadas</th><th>Asistencia</th></tr></thead><tbody id="${IDS.sectionsBody}"></tbody></table></div>
+      </section>`;
+    principal.appendChild(section);
+    crearModalCompartirInforme();
+
+    document.getElementById(IDS.from).value = primerDiaMesIso();
+    document.getElementById(IDS.to).value = hoyIso();
+
+    tab.addEventListener('click', abrirEstadisticas);
+    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario', 'tab-auditoria'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', cerrarEstadisticas, { capture: true });
+    });
+    document.getElementById(IDS.apply)?.addEventListener('click', () => cargarEstadisticas(true));
+    document.getElementById(IDS.refresh)?.addEventListener('click', () => cargarEstadisticas(true, true));
+    document.getElementById(IDS.clear)?.addEventListener('click', restablecerFiltros);
+    document.getElementById(IDS.export)?.addEventListener('click', exportarCsv);
+    document.getElementById(IDS.pdf)?.addEventListener('click', generarPdfProfesional);
+    document.getElementById(IDS.share)?.addEventListener('click', prepararCompartirPdfProfesional);
+    document.getElementById(IDS.print)?.addEventListener('click', imprimirInforme);
+    document.getElementById(IDS.search)?.addEventListener('input', renderEstadisticas);
+  }
+
+  function cerrarEstadisticas() {
+    document.getElementById(IDS.tab)?.classList.remove('is-active');
+    document.getElementById(IDS.tab)?.setAttribute('aria-selected', 'false');
+    document.getElementById(IDS.section)?.classList.add('hidden');
+  }
+
+  async function abrirEstadisticas() {
+    document.querySelectorAll('.nav-item').forEach(item => { item.classList.remove('is-active'); item.setAttribute('aria-selected', 'false'); });
+    document.querySelectorAll('#app-main > section').forEach(item => item.classList.add('hidden'));
+    document.getElementById(IDS.tab)?.classList.add('is-active');
+    document.getElementById(IDS.tab)?.setAttribute('aria-selected', 'true');
+    document.getElementById(IDS.section)?.classList.remove('hidden');
+    if (typeof pageTitle !== 'undefined' && pageTitle) pageTitle.textContent = 'Estadísticas de asistencia';
+    if (typeof pageDescription !== 'undefined' && pageDescription) pageDescription.textContent = 'Analiza asistencia, tardanzas, ausencias y justificaciones por periodo.';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await cargarEstadisticas(false);
+  }
+
+  function estadoVista(tipo) {
+    document.getElementById(IDS.loading)?.classList.toggle('hidden', tipo !== 'loading');
+    document.getElementById(IDS.empty)?.classList.toggle('hidden', tipo !== 'empty');
+  }
+
+  function filtrosServidor() {
+    const valorSeccion = String(document.getElementById(IDS.classFilter)?.value || '');
+    const [ano = '', seccion = '', turno = ''] = valorSeccion.split('|');
+    return {
+      fechaDesde: String(document.getElementById(IDS.from)?.value || ''),
+      fechaHasta: String(document.getElementById(IDS.to)?.value || ''),
+      ano,
+      seccion,
+      turno
+    };
+  }
+
+  async function cargarEstadisticas(forzar = false, notificar = false) {
+    if (cargando) return;
+    if (estadisticasData && !forzar) { renderEstadisticas(); return; }
+    if (typeof sessionToken === 'undefined' || !sessionToken) { estadoVista('empty'); return; }
+    cargando = true;
+    estadoVista('loading');
+    document.getElementById(IDS.refresh)?.classList.add('is-loading');
+    document.getElementById(IDS.apply)?.classList.add('is-loading');
+    try {
+      const respuesta = await apiRequest('obtenerEstadisticasAsistencia', filtrosServidor());
+      estadisticasData = respuesta;
+      if (!catalogoSecciones.length || !String(document.getElementById(IDS.classFilter)?.value || '')) {
+        catalogoSecciones = Array.isArray(respuesta.porSeccion) ? respuesta.porSeccion.map(item => ({ ...item })) : [];
+        llenarSecciones();
+      }
+      renderEstadisticas();
+      if (notificar && typeof mostrarToast === 'function') mostrarToast('Los indicadores se actualizaron correctamente.', 'success', 'Estadísticas actualizadas');
+    } catch (error) {
+      console.error('No se pudieron cargar las estadísticas:', error);
+      estadisticasData = null;
+      renderEstadisticas();
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudieron consultar las estadísticas.', 'error', 'Error de estadísticas');
+    } finally {
+      cargando = false;
+      document.getElementById(IDS.refresh)?.classList.remove('is-loading');
+      document.getElementById(IDS.apply)?.classList.remove('is-loading');
+    }
+  }
+
+  function llenarSecciones() {
+    const select = document.getElementById(IDS.classFilter);
+    if (!select) return;
+    const actual = select.value;
+    const opciones = catalogoSecciones.map(item => `${item.ano || ''}|${item.seccion || ''}|${item.turno || ''}`)
+      .filter((valor, indice, arreglo) => valor !== '||' && arreglo.indexOf(valor) === indice)
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas las secciones</option>' + opciones.map(valor => {
+      const [ano, seccion, turno] = valor.split('|');
+      return `<option value="${seguro(valor)}">${seguro(ano)} · Sección ${seguro(seccion)} · ${seguro(turno)}</option>`;
+    }).join('');
+    if (opciones.includes(actual)) select.value = actual;
+  }
+
+  function asignar(id, valor) {
+    const nodo = document.getElementById(id);
+    if (nodo) nodo.textContent = String(valor);
+  }
+
+  function alumnosFiltrados() {
+    const alumnos = Array.isArray(estadisticasData?.porAlumno) ? estadisticasData.porAlumno : [];
+    const texto = String(document.getElementById(IDS.search)?.value || '').trim().toLowerCase();
+    if (!texto) return alumnos;
+    return alumnos.filter(item => [item.alumno, item.ano, item.seccion, item.turno].some(valor => String(valor || '').toLowerCase().includes(texto)));
+  }
+
+  function renderEstadisticas() {
+    const resumen = estadisticasData?.resumen || null;
+    const total = numero(resumen?.total);
+    estadoVista(total ? 'ready' : 'empty');
+
+    asignar('stats-total', total);
+    asignar('stats-presentes', numero(resumen?.presentes));
+    asignar('stats-ausentes', numero(resumen?.ausentes));
+    asignar('stats-tardanzas', numero(resumen?.tardanzas));
+    asignar('stats-justificadas', numero(resumen?.justificadas));
+    asignar('stats-porcentaje', porcentaje(resumen?.porcentajeAsistencia));
+    asignar('stats-score-asistencia', porcentaje(resumen?.porcentajeAsistencia));
+    asignar('stats-score-cumplimiento', porcentaje(resumen?.porcentajeCumplimiento));
+
+    const barAsistencia = document.getElementById('stats-bar-asistencia');
+    const barCumplimiento = document.getElementById('stats-bar-cumplimiento');
+    if (barAsistencia) barAsistencia.style.width = `${Math.max(0, Math.min(100, numero(resumen?.porcentajeAsistencia)))}%`;
+    if (barCumplimiento) barCumplimiento.style.width = `${Math.max(0, Math.min(100, numero(resumen?.porcentajeCumplimiento)))}%`;
+
+    const breakdown = document.getElementById('stats-breakdown');
+    if (breakdown) breakdown.innerHTML = `
+      <span><i class="is-present"></i>Presentes <b>${numero(resumen?.presentes)}</b></span>
+      <span><i class="is-absent"></i>Ausentes <b>${numero(resumen?.ausentes)}</b></span>
+      <span><i class="is-late"></i>Tardanzas <b>${numero(resumen?.tardanzas)}</b></span>
+      <span><i class="is-justified"></i>Justificadas <b>${numero(resumen?.justificadas)}</b></span>`;
+
+    renderFechas();
+    renderAlumnos();
+    renderSecciones();
+  }
+
+  function renderFechas() {
+    const contenedor = document.getElementById(IDS.dates);
+    if (!contenedor) return;
+    const fechas = Array.isArray(estadisticasData?.porFecha) ? estadisticasData.porFecha : [];
+    if (!fechas.length) {
+      contenedor.innerHTML = '<div class="stats-mini-empty"><i class="fa-regular fa-calendar-xmark"></i><span>Sin datos diarios en el periodo.</span></div>';
+      return;
+    }
+    contenedor.innerHTML = [...fechas].reverse().slice(0, 10).map(item => {
+      const total = Math.max(1, numero(item.total));
+      const ancho = Math.max(4, Math.min(100, numero(item.porcentajeAsistencia)));
+      return `<article class="stats-daily-item">
+        <div><strong>${seguro(fechaLegible(item.fecha))}</strong><small>${numero(item.total)} registros · ${numero(item.tardanzas)} tardanzas</small></div>
+        <div class="stats-daily-bar"><span style="width:${ancho}%"></span></div>
+        <b>${porcentaje(item.porcentajeAsistencia)}</b>
+      </article>`;
+    }).join('');
+  }
+
+  function renderAlumnos() {
+    const body = document.getElementById(IDS.studentsBody);
+    const cards = document.getElementById(IDS.studentsCards);
+    if (!body || !cards) return;
+    const alumnos = alumnosFiltrados();
+    asignar(IDS.studentCount, `${alumnos.length} ${alumnos.length === 1 ? 'estudiante' : 'estudiantes'}`);
+    body.innerHTML = alumnos.map(item => `<tr>
+      <td><strong>${seguro(item.alumno || 'Estudiante')}</strong><small>${numero(item.total)} registros</small></td>
+      <td><strong>${seguro(item.ano || '')} · ${seguro(item.seccion || '')}</strong><small>${seguro(item.turno || '')}</small></td>
+      <td><span class="stats-state is-present">${numero(item.presentes)}</span></td>
+      <td><span class="stats-state is-absent">${numero(item.ausentes)}</span></td>
+      <td><span class="stats-state is-late">${numero(item.tardanzas)}</span></td>
+      <td><span class="stats-state is-justified">${numero(item.justificadas)}</span></td>
+      <td><span class="stats-rate ${clasePorcentaje(item.porcentajeAsistencia)}">${porcentaje(item.porcentajeAsistencia)}</span></td>
+      <td><span class="stats-rate ${clasePorcentaje(item.porcentajeCumplimiento)}">${porcentaje(item.porcentajeCumplimiento)}</span></td>
+    </tr>`).join('');
+    cards.innerHTML = alumnos.map(item => `<article class="stats-mobile-card">
+      <header><div><strong>${seguro(item.alumno || 'Estudiante')}</strong><span>${seguro(item.ano || '')} · Sección ${seguro(item.seccion || '')} · ${seguro(item.turno || '')}</span></div><b class="stats-rate ${clasePorcentaje(item.porcentajeAsistencia)}">${porcentaje(item.porcentajeAsistencia)}</b></header>
+      <div class="stats-mobile-states"><span class="is-present">P ${numero(item.presentes)}</span><span class="is-absent">A ${numero(item.ausentes)}</span><span class="is-late">T ${numero(item.tardanzas)}</span><span class="is-justified">J ${numero(item.justificadas)}</span></div>
+      <footer><span>${numero(item.total)} registros</span><span>Cumplimiento: ${porcentaje(item.porcentajeCumplimiento)}</span></footer>
+    </article>`).join('');
+  }
+
+  function renderSecciones() {
+    const body = document.getElementById(IDS.sectionsBody);
+    if (!body) return;
+    const secciones = Array.isArray(estadisticasData?.porSeccion) ? estadisticasData.porSeccion : [];
+    body.innerHTML = secciones.map(item => `<tr>
+      <td><strong>${seguro(item.ano || '')} · Sección ${seguro(item.seccion || '')}</strong><small>${seguro(item.turno || '')}</small></td>
+      <td>${numero(item.total)}</td><td>${numero(item.presentes)}</td><td>${numero(item.ausentes)}</td><td>${numero(item.tardanzas)}</td><td>${numero(item.justificadas)}</td>
+      <td><span class="stats-rate ${clasePorcentaje(item.porcentajeAsistencia)}">${porcentaje(item.porcentajeAsistencia)}</span></td>
+    </tr>`).join('');
+  }
+
+  function restablecerFiltros() {
+    document.getElementById(IDS.from).value = primerDiaMesIso();
+    document.getElementById(IDS.to).value = hoyIso();
+    document.getElementById(IDS.classFilter).value = '';
+    document.getElementById(IDS.search).value = '';
+    estadisticasData = null;
+    cargarEstadisticas(true);
+  }
+
+  function exportarCsv() {
+    const alumnos = alumnosFiltrados();
+    if (!alumnos.length) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para exportar.', 'warning', 'Exportación vacía');
+      return;
+    }
+    const columnas = ['alumno', 'ano', 'seccion', 'turno', 'total', 'presentes', 'ausentes', 'tardanzas', 'justificadas', 'porcentajeAsistencia', 'porcentajeCumplimiento'];
+    const escaparCsv = valor => `"${String(valor ?? '').replace(/"/g, '""')}"`;
+    const csv = [columnas.join(','), ...alumnos.map(item => columnas.map(c => escaparCsv(item[c])).join(','))].join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = `Estadisticas_Asistencia_${String(document.getElementById(IDS.from)?.value || '')}_${String(document.getElementById(IDS.to)?.value || '')}.csv`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
+    enlace.remove();
+  }
+
+  function nombreInstitucionReporte() {
+    const campo = document.getElementById('input-institucion');
+    const guardado = typeof storageGet === 'function' ? storageGet('nombreInstitucion', '') : '';
+    return String(campo?.value || guardado || 'UNIDAD EDUCATIVA EDUGESTIÓN').trim();
+  }
+
+  function fechaHoraReporte() {
+    return new Date().toLocaleString('es-BO', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function estadoTextoFiltro() {
+    const select = document.getElementById(IDS.classFilter);
+    return select?.selectedOptions?.[0]?.textContent?.trim() || 'Todas las secciones';
+  }
+
+  function filaEstadoPdf(etiqueta, valor, clase) {
+    return `<div class="stats-pdf-kpi ${clase}"><span>${seguro(etiqueta)}</span><strong>${seguro(valor)}</strong></div>`;
+  }
+
+  function construirReportePdf() {
+    const resumen = estadisticasData?.resumen || {};
+    const alumnos = alumnosFiltrados();
+    const secciones = Array.isArray(estadisticasData?.porSeccion) ? estadisticasData.porSeccion : [];
+    const fechas = Array.isArray(estadisticasData?.porFecha) ? estadisticasData.porFecha : [];
+    const desde = String(document.getElementById(IDS.from)?.value || '');
+    const hasta = String(document.getElementById(IDS.to)?.value || '');
+    const docente = String(profesorActual?.nombre || document.getElementById('profesor-name')?.textContent || 'Docente').trim();
+    const materia = String(profesorActual?.materia || document.getElementById('profesor-materia')?.textContent || 'Materia').trim();
+    const institucion = nombreInstitucionReporte();
+    const total = numero(resumen.total);
+
+    const reporte = document.createElement('article');
+    reporte.className = 'stats-pdf-report';
+    reporte.setAttribute('aria-hidden', 'true');
+    reporte.innerHTML = `
+      <header class="stats-pdf-header">
+        <div class="stats-pdf-brand"><span>EG</span></div>
+        <div class="stats-pdf-heading">
+          <p>${seguro(institucion.toUpperCase())}</p>
+          <h1>INFORME DE ASISTENCIA</h1>
+          <small>Reporte estadístico del periodo seleccionado</small>
+        </div>
+        <div class="stats-pdf-folio"><b>EDUGESTIÓN</b><span>Emitido: ${seguro(fechaHoraReporte())}</span></div>
+      </header>
+
+      <section class="stats-pdf-meta">
+        <div><span>Docente</span><strong>${seguro(docente)}</strong></div>
+        <div><span>Materia</span><strong>${seguro(materia)}</strong></div>
+        <div><span>Periodo</span><strong>${seguro(fechaLegible(desde))} al ${seguro(fechaLegible(hasta))}</strong></div>
+        <div><span>Sección analizada</span><strong>${seguro(estadoTextoFiltro())}</strong></div>
+      </section>
+
+      <section class="stats-pdf-summary">
+        ${filaEstadoPdf('Registros', total, 'is-total')}
+        ${filaEstadoPdf('Presentes', numero(resumen.presentes), 'is-present')}
+        ${filaEstadoPdf('Ausentes', numero(resumen.ausentes), 'is-absent')}
+        ${filaEstadoPdf('Tardanzas', numero(resumen.tardanzas), 'is-late')}
+        ${filaEstadoPdf('Justificadas', numero(resumen.justificadas), 'is-justified')}
+        ${filaEstadoPdf('Asistencia efectiva', porcentaje(resumen.porcentajeAsistencia), 'is-rate')}
+      </section>
+
+      <section class="stats-pdf-section stats-pdf-two-columns">
+        <div>
+          <h2>Indicadores del periodo</h2>
+          <div class="stats-pdf-indicator"><span>Asistencia efectiva</span><strong>${seguro(porcentaje(resumen.porcentajeAsistencia))}</strong><div><i style="width:${Math.max(0, Math.min(100, numero(resumen.porcentajeAsistencia)))}%"></i></div><small>Presentes + tardanzas sobre el total de registros.</small></div>
+          <div class="stats-pdf-indicator is-violet"><span>Cumplimiento registrado</span><strong>${seguro(porcentaje(resumen.porcentajeCumplimiento))}</strong><div><i style="width:${Math.max(0, Math.min(100, numero(resumen.porcentajeCumplimiento)))}%"></i></div><small>Incluye las ausencias justificadas.</small></div>
+        </div>
+        <div>
+          <h2>Resumen de estados</h2>
+          <table class="stats-pdf-compact-table"><tbody>
+            <tr><th>Presente</th><td>${numero(resumen.presentes)}</td><td>${total ? porcentaje(numero(resumen.presentes) * 100 / total) : '0%'}</td></tr>
+            <tr><th>Ausente</th><td>${numero(resumen.ausentes)}</td><td>${total ? porcentaje(numero(resumen.ausentes) * 100 / total) : '0%'}</td></tr>
+            <tr><th>Tardanza</th><td>${numero(resumen.tardanzas)}</td><td>${total ? porcentaje(numero(resumen.tardanzas) * 100 / total) : '0%'}</td></tr>
+            <tr><th>Justificada</th><td>${numero(resumen.justificadas)}</td><td>${total ? porcentaje(numero(resumen.justificadas) * 100 / total) : '0%'}</td></tr>
+          </tbody></table>
+        </div>
+      </section>
+
+      <section class="stats-pdf-section">
+        <h2>Detalle por estudiante</h2>
+        <table class="stats-pdf-table">
+          <thead><tr><th>Estudiante</th><th>Clase</th><th>P</th><th>A</th><th>T</th><th>J</th><th>Asistencia</th><th>Cumplimiento</th></tr></thead>
+          <tbody>${alumnos.length ? alumnos.map(item => `<tr>
+            <td><strong>${seguro(item.alumno || 'Estudiante')}</strong><small>${numero(item.total)} registros</small></td>
+            <td>${seguro(item.ano || '')} · ${seguro(item.seccion || '')}<small>${seguro(item.turno || '')}</small></td>
+            <td>${numero(item.presentes)}</td><td>${numero(item.ausentes)}</td><td>${numero(item.tardanzas)}</td><td>${numero(item.justificadas)}</td>
+            <td><b>${seguro(porcentaje(item.porcentajeAsistencia))}</b></td><td><b>${seguro(porcentaje(item.porcentajeCumplimiento))}</b></td>
+          </tr>`).join('') : '<tr><td colspan="8">No hay estudiantes para los filtros seleccionados.</td></tr>'}</tbody>
+        </table>
+      </section>
+
+      <section class="stats-pdf-section">
+        <h2>Resumen por sección</h2>
+        <table class="stats-pdf-table">
+          <thead><tr><th>Sección</th><th>Registros</th><th>Presentes</th><th>Ausentes</th><th>Tardanzas</th><th>Justificadas</th><th>Asistencia</th></tr></thead>
+          <tbody>${secciones.length ? secciones.map(item => `<tr>
+            <td><strong>${seguro(item.ano || '')} · Sección ${seguro(item.seccion || '')}</strong><small>${seguro(item.turno || '')}</small></td>
+            <td>${numero(item.total)}</td><td>${numero(item.presentes)}</td><td>${numero(item.ausentes)}</td><td>${numero(item.tardanzas)}</td><td>${numero(item.justificadas)}</td><td><b>${seguro(porcentaje(item.porcentajeAsistencia))}</b></td>
+          </tr>`).join('') : '<tr><td colspan="7">No hay secciones en el periodo.</td></tr>'}</tbody>
+        </table>
+      </section>
+
+      <section class="stats-pdf-section stats-pdf-dates">
+        <h2>Evolución por fecha</h2>
+        <div>${fechas.length ? [...fechas].reverse().slice(0, 16).map(item => `<article><span>${seguro(fechaLegible(item.fecha))}</span><div><i style="width:${Math.max(1, Math.min(100, numero(item.porcentajeAsistencia)))}%"></i></div><strong>${seguro(porcentaje(item.porcentajeAsistencia))}</strong></article>`).join('') : '<p>Sin datos diarios.</p>'}</div>
+      </section>
+
+      <section class="stats-pdf-note">
+        <strong>Criterio de lectura</strong>
+        <p>La asistencia efectiva considera los estados Presente y Tardanza. El cumplimiento registrado también incorpora las ausencias justificadas. Este informe refleja los datos disponibles en EduGestión al momento de su emisión.</p>
+      </section>
+
+      <section class="stats-pdf-signatures">
+        <div><span></span><strong>${seguro(docente)}</strong><small>Firma del docente</small></div>
+        <div><span></span><strong>Dirección / Secretaría</strong><small>Firma y sello institucional</small></div>
+      </section>
+
+      <footer class="stats-pdf-footer"><span>Generado por EduGestión</span><span>${seguro(institucion)}</span></footer>`;
+    return reporte;
+  }
+
+  function nombreArchivoInformePdf() {
+    const desde = String(document.getElementById(IDS.from)?.value || 'inicio');
+    const hasta = String(document.getElementById(IDS.to)?.value || 'fin');
+    return `Informe_Asistencia_Horizontal_${desde}_${hasta}.pdf`;
+  }
+
+  function mensajeCompartirInforme() {
+    const desde = fechaLegible(document.getElementById(IDS.from)?.value || '');
+    const hasta = fechaLegible(document.getElementById(IDS.to)?.value || '');
+    const docente = String(window.profesorActual?.nombre || window.usuarioActual?.nombre || 'Docente');
+    const materia = String(window.profesorActual?.materia || window.usuarioActual?.materia || '');
+    return `Comparto el informe de asistencia de ${docente}${materia ? ` (${materia})` : ''}, correspondiente al periodo ${desde} al ${hasta}.`;
+  }
+
+  function opcionesPdfProfesional(reporte, archivo) {
+    const anchoCaptura = Math.max(1123, Math.ceil(reporte.scrollWidth || reporte.getBoundingClientRect().width));
+    const altoCaptura = Math.max(794, Math.ceil(reporte.scrollHeight || reporte.getBoundingClientRect().height));
+    return {
+      margin: [6, 6, 8, 6],
+      filename: archivo,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        letterRendering: true,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
+        windowWidth: anchoCaptura,
+        windowHeight: altoCaptura
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape', compress: true },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.stats-pdf-kpi', '.stats-pdf-signatures'] }
+    };
+  }
+
+  async function crearPdfProfesionalBlob() {
+    const reporte = construirReportePdf();
+    const hostPdf = document.createElement('div');
+    hostPdf.className = 'stats-pdf-render-host';
+    hostPdf.setAttribute('aria-hidden', 'true');
+    hostPdf.appendChild(reporte);
+
+    const scrollAnterior = { x: window.scrollX, y: window.scrollY };
+    document.body.appendChild(hostPdf);
+    window.scrollTo(0, 0);
+    const archivo = nombreArchivoInformePdf();
+
+    try {
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const worker = html2pdf().set(opcionesPdfProfesional(reporte, archivo)).from(reporte).toPdf();
+      const blob = await worker.outputPdf('blob');
+      return { blob, archivo };
+    } finally {
+      hostPdf.remove();
+      window.scrollTo(scrollAnterior.x, scrollAnterior.y);
+    }
+  }
+
+  function descargarBlobPdf(blob, archivo) {
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = archivo;
+    enlace.style.display = 'none';
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function generarPdfProfesional() {
+    if (!numero(estadisticasData?.resumen?.total)) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para generar el informe.', 'warning', 'Informe vacío');
+      return;
+    }
+    if (typeof html2pdf !== 'function') {
+      if (typeof mostrarToast === 'function') mostrarToast('La librería de PDF no está disponible. Recarga la página e inténtalo nuevamente.', 'error', 'PDF no disponible');
+      return;
+    }
+
+    const boton = document.getElementById(IDS.pdf);
+    const contenidoAnterior = boton?.innerHTML || '';
+    if (boton) {
+      boton.disabled = true;
+      boton.classList.add('is-loading');
+      boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generando…';
+    }
+
+    try {
+      const { blob, archivo } = await crearPdfProfesionalBlob();
+      descargarBlobPdf(blob, archivo);
+      if (typeof mostrarToast === 'function') mostrarToast('El informe PDF se generó correctamente.', 'success', 'Informe descargado');
+    } catch (error) {
+      console.error('No se pudo generar el informe PDF:', error);
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo generar el PDF.', 'error', 'Error de PDF');
+    } finally {
+      if (boton) {
+        boton.disabled = false;
+        boton.classList.remove('is-loading');
+        boton.innerHTML = contenidoAnterior;
+      }
+    }
+  }
+
+  function crearModalCompartirInforme() {
+    // Reconstruye el modal para evitar que quede en pantalla una versión antigua sin el botón directo.
+    document.getElementById('stats-share-modal')?.remove();
+    const modal = document.createElement('div');
+    modal.id = 'stats-share-modal';
+    modal.className = 'stats-share-modal hidden';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', 'stats-share-title');
+    modal.innerHTML = `
+      <div class="stats-share-dialog">
+        <button id="stats-share-close" class="stats-share-close" type="button" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+        <div class="stats-share-heading"><span><i class="fa-solid fa-share-nodes"></i></span><div><h3 id="stats-share-title">Compartir informe PDF</h3><p id="stats-share-file">Informe preparado</p></div></div>
+        <div id="stats-share-result" class="stats-share-result hidden"></div>
+        <button id="stats-share-direct-telegram" class="stats-share-direct-telegram" type="button"><i class="fa-brands fa-telegram"></i><span><strong>Enviar a mi Telegram vinculado</strong><small>EduGestión enviará este PDF directamente al chat vinculado.</small></span></button>
+        <button id="stats-share-native" class="stats-share-native" type="button"><i class="fa-solid fa-mobile-screen-button"></i><span><strong>Compartir archivo</strong><small>Envía el PDF como archivo adjunto desde tu dispositivo.</small></span></button>
+        <div class="stats-share-divider"><span>O usa un acceso rápido</span></div>
+        <div class="stats-share-channels">
+          <button type="button" data-share-channel="whatsapp"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></button>
+          <button type="button" data-share-channel="telegram"><i class="fa-brands fa-telegram"></i><span>Telegram</span></button>
+          <button type="button" data-share-channel="email"><i class="fa-solid fa-envelope"></i><span>Correo</span></button>
+        </div>
+        <p class="stats-share-help">En computadora, los accesos rápidos descargan primero el PDF. Luego debes adjuntarlo manualmente en el mensaje abierto.</p>
+        <div class="stats-share-footer">
+          <button id="stats-share-download" type="button"><i class="fa-solid fa-download"></i> Descargar PDF</button>
+          <button id="stats-share-copy" type="button"><i class="fa-regular fa-copy"></i> Copiar mensaje</button>
+        </div>
+        <section class="stats-share-history" aria-labelledby="stats-share-history-title">
+          <div class="stats-share-history-head">
+            <div><span>Panel de control · Fase 2.0</span><h4 id="stats-share-history-title">Historial completo de envíos</h4></div>
+            <div class="stats-history-head-actions"><button id="stats-history-refresh" type="button" title="Actualizar desde el servidor"><i class="fa-solid fa-rotate"></i> Actualizar</button><button id="stats-history-clear" type="button" title="Eliminar todo el historial"><i class="fa-solid fa-trash-can"></i> Limpiar</button></div>
+          </div>
+          <div class="stats-share-history-summary">
+            <article><strong id="stats-history-total">0</strong><span>Total</span></article>
+            <article class="is-sent"><strong id="stats-history-sent">0</strong><span>Enviados</span></article>
+            <article class="is-error"><strong id="stats-history-errors">0</strong><span>Errores</span></article>
+          </div>
+          <div class="stats-share-history-filters">
+            <label><span>Buscar</span><div><i class="fa-solid fa-magnifying-glass"></i><input id="stats-history-search" type="search" placeholder="Archivo, periodo o sección"></div></label>
+            <label><span>Estado</span><select id="stats-history-status"><option value="">Todos</option><option value="enviado">Enviados</option><option value="error">Errores</option></select></label>
+            <label><span>Fecha</span><input id="stats-history-date" type="date"></label>
+            <button id="stats-history-reset" type="button"><i class="fa-solid fa-eraser"></i> Restablecer</button>
+          </div>
+          <div class="stats-share-history-count"><span>Registros visibles</span><b id="stats-history-visible-count">0 de 0</b></div>
+          <div id="stats-share-history-list" class="stats-share-history-list"></div>
+          <p class="stats-share-history-note"><i class="fa-solid fa-circle-info"></i> El historial se guarda en el servidor y estará disponible desde cualquier dispositivo. “Reenviar” envía nuevamente el informe que está preparado en el modal.</p>
+        </section>
+      </div>`;
+    document.body.appendChild(modal);
+
+    document.getElementById('stats-share-close')?.addEventListener('click', cerrarModalCompartirInforme);
+    document.getElementById('stats-share-direct-telegram')?.addEventListener('click', enviarInformeTelegramVinculado);
+    document.getElementById('stats-share-native')?.addEventListener('click', compartirArchivoNativo);
+    document.getElementById('stats-share-download')?.addEventListener('click', descargarInformeCompartirPendiente);
+    document.getElementById('stats-share-copy')?.addEventListener('click', copiarMensajeInforme);
+    document.getElementById('stats-history-refresh')?.addEventListener('click', () => cargarHistorialInformesTelegram());
+    document.getElementById('stats-history-clear')?.addEventListener('click', limpiarHistorialInformesTelegram);
+    ['stats-history-search', 'stats-history-status', 'stats-history-date'].forEach(id => {
+      document.getElementById(id)?.addEventListener(id === 'stats-history-search' ? 'input' : 'change', renderHistorialInformesTelegram);
+    });
+    document.getElementById('stats-history-reset')?.addEventListener('click', () => {
+      const search = document.getElementById('stats-history-search');
+      const status = document.getElementById('stats-history-status');
+      const date = document.getElementById('stats-history-date');
+      if (search) search.value = '';
+      if (status) status.value = '';
+      if (date) date.value = '';
+      renderHistorialInformesTelegram();
+    });
+    document.getElementById('stats-share-history-list')?.addEventListener('click', async evento => {
+      const boton = evento.target.closest('[data-history-action]');
+      if (!boton) return;
+      const id = boton.dataset.historyId;
+      if (boton.dataset.historyAction === 'delete') eliminarRegistroHistorialTelegram(id);
+      if (boton.dataset.historyAction === 'resend') await reenviarRegistroHistorialTelegram(id);
+    });
+    modal.querySelectorAll('[data-share-channel]').forEach(boton => boton.addEventListener('click', () => abrirCanalCompartirInforme(boton.dataset.shareChannel)));
+    modal.addEventListener('click', evento => { if (evento.target === modal) cerrarModalCompartirInforme(); });
+  }
+
+  function abrirModalCompartirInforme() {
+    // Si el navegador conservó un modal de una fase anterior, lo reemplaza automáticamente.
+    if (!document.getElementById('stats-share-direct-telegram')) {
+      crearModalCompartirInforme();
+    }
+    const modal = document.getElementById('stats-share-modal');
+    if (!modal || !informeCompartirPendiente) return;
+    const nombre = document.getElementById('stats-share-file');
+    if (nombre) nombre.textContent = informeCompartirPendiente.archivo;
+    const resultado = document.getElementById('stats-share-result');
+    if (resultado) { resultado.className = 'stats-share-result hidden'; resultado.innerHTML = ''; }
+    renderHistorialInformesTelegram();
+    cargarHistorialInformesTelegram({ silencioso: historialInformesTelegram.length > 0 });
+    const nativo = document.getElementById('stats-share-native');
+    const puedeCompartir = Boolean(navigator.share && navigator.canShare?.({ files: [informeCompartirPendiente.file] }));
+    nativo?.classList.toggle('hidden', !puedeCompartir);
+    modal.classList.remove('hidden');
+    document.body.classList.add('stats-share-open');
+  }
+
+  function cerrarModalCompartirInforme() {
+    document.getElementById('stats-share-modal')?.classList.add('hidden');
+    document.body.classList.remove('stats-share-open');
+  }
+
+  async function prepararCompartirPdfProfesional() {
+    if (!numero(estadisticasData?.resumen?.total)) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para compartir.', 'warning', 'Informe vacío');
+      return;
+    }
+    if (typeof html2pdf !== 'function') {
+      if (typeof mostrarToast === 'function') mostrarToast('La librería de PDF no está disponible.', 'error', 'PDF no disponible');
+      return;
+    }
+    const boton = document.getElementById(IDS.share);
+    const contenidoAnterior = boton?.innerHTML || '';
+    if (boton) {
+      boton.disabled = true;
+      boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Preparando…';
+    }
+    try {
+      const { blob, archivo } = await crearPdfProfesionalBlob();
+      const file = new File([blob], archivo, { type: 'application/pdf', lastModified: Date.now() });
+      informeCompartirPendiente = {
+        blob,
+        file,
+        archivo,
+        titulo: 'Informe de asistencia — EduGestión',
+        mensaje: mensajeCompartirInforme()
+      };
+      abrirModalCompartirInforme();
+    } catch (error) {
+      console.error('No se pudo preparar el informe para compartir:', error);
+      if (typeof mostrarToast === 'function') mostrarToast(error.message || 'No se pudo preparar el PDF.', 'error', 'Error al compartir');
+    } finally {
+      if (boton) {
+        boton.disabled = false;
+        boton.innerHTML = contenidoAnterior;
+      }
+    }
+  }
+
+  function endpointEnvioInformeTelegram() {
+    const host = String(window.location.hostname || '').toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost'
+      ? 'https://edugestion-a2xh.vercel.app/api/informe'
+      : '/api/informe';
+  }
+
+  function periodoInformeCompartido() {
+    const desde = document.getElementById(IDS.from)?.value || '';
+    const hasta = document.getElementById(IDS.to)?.value || '';
+    return desde && hasta ? `${desde} al ${hasta}` : desde || hasta || 'Periodo seleccionado';
+  }
+
+  function seccionInformeCompartido() {
+    const control = document.getElementById(IDS.classFilter);
+    if (!control?.value) return 'Todas las secciones';
+    return control.options?.[control.selectedIndex]?.textContent?.trim() || control.value;
+  }
+
+  async function enviarInformeTelegramVinculado() {
+    if (!informeCompartirPendiente) return;
+    if (!String(sessionToken || '').trim()) {
+      if (typeof mostrarToast === 'function') mostrarToast('Tu sesión docente no está disponible. Inicia sesión nuevamente.', 'error', 'Sesión requerida');
+      return;
+    }
+
+    const boton = document.getElementById('stats-share-direct-telegram');
+    const contenidoAnterior = boton?.innerHTML || '';
+    if (boton) {
+      boton.disabled = true;
+      boton.classList.add('is-loading');
+      boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i><span><strong>Enviando al Telegram vinculado…</strong><small>No cierres esta ventana.</small></span>';
+    }
+
+    try {
+      const formulario = new FormData();
+      formulario.append('token', String(sessionToken));
+      formulario.append('pdf', informeCompartirPendiente.file, informeCompartirPendiente.archivo);
+      formulario.append('archivo', informeCompartirPendiente.archivo);
+      formulario.append('mensaje', `${informeCompartirPendiente.mensaje}
+
+Archivo enviado directamente desde EduGestión.`);
+      formulario.append('periodo', periodoInformeCompartido());
+      formulario.append('seccion', seccionInformeCompartido());
+
+      const respuesta = await fetch(endpointEnvioInformeTelegram(), {
+        method: 'POST',
+        body: formulario
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok || datos.ok !== true) {
+        const error = new Error(datos.error || 'No se pudo enviar el informe por Telegram.');
+        error.code = datos.code || 'REPORT_SEND_ERROR';
+        throw error;
+      }
+
+      await cargarHistorialInformesTelegram({ silencioso: true });
+      mostrarResultadoEnvioTelegram(datos);
+      const destino = datos.destino ? ` a ${datos.destino}` : '';
+      if (typeof mostrarToast === 'function') mostrarToast(`El PDF fue enviado${destino}.`, 'success', 'Informe enviado');
+      if (datos.warning && typeof mostrarToast === 'function') {
+        setTimeout(() => mostrarToast(datos.warning, 'warning', 'Aviso de auditoría'), 450);
+      }
+    } catch (error) {
+      console.error('No se pudo enviar el informe al Telegram vinculado:', error);
+      let mensaje = error.message || 'No se pudo enviar el informe por Telegram.';
+      if (error.code === 'TELEGRAM_NOT_LINKED') mensaje = 'Tu cuenta docente no tiene un Telegram vinculado. Vincúlalo desde el botón superior de Telegram.';
+      if (error.code === 'PDF_TOO_LARGE') mensaje = 'El PDF es demasiado pesado. Reduce el periodo o utiliza Descargar PDF.';
+      if (error.code === 'SESSION_REQUIRED' || error.code === 'UNAUTHORIZED') mensaje = 'La sesión venció. Inicia sesión nuevamente y repite el envío.';
+      await cargarHistorialInformesTelegram({ silencioso: true });
+      if (typeof mostrarToast === 'function') mostrarToast(mensaje, 'error', 'No se pudo enviar');
+    } finally {
+      if (boton) {
+        boton.disabled = false;
+        boton.classList.remove('is-loading');
+        boton.innerHTML = contenidoAnterior;
+      }
+    }
+  }
+
+  async function compartirArchivoNativo() {
+    if (!informeCompartirPendiente || !navigator.share) return;
+    try {
+      await navigator.share({
+        title: informeCompartirPendiente.titulo,
+        text: informeCompartirPendiente.mensaje,
+        files: [informeCompartirPendiente.file]
+      });
+      cerrarModalCompartirInforme();
+      if (typeof mostrarToast === 'function') mostrarToast('El informe fue enviado al menú de compartir.', 'success', 'Informe compartido');
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('No se pudo compartir el archivo:', error);
+        if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el menú para compartir. Usa uno de los accesos rápidos.', 'warning', 'Compartir no disponible');
+      }
+    }
+  }
+
+  function descargarInformeCompartirPendiente() {
+    if (!informeCompartirPendiente) return;
+    descargarBlobPdf(informeCompartirPendiente.blob, informeCompartirPendiente.archivo);
+    if (typeof mostrarToast === 'function') mostrarToast('PDF descargado. Ya puedes adjuntarlo.', 'success', 'Informe listo');
+  }
+
+  function abrirCanalCompartirInforme(canal) {
+    if (!informeCompartirPendiente) return;
+    descargarInformeCompartirPendiente();
+    const texto = encodeURIComponent(`${informeCompartirPendiente.mensaje}\n\nAdjunto el informe PDF generado por EduGestión.`);
+    const asunto = encodeURIComponent('Informe de asistencia — EduGestión');
+    const destinos = {
+      whatsapp: `https://wa.me/?text=${texto}`,
+      telegram: `https://t.me/share/url?url=&text=${texto}`,
+      email: `mailto:?subject=${asunto}&body=${texto}`
+    };
+    const destino = destinos[canal];
+    if (destino) window.open(destino, '_blank', 'noopener,noreferrer');
+  }
+
+  async function copiarMensajeInforme() {
+    if (!informeCompartirPendiente) return;
+    try {
+      await navigator.clipboard.writeText(`${informeCompartirPendiente.mensaje}\n\nAdjunto el informe PDF generado por EduGestión.`);
+      if (typeof mostrarToast === 'function') mostrarToast('Mensaje copiado al portapapeles.', 'success', 'Texto copiado');
+    } catch {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo copiar automáticamente.', 'warning', 'Copia no disponible');
+    }
+  }
+
+  function imprimirInforme() {
+    if (!numero(estadisticasData?.resumen?.total)) {
+      if (typeof mostrarToast === 'function') mostrarToast('No hay datos para imprimir.', 'warning', 'Informe vacío');
+      return;
+    }
+    document.body.classList.add('stats-printing');
+    window.addEventListener('afterprint', () => document.body.classList.remove('stats-printing'), { once: true });
+    window.print();
+    setTimeout(() => document.body.classList.remove('stats-printing'), 1500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crearInterfazEstadisticas, { once: true });
+  else crearInterfazEstadisticas();
+})();
+/* EDUGESTION_REPORT_TELEGRAM_SEND_V1_READY */
+/* EDUGESTION_STATS_PANEL_V1_END */
