@@ -1149,146 +1149,166 @@
        </form>
       </div>
      </section>
-     <section class="hidden max-w-4xl mx-auto" id="section-registro">
-      <div class="bg-white p-6 sm:p-8 rounded-3xl shadow-md border border-gray-100">
-       <div class="flex items-center gap-3 border-b border-gray-100 pb-4 mb-6">
-        <div class="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-xl flex items-center justify-center text-xl shadow-sm">
-         <i class="fa-solid fa-user-plus">
-         </i>
-        </div>
-        <div>
-         <h2 class="text-xl font-black text-gray-800">
-          Ingreso Escolar Manual
-         </h2>
-         <p class="text-xs text-gray-400">
-          Inserta nuevos estudiantes directamente a la base de datos matriz
-         </p>
+     <section class="hidden student-register-module" id="section-registro">
+      <header class="student-register-hero">
+       <div class="student-register-hero__content">
+        <span class="student-register-hero__eyebrow"><i class="fa-solid fa-user-graduate"></i> Expediente escolar</span>
+        <h2>Registro de estudiantes</h2>
+        <p>Completa la ficha académica, familiar, deportiva y de salud del estudiante en un solo proceso.</p>
+        <div class="student-register-hero__meta">
+         <span><i class="fa-solid fa-shield-halved"></i> Datos protegidos</span>
+         <span><i class="fa-solid fa-list-check"></i> Formulario guiado</span>
+         <span><i class="fa-solid fa-cloud-arrow-up"></i> Guardado institucional</span>
         </div>
        </div>
-       <form class="space-y-6" id="form-registro-manual">
-        <h4 class="text-xs font-black text-indigo-600 uppercase tracking-widest border-l-4 border-indigo-500 pl-2">
-         1. Informaci&oacute;n del Estudiante
-        </h4>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-         <div class="sm:col-span-2">
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Nombre y Apellido
-          </label>
-          <input class="w-full px-4 py-2 border rounded-xl text-sm" id="reg-nombre" required type="text">
-         </div>
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           C&eacute;dula
-          </label>
-          <input class="w-full px-4 py-2 border rounded-xl text-sm" id="reg-cedula" required type="number">
+       <div class="student-register-hero__icon" aria-hidden="true">
+        <i class="fa-solid fa-user-plus"></i>
+       </div>
+      </header>
+
+      <div class="student-register-layout">
+       <form class="student-register-form" id="form-registro-manual">
+        <div class="student-form-progress" aria-label="Progreso del formulario">
+         <div class="student-form-progress__bar"><span id="student-form-progress-bar"></span></div>
+         <div class="student-form-progress__text">
+          <strong id="student-form-progress-value">0%</strong>
+          <span>Ficha completada</span>
          </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           A&ntilde;o Escolar
-          </label>
-          <select class="w-full px-3 py-2 border rounded-xl text-sm" id="reg-ano">
-           <option value="1ero">
-            1er A&ntilde;o
-           </option>
-           <option value="2do">
-            2do A&ntilde;o
-           </option>
-           <option value="3ero">
-            3er A&ntilde;o
-           </option>
-           <option value="4to">
-            4to A&ntilde;o
-           </option>
-           <option value="5to">
-            5to A&ntilde;o
-           </option>
-          </select>
+
+        <section class="student-form-card student-form-card--academic">
+         <div class="student-form-card__heading">
+          <span><i class="fa-solid fa-address-card"></i></span>
+          <div><small>Paso 1</small><h3>Información académica</h3><p>Datos de identificación y ubicación escolar.</p></div>
          </div>
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Secci&oacute;n
+         <div class="student-form-grid student-form-grid--3">
+          <label class="student-field student-field--wide">
+           <span>Nombre y apellido</span>
+           <input id="reg-nombre" placeholder="Ej.: Marcos Torres" required type="text">
           </label>
-          <select class="w-full px-3 py-2 border rounded-xl text-sm" id="reg-seccion">
-           <option value="A">
-            A
-           </option>
-           <option value="B">
-            B
-           </option>
-          </select>
-         </div>
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Turno
+          <label class="student-field">
+           <span>Cédula</span>
+           <input id="reg-cedula" inputmode="numeric" placeholder="Número de identificación" required type="text">
           </label>
-          <select class="w-full px-3 py-2 border rounded-xl text-sm" id="reg-turno">
-           <option value="Manana">
-            Ma&ntilde;ana
-           </option>
-           <option value="Tarde">
-            Tarde
-           </option>
-          </select>
-         </div>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Direcci&oacute;n
+          <label class="student-field">
+           <span>Año escolar</span>
+           <select id="reg-ano">
+            <option value="1ero">1er Año</option><option value="2do">2do Año</option>
+            <option value="3ero">3er Año</option><option value="4to">4to Año</option>
+            <option value="5to">5to Año</option>
+           </select>
           </label>
-          <input class="w-full px-4 py-2 border rounded-xl text-sm" id="reg-direccion" placeholder="Ej: Urb. Centro, Calle 5" required type="text">
-         </div>
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Repite
+          <label class="student-field">
+           <span>Sección</span>
+           <select id="reg-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
           </label>
-          <select class="w-full px-3 py-2 border rounded-xl text-sm" id="reg-repite">
-           <option value="No">
-            No
-           </option>
-           <option value="Si">
-            S&iacute;
-           </option>
-          </select>
-         </div>
-         <div class="sm:col-span-2">
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Materia Pendiente
+          <label class="student-field">
+           <span>Turno</span>
+           <select id="reg-turno"><option value="Manana">Mañana</option><option value="Tarde">Tarde</option></select>
           </label>
-          <input class="w-full px-4 py-2 border rounded-xl text-sm" id="reg-pendiente" placeholder="Dejar en blanco si no aplica" type="text">
-         </div>
-        </div>
-        <h4 class="text-xs font-black text-emerald-600 uppercase tracking-widest border-l-4 border-emerald-500 pl-2 pt-2">
-         2. Informaci&oacute;n del Representante
-        </h4>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Nombre Representante
+          <label class="student-field student-field--two">
+           <span>Dirección</span>
+           <input id="reg-direccion" placeholder="Urbanización, calle, número de vivienda" required type="text">
           </label>
-          <input class="w-full px-4 py-2 border rounded-xl text-sm" id="reg-representante" required type="text">
-         </div>
-         <div>
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           WhatsApp
+          <label class="student-field">
+           <span>¿Repite el año?</span>
+           <select id="reg-repite"><option value="No">No</option><option value="Si">Sí</option></select>
           </label>
-          <input class="w-full px-4 py-2 border rounded-xl text-sm" id="reg-telefono-rep" required type="tel">
-         </div>
-         <div class="sm:col-span-2">
-          <label class="block text-xs font-bold text-gray-500 mb-1">
-           Correo del representante <span class="font-normal text-gray-400">(opcional)</span>
+          <label class="student-field student-field--wide">
+           <span>Materia pendiente <em>Opcional</em></span>
+           <input id="reg-pendiente" placeholder="Déjalo en blanco si no aplica" type="text">
           </label>
-          <input autocomplete="email" class="w-full px-4 py-2 border rounded-xl text-sm" id="reg-email-rep" placeholder="representante@correo.com" type="email">
          </div>
-        </div>
-        <div class="pt-4 flex justify-end">
-         <button class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 py-3 rounded-xl shadow-md transition" id="btn-registrar-matriz" type="submit">
-          Registrar Alumno
-         </button>
+        </section>
+
+        <section class="student-form-card student-form-card--family">
+         <div class="student-form-card__heading">
+          <span><i class="fa-solid fa-people-roof"></i></span>
+          <div><small>Paso 2</small><h3>Representante y familia</h3><p>Información para contacto y seguimiento institucional.</p></div>
+         </div>
+         <div class="student-form-grid student-form-grid--2">
+          <label class="student-field">
+           <span>Nombre del representante</span>
+           <input id="reg-representante" placeholder="Nombre completo" required type="text">
+          </label>
+          <label class="student-field">
+           <span>WhatsApp</span>
+           <input id="reg-telefono-rep" inputmode="tel" placeholder="Ej.: 58414678097" required type="tel">
+          </label>
+          <label class="student-field student-field--wide">
+           <span>Correo del representante <em>Opcional</em></span>
+           <input autocomplete="email" id="reg-email-rep" placeholder="representante@correo.com" type="email">
+          </label>
+          <label class="student-field">
+           <span>¿Tiene hermanos en la institución?</span>
+           <select id="reg-tiene-hermanos"><option value="No">No</option><option value="Si">Sí</option></select>
+          </label>
+          <label class="student-field student-conditional-field is-hidden" id="field-reg-hermanos">
+           <span>Nombre(s), año y sección</span>
+           <input id="reg-hermanos" placeholder="Ej.: Ana Torres, 3ero B" type="text">
+          </label>
+         </div>
+        </section>
+
+        <section class="student-form-card student-form-card--wellbeing">
+         <div class="student-form-card__heading">
+          <span><i class="fa-solid fa-heart-pulse"></i></span>
+          <div><small>Paso 3</small><h3>Bienestar, deporte y salud</h3><p>Datos importantes para acompañar al estudiante de manera segura.</p></div>
+         </div>
+         <div class="student-choice-grid">
+          <div class="student-choice-card">
+           <div class="student-choice-card__icon student-choice-card__icon--sport"><i class="fa-solid fa-person-running"></i></div>
+           <label class="student-field"><span>¿Practica algún deporte?</span>
+            <select id="reg-practica-deporte"><option value="No">No</option><option value="Si">Sí</option></select>
+           </label>
+           <label class="student-field student-conditional-field is-hidden" id="field-reg-deporte">
+            <span>Deporte que practica</span><input id="reg-deporte" placeholder="Ej.: fútbol, natación, voleibol" type="text">
+           </label>
+          </div>
+          <div class="student-choice-card">
+           <div class="student-choice-card__icon student-choice-card__icon--health"><i class="fa-solid fa-notes-medical"></i></div>
+           <label class="student-field"><span>¿Presenta alguna alergia?</span>
+            <select id="reg-tiene-alergia"><option value="No">No</option><option value="Si">Sí</option></select>
+           </label>
+           <label class="student-field student-conditional-field is-hidden" id="field-reg-alergia">
+            <span>Alergia y observaciones</span><textarea id="reg-alergias" placeholder="Medicamentos, alimentos, contacto u otra información importante"></textarea>
+           </label>
+          </div>
+         </div>
+         <label class="student-field student-field--top-space">
+          <span>Observaciones adicionales <em>Opcional</em></span>
+          <textarea id="reg-observaciones" placeholder="Condiciones médicas, recomendaciones, información de interés escolar..."></textarea>
+         </label>
+        </section>
+
+        <div class="student-form-actions">
+         <button class="student-btn student-btn--ghost" id="btn-limpiar-registro" type="button"><i class="fa-solid fa-eraser"></i><span>Limpiar formulario</span></button>
+         <button class="student-btn student-btn--primary" id="btn-registrar-matriz" type="submit"><i class="fa-solid fa-user-check"></i><span>Registrar estudiante</span></button>
         </div>
        </form>
+
+       <aside class="student-register-summary">
+        <div class="student-summary-card student-summary-card--profile">
+         <span class="student-summary-avatar"><i class="fa-solid fa-user-graduate"></i></span>
+         <small>Vista previa</small>
+         <h3 id="student-preview-name">Nuevo estudiante</h3>
+         <p id="student-preview-course">1er Año · Sección A · Mañana</p>
+         <div class="student-summary-status"><i class="fa-solid fa-circle-info"></i><span>Completa los campos para actualizar esta ficha.</span></div>
+        </div>
+        <div class="student-summary-card">
+         <h4><i class="fa-solid fa-clipboard-list"></i> Resumen de la ficha</h4>
+         <ul class="student-summary-list">
+          <li><span>Representante</span><strong id="student-preview-representative">No registrado</strong></li>
+          <li><span>Deporte</span><strong id="student-preview-sport">No practica</strong></li>
+          <li><span>Hermanos</span><strong id="student-preview-siblings">No</strong></li>
+          <li><span>Alergias</span><strong id="student-preview-allergies">No registradas</strong></li>
+         </ul>
+        </div>
+        <div class="student-summary-tip">
+         <i class="fa-solid fa-shield-heart"></i>
+         <div><strong>Información sensible</strong><p>Registra únicamente datos relevantes para el acompañamiento educativo y la seguridad del estudiante.</p></div>
+        </div>
+       </aside>
       </div>
      </section>
      <section class="hidden max-w-[1400px] mx-auto space-y-6" id="section-horario">
