@@ -3539,6 +3539,223 @@ const SESSION_KEY = 'edugestion_session_v2';
 
   crearBibliotecaDigital();
   window.addEventListener('DOMContentLoaded', crearBibliotecaDigital);
+
+
+/* =========================================================
+   ASISTENCIA DEL PROFESOR
+   ========================================================= */
+(() => {
+  const IDS = { tab:'tab-asistencia-docente', section:'section-asistencia-docente' };
+  let dataAsistenciaDocente = null;
+
+  const escAD = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const horasTexto = minutos => {
+    const n = Math.max(0, Number(minutos) || 0);
+    const h = Math.floor(n / 60);
+    const m = n % 60;
+    return `${h} h ${String(m).padStart(2,'0')} min`;
+  };
+
+  function crearSeccion() {
+    if (document.getElementById(IDS.tab)) return;
+    const nav = document.getElementById('app-nav');
+    const main = document.getElementById('app-main');
+    if (!nav || !main) return;
+
+    const tab = document.createElement('button');
+    tab.id = IDS.tab;
+    tab.type = 'button';
+    tab.className = 'nav-item';
+    tab.setAttribute('aria-selected','false');
+    tab.dataset.title = 'Mi asistencia laboral';
+    tab.dataset.description = 'Registra tu llegada, salida, ausencias y horas trabajadas.';
+    tab.innerHTML = '<i class="fa-solid fa-business-time"></i><span>Mi asistencia laboral</span>';
+
+    const horario = nav.querySelector('#tab-horario');
+    if (horario?.nextSibling) nav.insertBefore(tab, horario.nextSibling);
+    else nav.appendChild(tab);
+
+    const section = document.createElement('section');
+    section.id = IDS.section;
+    section.className = 'hidden teacher-work-attendance';
+    section.innerHTML = `
+      <header class="platform-hero teacher-attendance-hero">
+        <div class="platform-hero__copy">
+          <span class="platform-hero__eyebrow"><i class="fa-solid fa-fingerprint"></i> Registro personal del docente</span>
+          <h2>Mi asistencia laboral</h2>
+          <p>Registra la hora de llegada, la hora de salida o informa una ausencia. Consulta tus días y horas trabajadas.</p>
+          <div class="platform-hero__badges">
+            <span><i class="fa-solid fa-clock"></i> Llegada y salida</span>
+            <span><i class="fa-solid fa-calendar-check"></i> Resumen semanal y mensual</span>
+            <span><i class="fa-brands fa-telegram"></i> Disponible en Telegram</span>
+          </div>
+        </div>
+        <div class="platform-hero__icon"><i class="fa-solid fa-user-clock"></i></div>
+      </header>
+
+      <section class="teacher-clock-card">
+        <div class="teacher-clock-card__date"><small>Fecha y hora actual</small><strong id="teacher-clock-date">—</strong><time id="teacher-clock-time">--:--:--</time></div>
+        <div class="teacher-clock-card__status" id="teacher-attendance-status"><i class="fa-solid fa-circle-info"></i><div><small>Estado de hoy</small><strong>Sin registro</strong><span>Registra tu llegada o una ausencia.</span></div></div>
+        <div class="teacher-clock-actions">
+          <button id="teacher-register-arrival" type="button"><i class="fa-solid fa-right-to-bracket"></i><span><strong>Registrar llegada</strong><small>Guardar la hora actual</small></span></button>
+          <button id="teacher-register-exit" type="button"><i class="fa-solid fa-right-from-bracket"></i><span><strong>Registrar salida</strong><small>Calcular horas trabajadas</small></span></button>
+          <button id="teacher-register-absence" type="button"><i class="fa-solid fa-user-xmark"></i><span><strong>No asistiré</strong><small>Informar el motivo</small></span></button>
+        </div>
+      </section>
+
+      <section class="teacher-hours-summary" id="teacher-hours-summary"></section>
+
+      <section class="teacher-attendance-layout">
+        <section class="teacher-attendance-panel">
+          <header><div><span><i class="fa-solid fa-chart-column"></i></span><div><h3>Horas de clase registradas</h3><p>Promedios calculados con tus entradas y salidas.</p></div></div></header>
+          <div id="teacher-hours-chart" class="teacher-hours-chart"></div>
+        </section>
+        <section class="teacher-attendance-panel">
+          <header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Historial reciente</h3><p>Últimos registros de asistencia laboral.</p></div></div></header>
+          <div id="teacher-attendance-history"></div>
+        </section>
+      </section>
+
+      <div class="teacher-absence-modal hidden" id="teacher-absence-modal" aria-hidden="true">
+        <div class="teacher-absence-modal__backdrop" data-close-teacher-absence></div>
+        <form class="teacher-absence-modal__card" id="teacher-absence-form">
+          <header><span><i class="fa-solid fa-user-xmark"></i></span><div><small>Registro de ausencia</small><h3>¿Por qué no asistirás?</h3></div><button type="button" data-close-teacher-absence><i class="fa-solid fa-xmark"></i></button></header>
+          <label><span>Fecha</span><input id="teacher-absence-date" type="date" required></label>
+          <label><span>Motivo *</span><textarea id="teacher-absence-reason" rows="5" maxlength="600" required placeholder="Ej.: reposo médico, emergencia familiar, trámite institucional…"></textarea></label>
+          <footer><button type="button" data-close-teacher-absence>Cancelar</button><button type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar ausencia</button></footer>
+        </form>
+      </div>
+    `;
+    main.appendChild(section);
+
+    tab.addEventListener('click', abrir);
+    section.querySelector('#teacher-register-arrival')?.addEventListener('click', registrarLlegada);
+    section.querySelector('#teacher-register-exit')?.addEventListener('click', registrarSalida);
+    section.querySelector('#teacher-register-absence')?.addEventListener('click', abrirAusencia);
+    section.querySelector('#teacher-absence-form')?.addEventListener('submit', guardarAusencia);
+    section.querySelectorAll('[data-close-teacher-absence]').forEach(b => b.addEventListener('click', cerrarAusencia));
+    iniciarReloj();
+  }
+
+  function iniciarReloj() {
+    const tick = () => {
+      const ahora = new Date();
+      const date = document.getElementById('teacher-clock-date');
+      const time = document.getElementById('teacher-clock-time');
+      if (date) date.textContent = ahora.toLocaleDateString('es-VE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+      if (time) time.textContent = ahora.toLocaleTimeString('es-VE',{hour12:false});
+    };
+    tick();
+    setInterval(tick,1000);
+  }
+
+  async function abrir() {
+    if (String(profesorActual?.rol || '').toLowerCase() === 'director') return;
+    document.querySelectorAll('.nav-item').forEach(i => { i.classList.remove('is-active'); i.setAttribute('aria-selected','false'); });
+    document.querySelectorAll('#app-main > section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(IDS.tab)?.classList.add('is-active');
+    document.getElementById(IDS.tab)?.setAttribute('aria-selected','true');
+    document.getElementById(IDS.section)?.classList.remove('hidden');
+    if (pageTitle) pageTitle.textContent = 'Mi asistencia laboral';
+    if (pageDescription) pageDescription.textContent = 'Entradas, salidas, ausencias y horas trabajadas.';
+    window.scrollTo({top:0,behavior:'smooth'});
+    await cargar(true);
+  }
+
+  async function cargar(forzar=false) {
+    if (dataAsistenciaDocente && !forzar) return render();
+    try {
+      dataAsistenciaDocente = await apiRequest('obtenerAsistenciaDocente');
+      render();
+    } catch (error) {
+      mostrarToast(error.message || 'No se pudo cargar la asistencia docente.','error','Error');
+    }
+  }
+
+  function render() {
+    if (!dataAsistenciaDocente) return;
+    const hoy = dataAsistenciaDocente.hoy || {};
+    const status = document.getElementById('teacher-attendance-status');
+    const llegada = document.getElementById('teacher-register-arrival');
+    const salida = document.getElementById('teacher-register-exit');
+    const ausencia = document.getElementById('teacher-register-absence');
+
+    if (hoy.estado === 'Ausente') {
+      status.className = 'teacher-clock-card__status is-absent';
+      status.innerHTML = `<i class="fa-solid fa-user-xmark"></i><div><small>Estado de hoy</small><strong>Ausente</strong><span>${escAD(hoy.motivoAusencia || 'Motivo registrado')}</span></div>`;
+    } else if (hoy.horaSalida) {
+      status.className = 'teacher-clock-card__status is-complete';
+      status.innerHTML = `<i class="fa-solid fa-circle-check"></i><div><small>Jornada completada</small><strong>${escAD(hoy.horaLlegada)} – ${escAD(hoy.horaSalida)}</strong><span>${horasTexto(hoy.minutosTrabajados)}</span></div>`;
+    } else if (hoy.horaLlegada) {
+      status.className = 'teacher-clock-card__status is-present';
+      status.innerHTML = `<i class="fa-solid fa-person-walking-arrow-right"></i><div><small>Entrada registrada</small><strong>Desde las ${escAD(hoy.horaLlegada)}</strong><span>Registra tu salida al finalizar.</span></div>`;
+    } else {
+      status.className = 'teacher-clock-card__status';
+      status.innerHTML = '<i class="fa-solid fa-circle-info"></i><div><small>Estado de hoy</small><strong>Sin registro</strong><span>Registra tu llegada o una ausencia.</span></div>';
+    }
+
+    if (llegada) llegada.disabled = Boolean(hoy.horaLlegada || hoy.estado === 'Ausente');
+    if (salida) salida.disabled = Boolean(!hoy.horaLlegada || hoy.horaSalida || hoy.estado === 'Ausente');
+    if (ausencia) ausencia.disabled = Boolean(hoy.horaLlegada || hoy.estado === 'Ausente');
+
+    const r = dataAsistenciaDocente.resumen || {};
+    const summary = document.getElementById('teacher-hours-summary');
+    if (summary) summary.innerHTML = [
+      ['fa-sun',r.dia,'Hoy'],
+      ['fa-calendar-week',r.semana,'Esta semana'],
+      ['fa-calendar-days',r.mes,'Este mes']
+    ].map(([icon,x,label]) => `<article><span><i class="fa-solid ${icon}"></i></span><div><small>${label}</small><strong>${Number(x?.horas||0).toFixed(1)} h</strong><em>${x?.diasTrabajados||0} días · Promedio ${Number(x?.promedioHorasDia||0).toFixed(1)} h/día</em></div></article>`).join('');
+
+    const chart = document.getElementById('teacher-hours-chart');
+    if (chart) {
+      const max = Math.max(1, ...(dataAsistenciaDocente.registros||[]).slice(0,7).map(x=>Number(x.minutosTrabajados||0)));
+      chart.innerHTML = (dataAsistenciaDocente.registros||[]).filter(x=>x.estado==='Presente').slice(0,7).reverse().map(x => `<article><div><span>${escAD(x.fecha)}</span><strong>${horasTexto(x.minutosTrabajados)}</strong></div><progress max="${max}" value="${Number(x.minutosTrabajados||0)}"></progress></article>`).join('') || '<div class="teacher-attendance-empty">Aún no hay jornadas completas para graficar.</div>';
+    }
+
+    const history = document.getElementById('teacher-attendance-history');
+    if (history) history.innerHTML = (dataAsistenciaDocente.registros||[]).slice(0,12).map(x => `<article class="${x.estado==='Ausente'?'is-absent':''}"><span><i class="fa-solid ${x.estado==='Ausente'?'fa-user-xmark':'fa-user-clock'}"></i></span><div><strong>${escAD(x.fecha)} · ${escAD(x.estado)}</strong><small>${x.estado==='Ausente'?escAD(x.motivoAusencia):`${escAD(x.horaLlegada||'—')} – ${escAD(x.horaSalida||'Pendiente')}`}</small></div><em>${x.estado==='Ausente'?'0 h':horasTexto(x.minutosTrabajados)}</em></article>`).join('') || '<div class="teacher-attendance-empty">No hay registros todavía.</div>';
+  }
+
+  async function accion(action, mensaje) {
+    try {
+      await apiRequest(action);
+      dataAsistenciaDocente = null;
+      await cargar(true);
+      mostrarToast(mensaje,'success','Registro guardado');
+    } catch(error) {
+      mostrarToast(error.message || 'No se pudo guardar.','error','Error');
+    }
+  }
+  function registrarLlegada(){ accion('registrarLlegadaDocente','Hora de llegada registrada.'); }
+  function registrarSalida(){ accion('registrarSalidaDocente','Hora de salida registrada.'); }
+
+  function abrirAusencia(){
+    const modal=document.getElementById('teacher-absence-modal');
+    const date=document.getElementById('teacher-absence-date');
+    if(date) date.value=new Date().toISOString().slice(0,10);
+    modal?.classList.remove('hidden'); modal?.setAttribute('aria-hidden','false');
+  }
+  function cerrarAusencia(){
+    const modal=document.getElementById('teacher-absence-modal');
+    modal?.classList.add('hidden'); modal?.setAttribute('aria-hidden','true');
+  }
+  async function guardarAusencia(e){
+    e.preventDefault();
+    try {
+      await apiRequest('registrarAusenciaDocente',{
+        fecha:document.getElementById('teacher-absence-date')?.value,
+        motivo:document.getElementById('teacher-absence-reason')?.value.trim()
+      });
+      cerrarAusencia(); dataAsistenciaDocente=null; await cargar(true);
+      mostrarToast('Ausencia registrada.','success','Registro guardado');
+    } catch(error){ mostrarToast(error.message,'error','No se guardó'); }
+  }
+
+  crearSeccion();
+  window.addEventListener('DOMContentLoaded',crearSeccion);
+})();
+
+
 })();
 
 
