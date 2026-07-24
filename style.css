@@ -4871,3 +4871,45 @@ body.stats-share-open { overflow: hidden; }
   .stats-share-history-item > b { grid-column:2; justify-self:start; }
 }
 /* EDUGESTION_REPORT_HISTORY_V1_END */
+
+
+/* EDUGESTION_FASE_2_0_HISTORIAL_TELEGRAM_START */
+.stats-share-dialog { width:min(620px, calc(100vw - 28px)); max-height:calc(100vh - 24px); overflow:auto; }
+.stats-share-history-head > button { border:1px solid #f0c8c5; border-radius:10px; background:#fff6f5; color:#bc4b45; padding:7px 10px; font-size:.66rem; font-weight:850; cursor:pointer; }
+.stats-share-history-head > button:hover { background:#ffebe9; }
+.stats-share-history-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:10px 0 12px; }
+.stats-share-history-summary article { padding:10px; border:1px solid #dce8ef; border-radius:12px; background:#f8fbfd; text-align:center; }
+.stats-share-history-summary strong,.stats-share-history-summary span { display:block; }
+.stats-share-history-summary strong { color:#214c68; font-size:1rem; font-weight:900; }
+.stats-share-history-summary span { margin-top:2px; color:#7d92a2; font-size:.61rem; font-weight:800; text-transform:uppercase; }
+.stats-share-history-summary .is-sent strong { color:#16814c; }
+.stats-share-history-summary .is-error strong { color:#c94740; }
+.stats-share-history-filters { display:grid; grid-template-columns:minmax(0,1.4fr) .8fr 1fr auto; gap:8px; align-items:end; margin-bottom:9px; }
+.stats-share-history-filters label > span { display:block; margin:0 0 4px; color:#72899a; font-size:.58rem; font-weight:900; letter-spacing:.05em; text-transform:uppercase; }
+.stats-share-history-filters label > div { position:relative; }
+.stats-share-history-filters label > div i { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#89a0b0; font-size:.7rem; }
+.stats-share-history-filters input,.stats-share-history-filters select { width:100%; min-height:36px; border:1px solid #d5e3ec; border-radius:10px; background:#fff; color:#29495f; padding:7px 9px; font-size:.68rem; outline:none; }
+.stats-share-history-filters label > div input { padding-left:29px; }
+.stats-share-history-filters input:focus,.stats-share-history-filters select:focus { border-color:#48a7d6; box-shadow:0 0 0 3px rgba(72,167,214,.12); }
+.stats-share-history-filters > button { min-height:36px; border:1px solid #d4e3ec; border-radius:10px; background:#f6fafc; color:#42647a; padding:7px 10px; font-size:.64rem; font-weight:850; cursor:pointer; white-space:nowrap; }
+.stats-share-history-count { display:flex; align-items:center; justify-content:space-between; margin:4px 1px 8px; color:#7a91a1; font-size:.62rem; }
+.stats-share-history-count b { color:#2b6688; }
+.stats-share-history-item { grid-template-columns:34px minmax(0,1fr) auto; }
+.stats-share-history-actions { grid-column:2 / 4; display:flex; justify-content:flex-end; gap:6px; padding-top:5px; border-top:1px dashed #e1e9ee; }
+.stats-share-history-actions button { display:inline-flex; align-items:center; gap:5px; border:1px solid #d5e5ee; border-radius:8px; background:#fff; color:#477086; padding:5px 8px; font-size:.59rem; font-weight:850; cursor:pointer; }
+.stats-share-history-actions button:hover { background:#eef8fd; color:#167baa; }
+.stats-share-history-actions button[data-history-action="delete"] { color:#bd514b; border-color:#efd3d1; }
+.stats-share-history-actions button[data-history-action="delete"]:hover { background:#fff0ef; }
+.stats-share-history-note { display:flex; gap:7px; margin:10px 1px 0; color:#7b91a1; font-size:.61rem; line-height:1.45; }
+.stats-share-history-note i { margin-top:2px; color:#2997cc; }
+@media (max-width:640px) {
+  .stats-share-dialog { width:min(100% - 18px, 620px); max-height:calc(100vh - 12px); padding:20px 16px; }
+  .stats-share-history-filters { grid-template-columns:1fr 1fr; }
+  .stats-share-history-filters label:first-child { grid-column:1 / -1; }
+  .stats-share-history-filters > button { width:100%; }
+  .stats-share-history-item { grid-template-columns:32px minmax(0,1fr); }
+  .stats-share-history-item > b { grid-column:2; justify-self:start; }
+  .stats-share-history-actions { grid-column:1 / -1; justify-content:stretch; }
+  .stats-share-history-actions button { flex:1; justify-content:center; min-height:34px; }
+}
+/* EDUGESTION_FASE_2_0_HISTORIAL_TELEGRAM_END */

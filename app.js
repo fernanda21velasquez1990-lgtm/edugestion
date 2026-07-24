@@ -2696,7 +2696,7 @@ const SESSION_KEY = 'edugestion_session_v2';
   let cargando = false;
   let catalogoSecciones = [];
   let informeCompartirPendiente = null;
-  const INFORME_HISTORIAL_MAX = 10;
+  const INFORME_HISTORIAL_MAX = 50;
 
   function claveHistorialInformesTelegram() {
     const docente = profesorActual?.id || profesorActual?.usuario || 'docente';
@@ -2739,20 +2739,84 @@ const SESSION_KEY = 'edugestion_session_v2';
     return fecha.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
+  function fechaIsoLocalHistorial(valor) {
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return '';
+    const local = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  }
+
+  function filtrosHistorialTelegram() {
+    return {
+      texto: String(document.getElementById('stats-history-search')?.value || '').trim().toLowerCase(),
+      estado: String(document.getElementById('stats-history-status')?.value || ''),
+      fecha: String(document.getElementById('stats-history-date')?.value || '')
+    };
+  }
+
+  function historialFiltradoTelegram() {
+    const filtros = filtrosHistorialTelegram();
+    return leerHistorialInformesTelegram().filter(item => {
+      const textoItem = `${item.archivo || ''} ${item.periodo || ''} ${item.seccion || ''} ${item.destino || ''} ${item.mensaje || ''}`.toLowerCase();
+      if (filtros.texto && !textoItem.includes(filtros.texto)) return false;
+      if (filtros.estado && String(item.estado || '') !== filtros.estado) return false;
+      if (filtros.fecha && fechaIsoLocalHistorial(item.fechaIso) !== filtros.fecha) return false;
+      return true;
+    });
+  }
+
+  function actualizarResumenHistorialTelegram() {
+    const historial = leerHistorialInformesTelegram();
+    const enviados = historial.filter(item => item.estado === 'enviado').length;
+    const errores = historial.filter(item => item.estado === 'error').length;
+    const asignar = (id, valor) => { const nodo = document.getElementById(id); if (nodo) nodo.textContent = String(valor); };
+    asignar('stats-history-total', historial.length);
+    asignar('stats-history-sent', enviados);
+    asignar('stats-history-errors', errores);
+  }
+
+  function eliminarRegistroHistorialTelegram(id) {
+    const historial = leerHistorialInformesTelegram().filter(item => String(item.id) !== String(id));
+    try { localStorage.setItem(claveHistorialInformesTelegram(), JSON.stringify(historial)); } catch (error) {}
+    renderHistorialInformesTelegram();
+  }
+
+  function limpiarHistorialInformesTelegram() {
+    if (!confirm('¿Eliminar todo el historial local de envíos de este docente?')) return;
+    try { localStorage.removeItem(claveHistorialInformesTelegram()); } catch (error) {}
+    renderHistorialInformesTelegram();
+    if (typeof mostrarToast === 'function') mostrarToast('El historial local fue eliminado.', 'success', 'Historial limpio');
+  }
+
+  async function reenviarRegistroHistorialTelegram(id) {
+    const registro = leerHistorialInformesTelegram().find(item => String(item.id) === String(id));
+    if (!registro || !informeCompartirPendiente) return;
+    if (typeof mostrarToast === 'function') mostrarToast('Se reenviará el informe que está preparado actualmente.', 'info', 'Reenvío iniciado');
+    await enviarInformeTelegramVinculado();
+  }
+
   function renderHistorialInformesTelegram() {
     const contenedor = document.getElementById('stats-share-history-list');
     if (!contenedor) return;
-    const historial = leerHistorialInformesTelegram();
+    const historialCompleto = leerHistorialInformesTelegram();
+    const historial = historialFiltradoTelegram();
+    actualizarResumenHistorialTelegram();
+    const contador = document.getElementById('stats-history-visible-count');
+    if (contador) contador.textContent = `${historial.length} de ${historialCompleto.length}`;
     if (!historial.length) {
-      contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-regular fa-clock"></i><span>Aún no hay envíos registrados en este dispositivo.</span></div>';
+      contenedor.innerHTML = '<div class="stats-share-history-empty"><i class="fa-regular fa-folder-open"></i><span>No hay registros que coincidan con los filtros seleccionados.</span></div>';
       return;
     }
     contenedor.innerHTML = historial.map(item => {
       const enviado = item.estado === 'enviado';
-      return `<article class="stats-share-history-item ${enviado ? 'is-sent' : 'is-error'}">
+      return `<article class="stats-share-history-item ${enviado ? 'is-sent' : 'is-error'}" data-history-id="${seguro(item.id || '')}">
         <span class="stats-share-history-icon"><i class="fa-solid ${enviado ? 'fa-circle-check' : 'fa-circle-xmark'}"></i></span>
-        <div><strong>${seguro(item.archivo || 'Informe de asistencia.pdf')}</strong><small>${seguro(fechaHoraHistorial(item.fechaIso))} · ${seguro(item.periodo || 'Periodo seleccionado')}</small><em>${seguro(item.destino || item.mensaje || (enviado ? 'Telegram vinculado' : 'No enviado'))}</em></div>
+        <div class="stats-share-history-copy"><strong>${seguro(item.archivo || 'Informe de asistencia.pdf')}</strong><small>${seguro(fechaHoraHistorial(item.fechaIso))} · ${seguro(item.periodo || 'Periodo seleccionado')}</small><em>${seguro(item.seccion || 'Todas las secciones')} · ${seguro(item.destino || item.mensaje || (enviado ? 'Telegram vinculado' : 'No enviado'))}</em></div>
         <b>${enviado ? 'Enviado' : 'Error'}</b>
+        <div class="stats-share-history-actions">
+          <button type="button" data-history-action="resend" data-history-id="${seguro(item.id || '')}" title="Reenviar el informe actual"><i class="fa-solid fa-paper-plane"></i><span>Reenviar</span></button>
+          <button type="button" data-history-action="delete" data-history-id="${seguro(item.id || '')}" title="Eliminar registro"><i class="fa-solid fa-trash-can"></i><span>Eliminar</span></button>
+        </div>
       </article>`;
     }).join('');
   }
@@ -3366,8 +3430,24 @@ const SESSION_KEY = 'edugestion_session_v2';
           <button id="stats-share-copy" type="button"><i class="fa-regular fa-copy"></i> Copiar mensaje</button>
         </div>
         <section class="stats-share-history" aria-labelledby="stats-share-history-title">
-          <div class="stats-share-history-head"><div><span>Registro local</span><h4 id="stats-share-history-title">Historial de envíos</h4></div><i class="fa-solid fa-clock-rotate-left"></i></div>
+          <div class="stats-share-history-head">
+            <div><span>Panel de control · Fase 2.0</span><h4 id="stats-share-history-title">Historial completo de envíos</h4></div>
+            <button id="stats-history-clear" type="button" title="Eliminar todo el historial"><i class="fa-solid fa-trash-can"></i> Limpiar</button>
+          </div>
+          <div class="stats-share-history-summary">
+            <article><strong id="stats-history-total">0</strong><span>Total</span></article>
+            <article class="is-sent"><strong id="stats-history-sent">0</strong><span>Enviados</span></article>
+            <article class="is-error"><strong id="stats-history-errors">0</strong><span>Errores</span></article>
+          </div>
+          <div class="stats-share-history-filters">
+            <label><span>Buscar</span><div><i class="fa-solid fa-magnifying-glass"></i><input id="stats-history-search" type="search" placeholder="Archivo, periodo o sección"></div></label>
+            <label><span>Estado</span><select id="stats-history-status"><option value="">Todos</option><option value="enviado">Enviados</option><option value="error">Errores</option></select></label>
+            <label><span>Fecha</span><input id="stats-history-date" type="date"></label>
+            <button id="stats-history-reset" type="button"><i class="fa-solid fa-eraser"></i> Restablecer</button>
+          </div>
+          <div class="stats-share-history-count"><span>Registros visibles</span><b id="stats-history-visible-count">0 de 0</b></div>
           <div id="stats-share-history-list" class="stats-share-history-list"></div>
+          <p class="stats-share-history-note"><i class="fa-solid fa-circle-info"></i> El historial se guarda localmente en este dispositivo. “Reenviar” envía nuevamente el informe que está preparado en el modal.</p>
         </section>
       </div>`;
     document.body.appendChild(modal);
@@ -3377,6 +3457,26 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById('stats-share-native')?.addEventListener('click', compartirArchivoNativo);
     document.getElementById('stats-share-download')?.addEventListener('click', descargarInformeCompartirPendiente);
     document.getElementById('stats-share-copy')?.addEventListener('click', copiarMensajeInforme);
+    document.getElementById('stats-history-clear')?.addEventListener('click', limpiarHistorialInformesTelegram);
+    ['stats-history-search', 'stats-history-status', 'stats-history-date'].forEach(id => {
+      document.getElementById(id)?.addEventListener(id === 'stats-history-search' ? 'input' : 'change', renderHistorialInformesTelegram);
+    });
+    document.getElementById('stats-history-reset')?.addEventListener('click', () => {
+      const search = document.getElementById('stats-history-search');
+      const status = document.getElementById('stats-history-status');
+      const date = document.getElementById('stats-history-date');
+      if (search) search.value = '';
+      if (status) status.value = '';
+      if (date) date.value = '';
+      renderHistorialInformesTelegram();
+    });
+    document.getElementById('stats-share-history-list')?.addEventListener('click', async evento => {
+      const boton = evento.target.closest('[data-history-action]');
+      if (!boton) return;
+      const id = boton.dataset.historyId;
+      if (boton.dataset.historyAction === 'delete') eliminarRegistroHistorialTelegram(id);
+      if (boton.dataset.historyAction === 'resend') await reenviarRegistroHistorialTelegram(id);
+    });
     modal.querySelectorAll('[data-share-channel]').forEach(boton => boton.addEventListener('click', () => abrirCanalCompartirInforme(boton.dataset.shareChannel)));
     modal.addEventListener('click', evento => { if (evento.target === modal) cerrarModalCompartirInforme(); });
   }
