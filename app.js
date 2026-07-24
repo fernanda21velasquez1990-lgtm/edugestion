@@ -3813,6 +3813,14 @@ Archivo enviado directamente desde EduGestión.`);
         </div>
       </section>
 
+      <section class="admin-history-teacher-summary-card">
+        <div class="admin-history-table-head">
+          <div><span>Resumen por docente</span><h3>Actividad institucional</h3></div>
+          <small id="admin-history-teacher-summary-count">0 docentes</small>
+        </div>
+        <div class="admin-history-teacher-summary" id="admin-history-teacher-summary"></div>
+      </section>
+
       <section class="admin-history-table-card">
         <div class="admin-history-table-head">
           <div><span>Consulta institucional</span><h3>Registros de envío</h3></div>
@@ -3821,12 +3829,23 @@ Archivo enviado directamente desde EduGestión.`);
         <div class="admin-history-loading hidden" id="admin-history-loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Consultando servidor…</div>
         <div class="admin-history-table-wrap">
           <table>
-            <thead><tr><th>Fecha</th><th>Docente</th><th>Archivo</th><th>Periodo / Sección</th><th>Destino</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Docente</th><th>Archivo</th><th>Periodo / Sección</th><th>Destino</th><th>Estado</th><th>Detalle</th></tr></thead>
             <tbody id="${ids.body}"></tbody>
           </table>
         </div>
         <div class="admin-history-cards" id="${ids.cards}"></div>
-      </section>`;
+      </section>
+
+      <div class="admin-history-detail-modal hidden" id="admin-history-detail-modal" aria-hidden="true">
+        <div class="admin-history-detail-backdrop" data-close-admin-detail="true"></div>
+        <div class="admin-history-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-history-detail-title">
+          <header>
+            <div><span>Registro institucional</span><h3 id="admin-history-detail-title">Detalle del envío</h3></div>
+            <button type="button" data-close-admin-detail="true" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+          </header>
+          <div id="admin-history-detail-content" class="admin-history-detail-content"></div>
+        </div>
+      </div>`;
     main.appendChild(section);
 
     document.getElementById(ids.refresh)?.addEventListener('click', () => cargarHistorialAdmin());
@@ -3839,6 +3858,10 @@ Archivo enviado directamente desde EduGestión.`);
         if (el) el.value = '';
       });
       cargarHistorialAdmin();
+    });
+
+    section.querySelectorAll('[data-close-admin-detail="true"]').forEach(el => {
+      el.addEventListener('click', cerrarDetalleAdmin);
     });
   }
 
@@ -3895,11 +3918,12 @@ Archivo enviado directamente desde EduGestión.`);
     }));
     set('admin-history-teachers', resumen.docentes ?? docentesUnicos.size);
     set('admin-history-visible', `${datos.length} registro${datos.length === 1 ? '' : 's'}`);
+    renderResumenDocentesAdmin();
 
     const body = document.getElementById(ids.body);
     const cards = document.getElementById(ids.cards);
     if (!datos.length) {
-      if (body) body.innerHTML = '<tr><td colspan="6"><div class="admin-history-empty"><i class="fa-regular fa-folder-open"></i><span>No hay registros para los filtros seleccionados.</span></div></td></tr>';
+      if (body) body.innerHTML = '<tr><td colspan="7"><div class="admin-history-empty"><i class="fa-regular fa-folder-open"></i><span>No hay registros para los filtros seleccionados.</span></div></td></tr>';
       if (cards) cards.innerHTML = '<div class="admin-history-empty"><i class="fa-regular fa-folder-open"></i><span>No hay registros para los filtros seleccionados.</span></div>';
       return;
     }
@@ -3913,8 +3937,13 @@ Archivo enviado directamente desde EduGestión.`);
         <td>${seguroAdmin(item.periodo || '—')}<small>${seguroAdmin(item.seccion || '—')}</small></td>
         <td>${seguroAdmin(item.destino || item.canal || 'Telegram')}</td>
         <td><b class="${error ? 'is-error' : 'is-sent'}">${error ? 'Error' : 'Enviado'}</b></td>
+        <td><button type="button" class="admin-history-detail-button" data-admin-detail-id="${seguroAdmin(item.id || '')}"><i class="fa-solid fa-eye"></i> Ver</button></td>
       </tr>`;
     }).join('');
+
+    body?.querySelectorAll('[data-admin-detail-id]').forEach(btn => {
+      btn.addEventListener('click', () => abrirDetalleAdmin(btn.dataset.adminDetailId));
+    });
 
     if (cards) cards.innerHTML = datos.map(item => {
       const error = String(item.estado || 'enviado').toLowerCase() === 'error';
@@ -3923,6 +3952,7 @@ Archivo enviado directamente desde EduGestión.`);
         <h4>${seguroAdmin(item.archivo || 'Informe.pdf')}</h4>
         <p>${seguroAdmin(item.periodo || '—')} · ${seguroAdmin(item.seccion || '—')}</p>
         <footer><span><i class="fa-regular fa-clock"></i> ${seguroAdmin(fechaAdmin(item.registradoEn))}</span><span><i class="fa-brands fa-telegram"></i> ${seguroAdmin(item.destino || 'Telegram')}</span></footer>
+        <button type="button" class="admin-history-detail-button" data-admin-detail-id="${seguroAdmin(item.id || '')}"><i class="fa-solid fa-eye"></i> Ver detalle</button>
       </article>`;
     }).join('');
   }

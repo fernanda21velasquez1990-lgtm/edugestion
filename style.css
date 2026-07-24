@@ -5249,3 +5249,237 @@ body.stats-share-open { overflow: hidden; }
   }
 }
 /* EDUGESTION_FASE_2_3_2_PDF_COMPLETE_FIX_END */
+
+
+/* EDUGESTION_FASE_2_4_DETALLE_RESUMEN_START */
+.admin-history-teacher-summary-card {
+  overflow:hidden;
+  border:1px solid var(--line);
+  border-radius:22px;
+  background:#fff;
+  box-shadow:var(--shadow-sm);
+}
+.admin-history-teacher-summary {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  padding:16px;
+}
+.admin-history-teacher-summary article {
+  display:flex;
+  gap:13px;
+  align-items:center;
+  padding:15px;
+  border:1px solid #dbe8f3;
+  border-radius:15px;
+  background:#f9fcff;
+}
+.admin-history-teacher-avatar {
+  display:flex;
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
+  align-items:center;
+  justify-content:center;
+  border-radius:12px;
+  color:#fff;
+  background:linear-gradient(135deg,var(--brand-500),var(--brand-800));
+  font-weight:800;
+}
+.admin-history-teacher-copy {
+  min-width:0;
+  flex:1;
+}
+.admin-history-teacher-copy strong,
+.admin-history-teacher-copy small {
+  display:block;
+}
+.admin-history-teacher-copy strong {
+  color:var(--brand-900);
+  font-size:.82rem;
+}
+.admin-history-teacher-copy small {
+  margin-top:4px;
+  color:var(--muted);
+  font-size:.67rem;
+}
+.admin-history-teacher-metrics {
+  display:flex;
+  gap:12px;
+  text-align:center;
+}
+.admin-history-teacher-metrics span {
+  color:#64748b;
+  font-size:.58rem;
+  font-weight:800;
+  text-transform:uppercase;
+}
+.admin-history-teacher-metrics b {
+  display:block;
+  margin-bottom:2px;
+  color:var(--brand-700);
+  font-size:.9rem;
+}
+.admin-history-detail-button {
+  display:inline-flex;
+  gap:6px;
+  align-items:center;
+  justify-content:center;
+  padding:7px 10px;
+  border:1px solid #bfd6e9;
+  border-radius:9px;
+  color:var(--brand-700);
+  background:#f4f9fd;
+  font-size:.67rem;
+  font-weight:800;
+  cursor:pointer;
+}
+.admin-history-cards .admin-history-detail-button {
+  width:100%;
+  margin-top:12px;
+}
+.admin-history-detail-modal {
+  position:fixed;
+  z-index:100000;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+}
+.admin-history-detail-modal.hidden { display:none !important; }
+.admin-history-detail-backdrop {
+  position:absolute;
+  inset:0;
+  background:rgba(11,31,53,.72);
+  backdrop-filter:blur(5px);
+}
+.admin-history-detail-dialog {
+  position:relative;
+  z-index:1;
+  width:min(680px,100%);
+  max-height:90vh;
+  overflow:auto;
+  border-radius:22px;
+  background:#fff;
+  box-shadow:0 28px 80px rgba(11,31,53,.35);
+}
+.admin-history-detail-dialog > header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:15px;
+  padding:20px 22px;
+  color:#fff;
+  background:linear-gradient(135deg,var(--brand-900),var(--brand-600));
+}
+.admin-history-detail-dialog > header span {
+  color:#bfe0fb;
+  font-size:.64rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.admin-history-detail-dialog > header h3 {
+  margin:4px 0 0;
+  font-size:1.12rem;
+}
+.admin-history-detail-dialog > header button {
+  display:flex;
+  width:38px;
+  height:38px;
+  align-items:center;
+  justify-content:center;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:11px;
+  color:#fff;
+  background:rgba(255,255,255,.1);
+  cursor:pointer;
+}
+.admin-history-detail-content {
+  padding:20px;
+}
+.admin-history-detail-status {
+  display:flex;
+  gap:12px;
+  align-items:center;
+  padding:14px;
+  border-radius:14px;
+}
+.admin-history-detail-status.is-sent {
+  color:#087a4d;
+  background:#e7f8ef;
+}
+.admin-history-detail-status.is-error {
+  color:#b42318;
+  background:#fff0ee;
+}
+.admin-history-detail-status i { font-size:1.35rem; }
+.admin-history-detail-status strong,
+.admin-history-detail-status span { display:block; }
+.admin-history-detail-status span {
+  margin-top:3px;
+  font-size:.7rem;
+  opacity:.8;
+}
+.admin-history-detail-content dl {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin:16px 0 0;
+}
+.admin-history-detail-content dl > div {
+  padding:12px;
+  border:1px solid #dbe8f3;
+  border-radius:12px;
+  background:#f9fcff;
+}
+.admin-history-detail-content dt {
+  color:#64748b;
+  font-size:.62rem;
+  font-weight:800;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.admin-history-detail-content dd {
+  margin:5px 0 0;
+  color:var(--brand-900);
+  font-size:.78rem;
+  font-weight:700;
+  overflow-wrap:anywhere;
+}
+.admin-history-detail-note {
+  margin-top:12px;
+  padding:13px;
+  border-left:4px solid var(--warning);
+  border-radius:10px;
+  background:#fff8e8;
+}
+.admin-history-detail-note strong {
+  color:#9a6700;
+  font-size:.72rem;
+}
+.admin-history-detail-note p {
+  margin:5px 0 0;
+  color:#7a5a14;
+  font-size:.72rem;
+}
+@media (max-width:850px) {
+  .admin-history-teacher-summary { grid-template-columns:1fr; }
+}
+@media (max-width:600px) {
+  .admin-history-teacher-summary article {
+    align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .admin-history-teacher-metrics {
+    width:100%;
+    justify-content:space-around;
+    padding-top:10px;
+    border-top:1px solid #dbe8f3;
+  }
+  .admin-history-detail-content dl {
+    grid-template-columns:1fr;
+  }
+}
+/* EDUGESTION_FASE_2_4_DETALLE_RESUMEN_END */
