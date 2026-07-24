@@ -450,6 +450,7 @@ function reportsResultKeyboard() {
 
 function recordsMenuKeyboard(types = []) {
   const rows = [
+    [{ text: '➕ Crear nueva acta', callback_data: 'records:create' }],
     [{ text: '📚 Ver actas recientes', callback_data: 'records:list' }],
   ];
 
@@ -483,6 +484,41 @@ function recordDetailKeyboard() {
     inline_keyboard: [
       [{ text: '📝 Volver a actas', callback_data: 'records:menu' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function recordStudentsKeyboard(students = []) {
+  const rows = students.slice(0, 30).map((student, index) => [{
+    text: `${index + 1}. ${student.nombre || 'Estudiante'} · ${student.ano || ''} ${student.seccion || ''}`.slice(0, 60),
+    callback_data: `records:create:student:${index}`,
+  }]);
+  rows.push([{ text: '❌ Cancelar', callback_data: 'records:create:cancel' }]);
+  return { inline_keyboard: rows };
+}
+
+function recordTypesKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📌 General', callback_data: 'records:create:type:general' },
+        { text: '⚠️ Incidencia', callback_data: 'records:create:type:incidencia' },
+      ],
+      [
+        { text: '🎓 Académica', callback_data: 'records:create:type:academica' },
+        { text: '🤝 Compromiso', callback_data: 'records:create:type:compromiso' },
+      ],
+      [{ text: '❌ Cancelar', callback_data: 'records:create:cancel' }],
+    ],
+  };
+}
+
+function recordConfirmKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '✅ Guardar acta', callback_data: 'records:create:save' }],
+      [{ text: '📧 Guardar y enviar correo', callback_data: 'records:create:save-email' }],
+      [{ text: '❌ Cancelar', callback_data: 'records:create:cancel' }],
     ],
   };
 }
@@ -1351,6 +1387,146 @@ ${escapeHtml(item.mensaje || 'Sin contenido registrado.')}`,
   );
 }
 
+async function startRecordCreation(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botIniciarCreacionActa', { telegramId });
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+  pendingTextMode.delete(String(chatId));
+
+  if (!students.length) {
+    await sendMessage(chatId, '📝 <b>Crear acta</b>\n\nNo tienes estudiantes registrados.', {
+      reply_markup: recordsMenuKeyboard(),
+    });
+    return;
+  }
+
+  await sendMessage(chatId, '📝 <b>Crear nueva acta</b>\n\nPaso 1 de 4: selecciona el estudiante.', {
+    reply_markup: recordStudentsKeyboard(students),
+  });
+}
+
+async function selectRecordStudent(chatId, source, index) {
+  const result = await callEduGestion('botSeleccionarAlumnoActa', {
+    telegramId: teacherTelegramId(source),
+    indice: Number(index),
+  });
+
+  await sendMessage(
+    chatId,
+    `📝 <b>Crear nueva acta</b>
+
+Estudiante: <b>${escapeHtml(result.estudiante?.nombre || 'Estudiante')}</b>
+
+Paso 2 de 4: selecciona el tipo de acta.`,
+    { reply_markup: recordTypesKeyboard() },
+  );
+}
+
+async function selectRecordType(chatId, source, type) {
+  const result = await callEduGestion('botSeleccionarTipoActa', {
+    telegramId: teacherTelegramId(source),
+    tipo: type,
+  });
+
+  pendingTextMode.set(String(chatId), 'record-title');
+  await sendMessage(
+    chatId,
+    `📝 <b>Crear nueva acta</b>
+
+Estudiante: <b>${escapeHtml(result.alumno || 'Estudiante')}</b>
+Tipo: <b>${escapeHtml(result.tipo || type)}</b>
+
+Paso 3 de 4: escribe el título.
+
+Ejemplo:
+<code>Compromiso de mejora académica</code>
+
+Escribe <code>cancelar</code> para salir.`,
+  );
+}
+
+async function saveRecordTitle(chatId, source, title) {
+  const result = await callEduGestion('botGuardarTituloActa', {
+    telegramId: teacherTelegramId(source),
+    titulo: String(title || '').trim(),
+  });
+
+  pendingTextMode.set(String(chatId), 'record-message');
+  await sendMessage(
+    chatId,
+    `📝 <b>Crear nueva acta</b>
+
+Título: <b>${escapeHtml(result.titulo || title)}</b>
+
+Paso 4 de 4: escribe el contenido completo.
+
+Escribe <code>cancelar</code> para salir.`,
+  );
+}
+
+async function previewRecord(chatId, source, messageText) {
+  const result = await callEduGestion('botPrevisualizarActa', {
+    telegramId: teacherTelegramId(source),
+    mensaje: String(messageText || '').trim(),
+  });
+
+  pendingTextMode.delete(String(chatId));
+  const item = result.vistaPrevia || {};
+
+  await sendMessage(
+    chatId,
+    `📝 <b>Revisar acta</b>
+
+Estudiante: <b>${escapeHtml(item.alumno || 'Estudiante')}</b>
+Tipo: ${escapeHtml(item.tipo || 'general')}
+Título: <b>${escapeHtml(item.titulo || 'Acta')}</b>
+Fecha: ${escapeHtml(formatPlanningDate(item.fecha))}
+
+<b>Contenido</b>
+${escapeHtml(item.mensaje || '')}
+
+Selecciona cómo deseas guardarla:`,
+    { reply_markup: recordConfirmKeyboard() },
+  );
+}
+
+async function confirmRecord(chatId, source, sendEmail) {
+  const result = await callEduGestion('botConfirmarActa', {
+    telegramId: teacherTelegramId(source),
+    enviarCorreo: Boolean(sendEmail),
+  });
+
+  const emailText = sendEmail
+    ? (result.correo?.enviado
+      ? '\n📧 Correo enviado al representante.'
+      : `\n⚠️ ${escapeHtml(result.correo?.message || 'No se pudo enviar el correo.')}`)
+    : '';
+
+  await sendMessage(
+    chatId,
+    `✅ <b>Acta creada correctamente</b>
+
+Estudiante: <b>${escapeHtml(result.acta?.alumno || 'Estudiante')}</b>
+Título: <b>${escapeHtml(result.acta?.titulo || 'Acta')}</b>${emailText}`,
+    { reply_markup: recordsMenuKeyboard() },
+  );
+}
+
+async function cancelRecordCreation(chatId, source) {
+  pendingTextMode.delete(String(chatId));
+  try {
+    await callEduGestion('botCancelarCreacionActa', {
+      telegramId: teacherTelegramId(source),
+    });
+  } catch (error) {
+    if (error.code !== 'FLOW_EXPIRED') throw error;
+  }
+
+  await sendMessage(chatId, '❌ Creación del acta cancelada.', {
+    reply_markup: recordsMenuKeyboard(),
+  });
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -1468,6 +1644,22 @@ async function handleMessage(message) {
       }
       return;
     }
+    if (mode === 'record-title') {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        await cancelRecordCreation(chatId, message);
+      } else {
+        await saveRecordTitle(chatId, message, text);
+      }
+      return;
+    }
+    if (mode === 'record-message') {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        await cancelRecordCreation(chatId, message);
+      } else {
+        await previewRecord(chatId, message, text);
+      }
+      return;
+    }
 
     try {
       await previewAttendance(chatId, message, text);
@@ -1516,6 +1708,33 @@ async function handleCallbackQuery(callbackQuery) {
     await showRecordsMenu(chatId, callbackQuery);
     return;
   }
+  if (data === 'records:create') {
+    await startRecordCreation(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('records:create:student:')) {
+    const index = Number(data.split(':')[3]);
+    await selectRecordStudent(chatId, callbackQuery, index);
+    return;
+  }
+  if (data.startsWith('records:create:type:')) {
+    const type = data.split(':').slice(3).join(':');
+    await selectRecordType(chatId, callbackQuery, type);
+    return;
+  }
+  if (data === 'records:create:save') {
+    await confirmRecord(chatId, callbackQuery, false);
+    return;
+  }
+  if (data === 'records:create:save-email') {
+    await confirmRecord(chatId, callbackQuery, true);
+    return;
+  }
+  if (data === 'records:create:cancel') {
+    await cancelRecordCreation(chatId, callbackQuery);
+    return;
+  }
+
   if (data === 'records:list') {
     await showRecordsList(chatId, callbackQuery);
     return;
@@ -1676,7 +1895,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.5A-records-ready',
+        status: 'phase3.5B-records-create-ready',
       });
     }
 
