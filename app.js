@@ -1,3 +1,4 @@
+/* EDUGESTION_DIRECTOR_ALUMNOS_SECCION_V2_20260724 */
 const API_URL = String(window.EDUGESTION_CONFIG?.API_URL || '').trim();
 const SESSION_KEY = 'edugestion_session_v2';
 
