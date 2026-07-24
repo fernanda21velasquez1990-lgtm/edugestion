@@ -1,4 +1,4 @@
-const BOT_API_BASE = 'https://api.telegram.org';
+﻿const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_TELEGRAM_MESSAGE = 3900;
 const pendingTextMode = new Map();
 
@@ -345,6 +345,7 @@ function attendanceDetailKeyboard(index, registered = false) {
 function studentsMenuKeyboard() {
   return {
     inline_keyboard: [
+      [{ text: 'ðŸ•’ Mi asistencia laboral', callback_data: 'teacherTime:menu' }],
       [{ text: '📚 Ver lista', callback_data: 'students:list' }],
       [{ text: '🔎 Buscar por nombre o cédula', callback_data: 'students:search' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
@@ -549,6 +550,54 @@ function attendancePreviewKeyboard() {
   };
 }
 
+function teacherTimeKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: 'ðŸŸ¢ Registrar llegada', callback_data: 'teacherTime:arrival' }],
+      [{ text: 'ðŸ”´ Registrar salida', callback_data: 'teacherTime:exit' }],
+      [{ text: 'ðŸš« Informar ausencia', callback_data: 'teacherTime:absence' }],
+      [{ text: 'ðŸ“Š Ver resumen', callback_data: 'teacherTime:summary' }],
+      [{ text: 'ðŸ  MenÃº principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+async function showTeacherTimeMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const data = await callEduGestion('botObtenerAsistenciaDocente', { telegramId });
+  const hoy = data.hoy || {};
+  const estado = hoy.estado === 'Ausente'
+    ? `ðŸš« Ausente\nMotivo: ${escapeHtml(hoy.motivoAusencia || 'Registrado')}`
+    : hoy.horaSalida
+      ? `âœ… Jornada completada\n${escapeHtml(hoy.horaLlegada)} - ${escapeHtml(hoy.horaSalida)}`
+      : hoy.horaLlegada
+        ? `ðŸŸ¢ Llegada: ${escapeHtml(hoy.horaLlegada)}\nSalida pendiente`
+        : 'âšª Sin registro hoy';
+  await sendMessage(chatId, `ðŸ•’ <b>Mi asistencia laboral</b>\n\n${estado}\n\nRegistra tu llegada, salida o informa una ausencia.`, { reply_markup: teacherTimeKeyboard() });
+}
+async function registerTeacherArrival(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const data = await callEduGestion('botRegistrarLlegadaDocente', { telegramId });
+  await sendMessage(chatId, `âœ… <b>Llegada registrada</b>\n\n${escapeHtml(data.message || '')}`, { reply_markup: teacherTimeKeyboard() });
+}
+async function registerTeacherExit(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const data = await callEduGestion('botRegistrarSalidaDocente', { telegramId });
+  await sendMessage(chatId, `âœ… <b>Salida registrada</b>\n\n${escapeHtml(data.message || '')}`, { reply_markup: teacherTimeKeyboard() });
+}
+async function showTeacherTimeSummary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const data = await callEduGestion('botObtenerAsistenciaDocente', { telegramId });
+  const r = data.resumen || {};
+  const line = (name, x) => `${name}: <b>${Number(x?.horas || 0).toFixed(1)} h</b> Â· ${x?.diasTrabajados || 0} dÃ­as Â· promedio ${Number(x?.promedioHorasDia || 0).toFixed(1)} h/dÃ­a`;
+  await sendMessage(chatId, `ðŸ“Š <b>Resumen de asistencia laboral</b>\n\n${line('Hoy', r.dia)}\n${line('Semana', r.semana)}\n${line('Mes', r.mes)}`, { reply_markup: teacherTimeKeyboard() });
+}
+async function saveTeacherAbsenceFromText(message, reason) {
+  const chatId = message.chat.id;
+  const telegramId = teacherTelegramId(message);
+  const data = await callEduGestion('botRegistrarAusenciaDocente', { telegramId, motivo: reason });
+  await sendMessage(chatId, `âœ… <b>Ausencia registrada</b>\n\n${escapeHtml(data.message || '')}`, { reply_markup: teacherTimeKeyboard() });
+}
 async function linkedProfile(telegramId) {
   try {
     return await callEduGestion('botEstadoTelegram', { telegramId });
@@ -1653,6 +1702,11 @@ async function showHelp(chatId, source) {
 }
 
 async function handleMessage(message) {
+  const teacherTimeText = String(message.text || '').trim();
+  if (/^\/ausencia\s+/i.test(teacherTimeText)) {
+    await saveTeacherAbsenceFromText(message, teacherTimeText.replace(/^\/ausencia\s+/i, '').trim());
+    return;
+  }
   const chatId = message?.chat?.id;
   if (!chatId) return;
 
@@ -1984,6 +2038,15 @@ async function handleCallbackQuery(callbackQuery) {
     return;
   }
 
+  if (data === 'teacherTime:menu') { await showTeacherTimeMenu(chatId, callbackQuery); return; }
+  if (data === 'teacherTime:arrival') { await registerTeacherArrival(chatId, callbackQuery); return; }
+  if (data === 'teacherTime:exit') { await registerTeacherExit(chatId, callbackQuery); return; }
+  if (data === 'teacherTime:summary') { await showTeacherTimeSummary(chatId, callbackQuery); return; }
+  if (data === 'teacherTime:absence') {
+    await sendMessage(chatId, 'ðŸš« <b>Informar ausencia</b>\n\nEscribe:\n<code>/ausencia Motivo de la ausencia</code>\n\nEjemplo:\n<code>/ausencia Reposo mÃ©dico</code>', { reply_markup: teacherTimeKeyboard() });
+    return;
+  }
+
   await showMainMenu(chatId, callbackQuery);
 }
 
@@ -2042,3 +2105,4 @@ export default {
     }
   },
 };
+
