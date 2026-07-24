@@ -98,10 +98,19 @@ async function callEduGestion(action, payload = {}) {
 
 function mainMenuKeyboard(linked = true) {
   const rows = [];
+
   if (linked) {
     rows.push([
       { text: '✅ Pasar asistencia', callback_data: 'attendance:start' },
-      { text: '📅 Clases de hoy', callback_data: 'classes:today' },
+      { text: '📋 Consultar asistencia', callback_data: 'attendance:consult' },
+    ]);
+    rows.push([
+      { text: '👨‍🎓 Mis estudiantes', callback_data: 'students:menu' },
+      { text: '📅 Planificación', callback_data: 'planning:menu' },
+    ]);
+    rows.push([
+      { text: '📊 Estadísticas', callback_data: 'stats:menu' },
+      { text: '📄 Generar informe', callback_data: 'reports:menu' },
     ]);
     rows.push([
       { text: '👤 Mi cuenta', callback_data: 'account:status' },
@@ -111,6 +120,7 @@ function mainMenuKeyboard(linked = true) {
     rows.push([{ text: '🔗 Vincular cuenta', callback_data: 'link:start' }]);
     rows.push([{ text: 'ℹ️ Ayuda', callback_data: 'help' }]);
   }
+
   return { inline_keyboard: rows };
 }
 
@@ -161,16 +171,44 @@ async function showMainMenu(chatId, source) {
   if (!profile) {
     await sendMessage(
       chatId,
-      `🎓 <b>EduGestión Docente</b>\n\nHola, <b>${escapeHtml(teacherName(source))}</b>. El bot está conectado, pero este Telegram todavía no está vinculado con una cuenta docente.\n\nGenera un código temporal dentro de EduGestión y envíalo así:\n<code>/vincular 123456</code>`,
+      `🎓 <b>EduGestión Docente</b>
+
+Hola, <b>${escapeHtml(teacherName(source))}</b>. Este Telegram todavía no está vinculado con una cuenta docente.
+
+Genera un código temporal dentro de EduGestión y envíalo así:
+<code>/vincular 123456</code>`,
       { reply_markup: mainMenuKeyboard(false) },
     );
     return;
   }
 
-  const profesor = profile.profesor || {};
+  let menuData = null;
+  try {
+    menuData = await callEduGestion('botMenuPrincipal', { telegramId });
+  } catch (error) {
+    console.warn('No se pudo cargar el resumen del menú:', error?.message || error);
+  }
+
+  const profesor = menuData?.profesor || profile.profesor || {};
+  const clasesHoy = Number(menuData?.clasesHoy || 0);
+  const pendientesHoy = Number(menuData?.pendientesHoy || 0);
+  const resumen = clasesHoy
+    ? `
+
+📅 Clases de hoy: <b>${clasesHoy}</b>
+🟡 Pendientes de asistencia: <b>${pendientesHoy}</b>`
+    : '
+
+📅 No tienes clases programadas para hoy.';
+
   await sendMessage(
     chatId,
-    `🎓 <b>EduGestión Docente</b>\n\nHola, <b>${escapeHtml(profesor.nombre || teacherName(source))}</b>.\nMateria: <b>${escapeHtml(profesor.materia || 'Sin materia asignada')}</b>\n\n¿Qué deseas hacer?`,
+    `🎓 <b>EduGestión Docente</b>
+
+Hola, <b>${escapeHtml(profesor.nombre || teacherName(source))}</b>.
+Materia: <b>${escapeHtml(profesor.materia || 'Sin materia asignada')}</b>${resumen}
+
+Selecciona una opción:`,
     { reply_markup: mainMenuKeyboard(true) },
   );
 }
@@ -350,6 +388,63 @@ async function cancelAttendance(chatId, source) {
   await sendMessage(chatId, '❌ Registro de asistencia cancelado.', { reply_markup: mainMenuKeyboard(true) });
 }
 
+
+async function showComingSoon(chatId, title, description) {
+  await sendMessage(
+    chatId,
+    `🚧 <b>${escapeHtml(title)}</b>
+
+${escapeHtml(description)}
+
+Esta opción ya está integrada en el menú y se activará en la siguiente fase correspondiente.`,
+    { reply_markup: mainMenuKeyboard(true) },
+  );
+}
+
+async function showAttendanceConsultation(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  try {
+    const result = await callEduGestion('botClasesHoy', { telegramId });
+    const classes = Array.isArray(result.clases) ? result.clases : [];
+
+    if (!classes.length) {
+      await sendMessage(
+        chatId,
+        `📋 <b>Consultar asistencia</b>
+
+No hay clases registradas para ${escapeHtml(result.dia || 'hoy')}.`,
+        { reply_markup: mainMenuKeyboard(true) },
+      );
+      return;
+    }
+
+    const body = classes.map((item, index) => {
+      const estado = item.registrada
+        ? `✅ Registrada · P:${item.presentes || 0} · A:${item.ausentes || 0} · T:${item.tardanzas || 0} · J:${item.justificadas || 0}`
+        : '🟡 Pendiente';
+      return `${index + 1}. <b>${escapeHtml(item.horaInicio || '--:--')}–${escapeHtml(item.horaFin || '--:--')}</b>
+${escapeHtml(item.ano || '')} · Sección ${escapeHtml(item.seccion || '')} · ${estado}`;
+    }).join('\n\n');
+
+    await sendMessage(
+      chatId,
+      `📋 <b>Asistencia de hoy</b>
+${escapeHtml(result.dia || '')} · ${escapeHtml(result.fecha || '')}
+
+${body}
+
+Para consultar o corregir una clase, selecciónala:`,
+      { reply_markup: classesKeyboard(classes) },
+    );
+  } catch (error) {
+    if (error.code === 'TELEGRAM_NOT_LINKED') {
+      await showLinkInstructions(chatId);
+      return;
+    }
+    throw error;
+  }
+}
+
 async function showAccountStatus(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   if (!profile) {
@@ -393,6 +488,11 @@ async function handleMessage(message) {
 
   if (/^\/(hoy|asistencia)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showTodayClasses(chatId, message);
+    return;
+  }
+
+  if (/^\/consultar(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showAttendanceConsultation(chatId, message);
     return;
   }
 
@@ -458,6 +558,26 @@ async function handleCallbackQuery(callbackQuery) {
     await showTodayClasses(chatId, callbackQuery);
     return;
   }
+  if (data === 'attendance:consult') {
+    await showAttendanceConsultation(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'students:menu') {
+    await showComingSoon(chatId, 'Mis estudiantes', 'La búsqueda y consulta de estudiantes se activará en la Fase 3.2.');
+    return;
+  }
+  if (data === 'planning:menu') {
+    await showComingSoon(chatId, 'Planificación', 'Las próximas evaluaciones y recordatorios se activarán en la Fase 3.3.');
+    return;
+  }
+  if (data === 'stats:menu') {
+    await showComingSoon(chatId, 'Estadísticas', 'Los resúmenes diarios, semanales y mensuales se activarán en la Fase 3.4.');
+    return;
+  }
+  if (data === 'reports:menu') {
+    await showComingSoon(chatId, 'Generar informe', 'La generación y envío de PDF desde Telegram se activará en la Fase 3.4.');
+    return;
+  }
   if (data.startsWith('class:open:')) {
     const index = Number(data.split(':')[2]);
     await openClass(chatId, callbackQuery, index);
@@ -508,7 +628,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase1.2-ready',
+        status: 'phase3.0-menu-ready',
       });
     }
 
