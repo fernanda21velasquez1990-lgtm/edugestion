@@ -1,3 +1,4 @@
+/* EDUGESTION_GUIDE_FIX_V2_20260724 */
 /* EDUGESTION_DIRECTOR_ALUMNOS_SECCION_V2_20260724 */
 const API_URL = String(window.EDUGESTION_CONFIG?.API_URL || '').trim();
 const SESSION_KEY = 'edugestion_session_v2';
@@ -4554,40 +4555,86 @@ Archivo enviado directamente desde EduGestión.`);
 /* EDUGESTION_STATS_PANEL_V1_END */
 
 
-/* EDUGESTION_USER_GUIDE_V1_START */
+/* EDUGESTION_USER_GUIDE_V2_START */
 (() => {
-  const modal = document.getElementById('user-guide-modal');
-  if (!modal) return;
+  function iniciarGuiaEduGestion() {
+    const modal = document.getElementById('user-guide-modal');
+    if (!modal || modal.dataset.guideReady === 'true') return;
 
-  const openButtons = document.querySelectorAll('[data-open-user-guide="true"]');
-  const closeButtons = modal.querySelectorAll('[data-close-user-guide="true"]');
-  const tabs = modal.querySelectorAll('[data-guide-tab]');
-  const panels = modal.querySelectorAll('[data-guide-panel]');
+    modal.dataset.guideReady = 'true';
 
-  function openGuide() {
-    modal.classList.remove('hidden');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('user-guide-open');
-    setTimeout(() => modal.querySelector('.user-guide-modal__close')?.focus(), 40);
+    const tabs = [...modal.querySelectorAll('[data-guide-tab]')];
+    const panels = [...modal.querySelectorAll('[data-guide-panel]')];
+
+    function seleccionarPestana(nombre) {
+      tabs.forEach(tab => {
+        const activa = tab.dataset.guideTab === nombre;
+        tab.classList.toggle('is-active', activa);
+        tab.setAttribute('aria-selected', activa ? 'true' : 'false');
+      });
+
+      panels.forEach(panel => {
+        panel.classList.toggle('is-active', panel.dataset.guidePanel === nombre);
+      });
+    }
+
+    function abrirGuia(pestana = 'access') {
+      seleccionarPestana(pestana);
+      modal.classList.remove('hidden');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('user-guide-open');
+
+      window.setTimeout(() => {
+        modal.querySelector('.user-guide-modal__close')?.focus();
+      }, 50);
+    }
+
+    function cerrarGuia() {
+      modal.classList.add('hidden');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('user-guide-open');
+    }
+
+    document.addEventListener('click', event => {
+      const abrir = event.target.closest('[data-open-user-guide="true"]');
+      if (abrir) {
+        event.preventDefault();
+        abrirGuia(abrir.dataset.guideStart || 'access');
+        return;
+      }
+
+      const cerrar = event.target.closest('[data-close-user-guide="true"]');
+      if (cerrar) {
+        event.preventDefault();
+        cerrarGuia();
+        return;
+      }
+
+      const tab = event.target.closest('[data-guide-tab]');
+      if (tab && modal.contains(tab)) {
+        event.preventDefault();
+        seleccionarPestana(tab.dataset.guideTab);
+      }
+    });
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+        cerrarGuia();
+      }
+    });
+
+    modal.querySelector('.user-guide-modal__card')?.addEventListener('click', event => {
+      event.stopPropagation();
+    });
+
+    window.abrirGuiaEduGestion = abrirGuia;
+    window.cerrarGuiaEduGestion = cerrarGuia;
   }
 
-  function closeGuide() {
-    modal.classList.add('hidden');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('user-guide-open');
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', iniciarGuiaEduGestion, { once: true });
+  } else {
+    iniciarGuiaEduGestion();
   }
-
-  function selectTab(name) {
-    tabs.forEach(tab => tab.classList.toggle('is-active', tab.dataset.guideTab === name));
-    panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.guidePanel === name));
-  }
-
-  openButtons.forEach(button => button.addEventListener('click', openGuide));
-  closeButtons.forEach(button => button.addEventListener('click', closeGuide));
-  tabs.forEach(tab => tab.addEventListener('click', () => selectTab(tab.dataset.guideTab)));
-
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeGuide();
-  });
 })();
-/* EDUGESTION_USER_GUIDE_V1_END */
+/* EDUGESTION_USER_GUIDE_V2_END */
