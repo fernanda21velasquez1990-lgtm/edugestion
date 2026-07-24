@@ -6218,3 +6218,316 @@ body.stats-share-open { overflow: hidden; }
 
 @media(max-width:1050px){.student-register-layout{grid-template-columns:1fr}.student-register-summary{position:static;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.student-register-hero{min-height:0;padding:25px 21px;border-radius:20px}.student-register-hero__icon{display:none}.student-register-hero h2{font-size:2rem}.student-form-grid--3,.student-form-grid--2,.student-choice-grid{grid-template-columns:1fr}.student-field--two{grid-column:auto}.student-register-summary{grid-template-columns:1fr}.student-form-actions{flex-direction:column}.student-btn{width:100%}.student-form-progress{align-items:flex-start;flex-direction:column}.student-form-progress__bar{width:100%;flex:none}.student-form-progress__text{justify-content:flex-start}}
+
+
+/* =========================================================
+   FASE FINAL — MULTIDOCENTE, AYUDA Y ADAPTACIÓN MÓVIL
+   ========================================================= */
+.login-help--actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+.login-guide-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  border: 1px solid #cfe0ef;
+  border-radius: 12px;
+  color: var(--brand-700);
+  background: #edf6ff;
+  font-size: .74rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.login-guide-button:hover { background: #e3f1ff; }
+.login-help__support {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #7b8797;
+  font-size: .67rem;
+  line-height: 1.4;
+  text-align: center;
+}
+.sidebar-guide-button {
+  display: flex;
+  width: calc(100% - 36px);
+  min-height: 44px;
+  align-items: center;
+  gap: 11px;
+  margin: auto 18px 14px;
+  padding: 0 14px;
+  border: 1px solid rgba(130, 218, 255, .18);
+  border-radius: 12px;
+  color: #dcecff;
+  background: rgba(255,255,255,.055);
+  font-size: .72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.sidebar-guide-button:hover { background: rgba(255,255,255,.1); }
+
+.user-guide-modal {
+  position: fixed;
+  z-index: 1600;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+.user-guide-modal.hidden { display: none; }
+.user-guide-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 25, 45, .7);
+  backdrop-filter: blur(6px);
+}
+.user-guide-modal__card {
+  position: relative;
+  z-index: 1;
+  width: min(960px, 100%);
+  max-height: min(90vh, 820px);
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,.65);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 28px 90px rgba(10, 35, 65, .35);
+}
+.user-guide-modal__close {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  background: rgba(255,255,255,.14);
+  cursor: pointer;
+}
+.user-guide-modal__hero {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 28px 64px 28px 28px;
+  color: #fff;
+  background: linear-gradient(135deg, #2e7dde, #13477f);
+}
+.user-guide-modal__hero > span {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  place-items: center;
+  border-radius: 18px;
+  background: rgba(255,255,255,.14);
+  font-size: 1.45rem;
+}
+.user-guide-modal__hero small {
+  display: block;
+  margin-bottom: 4px;
+  color: #cfe7ff;
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.user-guide-modal__hero h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+.user-guide-modal__hero p {
+  margin: 6px 0 0;
+  color: rgba(255,255,255,.76);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+.user-guide-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e2eaf2;
+  background: #f7fafd;
+}
+.user-guide-tabs button {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: #637186;
+  background: transparent;
+  font-size: .7rem;
+  font-weight: 800;
+}
+.user-guide-tabs button.is-active {
+  color: var(--brand-700);
+  border-color: #cfe0ef;
+  background: #eaf4ff;
+}
+.user-guide-content { padding: 25px 28px; }
+.user-guide-panel { display: none; }
+.user-guide-panel.is-active { display: block; animation: guidePanelIn .18s ease both; }
+.user-guide-panel h3 {
+  margin: 0 0 16px;
+  color: var(--brand-900);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.user-guide-panel ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+  color: #59697d;
+  font-size: .76rem;
+  line-height: 1.55;
+}
+.user-guide-panel code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--brand-700);
+  background: #eaf4ff;
+  font-weight: 800;
+}
+.user-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.user-guide-steps > div {
+  position: relative;
+  min-height: 112px;
+  padding: 16px 16px 16px 54px;
+  border: 1px solid #dbe6f0;
+  border-radius: 15px;
+  background: #f9fcff;
+}
+.user-guide-steps > div > span {
+  position: absolute;
+  top: 16px;
+  left: 15px;
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--brand-600);
+  font-size: .58rem;
+  font-weight: 800;
+}
+.user-guide-steps strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--brand-900);
+  font-size: .76rem;
+}
+.user-guide-steps p {
+  margin: 0;
+  color: #718096;
+  font-size: .68rem;
+  line-height: 1.5;
+}
+.user-guide-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 18px;
+  padding: 13px;
+  border: 1px solid #cfe3f4;
+  border-radius: 13px;
+  color: #5c6f84;
+  background: #edf6ff;
+  font-size: .69rem;
+  line-height: 1.5;
+}
+.user-guide-note i { margin-top: 2px; color: var(--brand-600); }
+.user-guide-footer {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  border-top: 1px solid #e2eaf2;
+  color: #758397;
+  background: #f8fafc;
+  font-size: .65rem;
+}
+.user-guide-footer button {
+  min-width: 110px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--brand-700);
+  font-size: .7rem;
+  font-weight: 800;
+}
+body.user-guide-open { overflow: hidden; }
+
+@keyframes guidePanelIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Ajustes generales para pantallas medianas y celulares */
+@media (max-width: 1024px) {
+  .app-main { min-width: 0; }
+  #app-main > section { max-width: 100% !important; }
+  .topbar { gap: 10px; }
+  .header-actions { flex-wrap: wrap; justify-content: flex-end; }
+  .user-guide-steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .login-page { padding: 0; }
+  .login-shell { min-height: 100vh; border-radius: 0; }
+  .login-panel { min-height: 100vh; padding: 28px 20px; }
+  .login-card { width: 100%; padding: 24px 20px; }
+  .app-shell { min-width: 0; }
+  .app-sidebar { width: min(86vw, 290px); }
+  .topbar {
+    min-height: auto;
+    align-items: flex-start;
+    padding: 14px 16px;
+  }
+  .page-heading h1 { font-size: 1.08rem; }
+  .page-heading p { font-size: .67rem; }
+  .header-actions { gap: 7px; }
+  .teacher-profile { max-width: 155px; }
+  .teacher-data strong,.teacher-data small { max-width: 95px; }
+  .app-main { padding: 16px !important; overflow-x: hidden; }
+  #app-main > section { width: 100% !important; }
+  input, select, textarea, button { max-width: 100%; }
+  .user-guide-modal { padding: 0; }
+  .user-guide-modal__card {
+    width: 100%;
+    max-height: 100vh;
+    min-height: 100vh;
+    border-radius: 0;
+  }
+  .user-guide-modal__hero { padding: 24px 58px 22px 20px; }
+  .user-guide-modal__hero > span { width: 48px; height: 48px; flex-basis: 48px; }
+  .user-guide-modal__hero h2 { font-size: 1.3rem; }
+  .user-guide-tabs {
+    grid-template-columns: repeat(2, 1fr);
+    padding: 12px;
+  }
+  .user-guide-content { padding: 20px; }
+  .user-guide-footer {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 14px 20px;
+  }
+  .user-guide-footer button { width: 100%; }
+}

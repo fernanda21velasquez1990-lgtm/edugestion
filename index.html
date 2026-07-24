@@ -184,11 +184,14 @@
       </form>
       <div class="hidden login-error" id="login-error" role="alert">
       </div>
-      <div class="login-help">
-       <i class="fa-solid fa-headset">
-       </i>
-       <span>
-        &iquest;Problemas para ingresar? Comun&iacute;cate con la administraci&oacute;n.
+      <div class="login-help login-help--actions">
+       <button class="login-guide-button" data-open-user-guide="true" type="button">
+        <i class="fa-solid fa-circle-question"></i>
+        <span>¿Cómo se usa EduGestión?</span>
+       </button>
+       <span class="login-help__support">
+        <i class="fa-solid fa-headset"></i>
+        Problemas de acceso: comunícate con la administración.
        </span>
       </div>
      </div>
@@ -1538,5 +1541,80 @@
   </script>
   <script src="app.js">
   </script>
- </body>
+ 
+  <div aria-hidden="true" class="user-guide-modal hidden" id="user-guide-modal">
+   <div class="user-guide-modal__backdrop" data-close-user-guide="true"></div>
+   <section aria-labelledby="user-guide-title" aria-modal="true" class="user-guide-modal__card" role="dialog">
+    <button aria-label="Cerrar guía" class="user-guide-modal__close" data-close-user-guide="true" type="button">
+     <i class="fa-solid fa-xmark"></i>
+    </button>
+    <header class="user-guide-modal__hero">
+     <span><i class="fa-solid fa-graduation-cap"></i></span>
+     <div>
+      <small>Centro de ayuda docente</small>
+      <h2 id="user-guide-title">Cómo usar EduGestión</h2>
+      <p>Guía rápida para ingresar, guardar información, trabajar desde el celular y utilizar el bot de Telegram.</p>
+     </div>
+    </header>
+    <nav class="user-guide-tabs" aria-label="Temas de ayuda">
+     <button class="is-active" data-guide-tab="access" type="button"><i class="fa-solid fa-key"></i> Acceso</button>
+     <button data-guide-tab="system" type="button"><i class="fa-solid fa-display"></i> Plataforma</button>
+     <button data-guide-tab="mobile" type="button"><i class="fa-solid fa-mobile-screen"></i> Celular</button>
+     <button data-guide-tab="telegram" type="button"><i class="fa-brands fa-telegram"></i> Telegram</button>
+    </nav>
+    <div class="user-guide-content">
+     <article class="user-guide-panel is-active" data-guide-panel="access">
+      <h3>1. Ingreso personal de cada docente</h3>
+      <ol>
+       <li>La administración crea un usuario y una contraseña para cada docente.</li>
+       <li>El docente escribe sus credenciales en la pantalla principal.</li>
+       <li>Al iniciar sesión, EduGestión identifica al docente y carga únicamente su información.</li>
+       <li>Los datos permanecen guardados en Google Sheets aunque cierre la página o cambie de dispositivo.</li>
+      </ol>
+      <div class="user-guide-note"><i class="fa-solid fa-shield-halved"></i><span>No compartas tu contraseña. Cada cuenta mantiene separados estudiantes, asistencia, planificación, horarios y actas.</span></div>
+     </article>
+     <article class="user-guide-panel" data-guide-panel="system">
+      <h3>2. Uso de la plataforma</h3>
+      <div class="user-guide-steps">
+       <div><span>01</span><strong>Estudiantes</strong><p>Registra al estudiante y a su representante antes de usar los demás módulos.</p></div>
+       <div><span>02</span><strong>Horario</strong><p>Configura los bloques semanales para organizar la agenda de clases.</p></div>
+       <div><span>03</span><strong>Asistencia</strong><p>Selecciona año, sección, turno y fecha. Marca el estado y guarda.</p></div>
+       <div><span>04</span><strong>Planificación</strong><p>Registra evaluaciones, fechas y ponderaciones por sección.</p></div>
+       <div><span>05</span><strong>Actas</strong><p>Selecciona el tipo, el estudiante y genera el documento institucional.</p></div>
+       <div><span>06</span><strong>Estadísticas</strong><p>Consulta indicadores, filtros, auditoría e informes de asistencia.</p></div>
+      </div>
+     </article>
+     <article class="user-guide-panel" data-guide-panel="mobile">
+      <h3>3. Uso desde el celular</h3>
+      <ol>
+       <li>Abre la dirección de EduGestión en Chrome, Safari o el navegador del teléfono.</li>
+       <li>Inicia sesión con el mismo usuario y contraseña.</li>
+       <li>Usa el menú adaptable para abrir cada módulo.</li>
+       <li>Para crear un acceso directo, abre el menú del navegador y selecciona <b>Agregar a pantalla de inicio</b>.</li>
+       <li>Los datos guardados en el celular se verán también en la computadora al iniciar la misma cuenta.</li>
+      </ol>
+      <div class="user-guide-note"><i class="fa-solid fa-wifi"></i><span>Necesitas conexión a internet al consultar o guardar información.</span></div>
+     </article>
+     <article class="user-guide-panel" data-guide-panel="telegram">
+      <h3>4. Instalación y uso del bot de Telegram</h3>
+      <ol>
+       <li>Instala la aplicación <b>Telegram</b> desde Play Store o App Store. En computadora también puedes usar Telegram Web o Desktop.</li>
+       <li>Entra primero a EduGestión con tu cuenta docente.</li>
+       <li>Pulsa el botón azul de Telegram ubicado en la barra superior.</li>
+       <li>Selecciona <b>Generar código</b> y copia el comando temporal.</li>
+       <li>Abre el bot institucional en Telegram, pulsa <b>Iniciar</b> y envía el comando copiado.</li>
+       <li>Regresa a EduGestión y pulsa <b>Comprobar vinculación</b>.</li>
+       <li>En Telegram escribe <code>/menu</code> para consultar asistencia, estudiantes, planificación, estadísticas, informes y actas.</li>
+      </ol>
+      <div class="user-guide-note"><i class="fa-brands fa-telegram"></i><span>El código es personal, temporal y solo puede vincularse con la cuenta docente que lo generó.</span></div>
+     </article>
+    </div>
+    <footer class="user-guide-footer">
+     <span><i class="fa-solid fa-circle-info"></i> Los cambios se guardan por docente en la base de datos institucional.</span>
+     <button data-close-user-guide="true" type="button">Entendido</button>
+    </footer>
+   </section>
+  </div>
+
+</body>
 </html>

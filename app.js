@@ -3817,3 +3817,42 @@ Archivo enviado directamente desde EduGestión.`);
 })();
 /* EDUGESTION_REPORT_TELEGRAM_SEND_V1_READY */
 /* EDUGESTION_STATS_PANEL_V1_END */
+
+
+/* EDUGESTION_USER_GUIDE_V1_START */
+(() => {
+  const modal = document.getElementById('user-guide-modal');
+  if (!modal) return;
+
+  const openButtons = document.querySelectorAll('[data-open-user-guide="true"]');
+  const closeButtons = modal.querySelectorAll('[data-close-user-guide="true"]');
+  const tabs = modal.querySelectorAll('[data-guide-tab]');
+  const panels = modal.querySelectorAll('[data-guide-panel]');
+
+  function openGuide() {
+    modal.classList.remove('hidden');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('user-guide-open');
+    setTimeout(() => modal.querySelector('.user-guide-modal__close')?.focus(), 40);
+  }
+
+  function closeGuide() {
+    modal.classList.add('hidden');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('user-guide-open');
+  }
+
+  function selectTab(name) {
+    tabs.forEach(tab => tab.classList.toggle('is-active', tab.dataset.guideTab === name));
+    panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.guidePanel === name));
+  }
+
+  openButtons.forEach(button => button.addEventListener('click', openGuide));
+  closeButtons.forEach(button => button.addEventListener('click', closeGuide));
+  tabs.forEach(tab => tab.addEventListener('click', () => selectTab(tab.dataset.guideTab)));
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeGuide();
+  });
+})();
+/* EDUGESTION_USER_GUIDE_V1_END */
