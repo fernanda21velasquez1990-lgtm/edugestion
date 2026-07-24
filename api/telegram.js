@@ -106,7 +106,7 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '👨‍🎓 Mis estudiantes', callback_data: 'students:menu' },
-      { text: '📅 Planificación', callback_data: 'planning:soon' },
+      { text: '📅 Planificación', callback_data: 'planning:menu' },
     ]);
     rows.push([
       { text: '📊 Estadísticas', callback_data: 'stats:soon' },
@@ -177,6 +177,44 @@ function studentDetailKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '📚 Volver a estudiantes', callback_data: 'students:menu' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function planningMenuKeyboard(sections = []) {
+  const rows = [
+    [{ text: '📅 Próximas evaluaciones', callback_data: 'planning:list' }],
+  ];
+
+  if (Array.isArray(sections) && sections.length) {
+    const sectionButtons = sections.slice(0, 6).map(section => ({
+      text: `Sección ${section}`,
+      callback_data: `planning:section:${section}`,
+    }));
+    for (let i = 0; i < sectionButtons.length; i += 2) {
+      rows.push(sectionButtons.slice(i, i + 2));
+    }
+  }
+
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function planningListKeyboard(items = []) {
+  const rows = items.slice(0, 30).map((item, index) => [{
+    text: `${item.fecha || 'Sin fecha'} · ${item.actividad || 'Evaluación'}`.slice(0, 60),
+    callback_data: `planning:open:${index}`,
+  }]);
+  rows.push([{ text: '📅 Volver a planificación', callback_data: 'planning:menu' }]);
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function planningDetailKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📅 Volver a planificación', callback_data: 'planning:menu' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
     ],
   };
@@ -675,6 +713,106 @@ Asistencia efectiva: <b>${Number(attendance.porcentajeAsistencia || 0).toFixed(2
   );
 }
 
+function formatPlanningDate(value) {
+  const parts = String(value || '').split('-');
+  if (parts.length !== 3) return value || 'Sin fecha';
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function planningUrgencyLabel(days) {
+  if (days === null || days === undefined || Number.isNaN(Number(days))) return '';
+  const value = Number(days);
+  if (value < 0) return 'Vencida';
+  if (value === 0) return 'Hoy';
+  if (value === 1) return 'Mañana';
+  if (value <= 7) return `En ${value} días`;
+  return `En ${value} días`;
+}
+
+async function showPlanningMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botListarPlanificacion', {
+    telegramId,
+    incluirPasadas: false,
+  });
+  const sections = Array.isArray(result.secciones) ? result.secciones : [];
+  const total = Number(result.total || 0);
+
+  await sendMessage(
+    chatId,
+    `📅 <b>Planificación académica</b>
+
+Próximas evaluaciones: <b>${total}</b>
+
+Consulta tus actividades, fechas, secciones y ponderaciones.`,
+    { reply_markup: planningMenuKeyboard(sections) },
+  );
+}
+
+async function showPlanningList(chatId, source, section = '') {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botListarPlanificacion', {
+    telegramId,
+    seccion: section,
+    incluirPasadas: false,
+  });
+  const items = Array.isArray(result.planificaciones) ? result.planificaciones : [];
+
+  if (!items.length) {
+    const sectionText = section ? ` para la Sección ${escapeHtml(section)}` : '';
+    await sendMessage(
+      chatId,
+      `📅 <b>Próximas evaluaciones</b>
+
+No tienes evaluaciones próximas${sectionText}.`,
+      { reply_markup: planningMenuKeyboard(result.secciones || []) },
+    );
+    return;
+  }
+
+  const body = items.map((item, index) => {
+    const urgency = planningUrgencyLabel(item.diasRestantes);
+    return `${index + 1}. <b>${escapeHtml(item.actividad || 'Evaluación')}</b>
+Fecha: ${escapeHtml(formatPlanningDate(item.fecha))}
+Curso: ${escapeHtml(item.ano || '')} · Sección ${escapeHtml(item.seccion || '')}
+Ponderación: <b>${Number(item.puntos || 0)}%</b>${urgency ? `
+⏳ ${escapeHtml(urgency)}` : ''}`;
+  }).join('\n\n');
+
+  await sendMessage(
+    chatId,
+    `📅 <b>Próximas evaluaciones${section ? ` · Sección ${escapeHtml(section)}` : ''}</b>
+
+${body}
+
+Selecciona una evaluación para ver el detalle:`,
+    { reply_markup: planningListKeyboard(items) },
+  );
+}
+
+async function showPlanningDetail(chatId, source, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetallePlanificacion', {
+    telegramId,
+    indice: Number(index),
+  });
+  const item = result.planificacion || {};
+  const urgency = planningUrgencyLabel(item.diasRestantes);
+
+  await sendMessage(
+    chatId,
+    `📅 <b>Detalle de evaluación</b>
+
+Actividad: <b>${escapeHtml(item.actividad || 'Evaluación')}</b>
+Fecha: <b>${escapeHtml(formatPlanningDate(item.fecha))}</b>
+Año: ${escapeHtml(item.ano || 'No registrado')}
+Sección: ${escapeHtml(item.seccion || 'No registrada')}
+Ponderación: <b>${Number(item.puntos || 0)}%</b>
+${urgency ? `Recordatorio: <b>${escapeHtml(urgency)}</b>` : ''}`,
+    { reply_markup: planningDetailKeyboard() },
+  );
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -701,7 +839,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -736,6 +874,11 @@ async function handleMessage(message) {
 
   if (/^\/estudiantes(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showStudentsMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/planificacion(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showPlanningMenu(chatId, message);
     return;
   }
 
@@ -855,8 +998,22 @@ async function handleCallbackQuery(callbackQuery) {
     await showStudentDetail(chatId, callbackQuery, index);
     return;
   }
-  if (data === 'planning:soon') {
-    await showSoonMessage(chatId, 'Planificación', 'Fase 3.3');
+  if (data === 'planning:menu') {
+    await showPlanningMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'planning:list') {
+    await showPlanningList(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('planning:section:')) {
+    const section = data.split(':').slice(2).join(':');
+    await showPlanningList(chatId, callbackQuery, section);
+    return;
+  }
+  if (data.startsWith('planning:open:')) {
+    const index = Number(data.split(':')[2]);
+    await showPlanningDetail(chatId, callbackQuery, index);
     return;
   }
   if (data === 'stats:soon') {
@@ -917,7 +1074,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.2-students-ready',
+        status: 'phase3.3-planning-ready',
       });
     }
 
