@@ -1,5 +1,6 @@
 const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_TELEGRAM_MESSAGE = 3900;
+const pendingTextMode = new Map();
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -104,7 +105,7 @@ function mainMenuKeyboard(linked = true) {
       { text: '📋 Consultar asistencia', callback_data: 'attendance:consult' },
     ]);
     rows.push([
-      { text: '👨‍🎓 Mis estudiantes', callback_data: 'students:soon' },
+      { text: '👨‍🎓 Mis estudiantes', callback_data: 'students:menu' },
       { text: '📅 Planificación', callback_data: 'planning:soon' },
     ]);
     rows.push([
@@ -150,6 +151,35 @@ function attendanceDetailKeyboard(index, registered = false) {
   rows.push([{ text: '📋 Volver a consultar', callback_data: 'attendance:consult' }]);
   rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
   return { inline_keyboard: rows };
+}
+
+function studentsMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📚 Ver lista', callback_data: 'students:list' }],
+      [{ text: '🔎 Buscar por nombre o cédula', callback_data: 'students:search' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function studentsListKeyboard(students = []) {
+  const rows = students.slice(0, 30).map((student, index) => [{
+    text: `${index + 1}. ${student.nombre || 'Estudiante'} · ${student.ano || ''}${student.seccion ? ` ${student.seccion}` : ''}`.slice(0, 60),
+    callback_data: `students:open:${index}`,
+  }]);
+  rows.push([{ text: '🔎 Buscar', callback_data: 'students:search' }]);
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function studentDetailKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📚 Volver a estudiantes', callback_data: 'students:menu' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
 }
 
 function attendanceInputKeyboard() {
@@ -488,6 +518,163 @@ ${escapeHtml(aviso)}`,
 }
 
 
+async function showStudentsMenu(chatId, source) {
+  const profile = await linkedProfile(teacherTelegramId(source));
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  pendingTextMode.delete(String(chatId));
+  await sendMessage(
+    chatId,
+    `👨‍🎓 <b>Mis estudiantes</b>
+
+Consulta únicamente los estudiantes asociados a tu cuenta docente.
+
+Selecciona una opción:`,
+    { reply_markup: studentsMenuKeyboard() },
+  );
+}
+
+async function showStudentsList(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botListarEstudiantes', { telegramId, limite: 30 });
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+
+  if (!students.length) {
+    await sendMessage(
+      chatId,
+      '👨‍🎓 <b>Mis estudiantes</b>\n\nTodavía no tienes estudiantes registrados.',
+      { reply_markup: studentsMenuKeyboard() },
+    );
+    return;
+  }
+
+  const body = students.map((student, index) =>
+    `${index + 1}. <b>${escapeHtml(student.nombre || 'Estudiante')}</b>\n` +
+    `Cédula: ${escapeHtml(student.cedula || 'No registrada')} · ` +
+    `${escapeHtml(student.ano || '')} · Sección ${escapeHtml(student.seccion || '')}`
+  ).join('\n\n');
+
+  await sendMessage(
+    chatId,
+    `📚 <b>Lista de estudiantes</b>
+
+Mostrando ${students.length} de ${Number(result.total || students.length)} estudiante(s).
+
+${body}
+
+Selecciona un estudiante para ver sus datos:`,
+    { reply_markup: studentsListKeyboard(students) },
+  );
+}
+
+async function requestStudentSearch(chatId) {
+  pendingTextMode.set(String(chatId), 'student-search');
+  await sendMessage(
+    chatId,
+    `🔎 <b>Buscar estudiante</b>
+
+Escribe parte del nombre o la cédula.
+
+Ejemplos:
+<code>Marcos</code>
+<code>12345678</code>
+
+Escribe <code>cancelar</code> para salir.`,
+    {
+      reply_markup: {
+        inline_keyboard: [[{ text: '❌ Cancelar búsqueda', callback_data: 'students:menu' }]],
+      },
+    },
+  );
+}
+
+async function searchStudents(chatId, source, text) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botBuscarEstudiantes', {
+    telegramId,
+    texto: String(text || '').trim(),
+  });
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+
+  pendingTextMode.delete(String(chatId));
+
+  if (!students.length) {
+    await sendMessage(
+      chatId,
+      `🔎 <b>Resultado de búsqueda</b>
+
+No encontré estudiantes con:
+<code>${escapeHtml(text)}</code>`,
+      { reply_markup: studentsMenuKeyboard() },
+    );
+    return;
+  }
+
+  const body = students.map((student, index) =>
+    `${index + 1}. <b>${escapeHtml(student.nombre || 'Estudiante')}</b>\n` +
+    `Cédula: ${escapeHtml(student.cedula || 'No registrada')} · ` +
+    `${escapeHtml(student.ano || '')} · Sección ${escapeHtml(student.seccion || '')}`
+  ).join('\n\n');
+
+  await sendMessage(
+    chatId,
+    `🔎 <b>Resultados</b>
+
+${body}
+
+Selecciona un estudiante:`,
+    { reply_markup: studentsListKeyboard(students) },
+  );
+}
+
+async function showStudentDetail(chatId, source, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetalleEstudiante', {
+    telegramId,
+    indice: Number(index),
+  });
+  const student = result.estudiante || {};
+  const attendance = student.asistencia || {};
+
+  const representativePhone = student.telefonoRepresentante
+    ? `<code>${escapeHtml(student.telefonoRepresentante)}</code>`
+    : 'No registrado';
+
+  const representativeEmail = student.emailRepresentante
+    ? escapeHtml(student.emailRepresentante)
+    : 'No registrado';
+
+  await sendMessage(
+    chatId,
+    `👨‍🎓 <b>${escapeHtml(student.nombre || 'Estudiante')}</b>
+
+<b>Datos académicos</b>
+Cédula: ${escapeHtml(student.cedula || 'No registrada')}
+Año: ${escapeHtml(student.ano || 'No registrado')}
+Sección: ${escapeHtml(student.seccion || 'No registrada')}
+Turno: ${escapeHtml(student.turno || 'No registrado')}
+Repite: ${escapeHtml(student.repite || 'No')}
+Materia pendiente: ${escapeHtml(student.materiaPendiente || 'Ninguna')}
+
+<b>Representante</b>
+Nombre: ${escapeHtml(student.representante || 'No registrado')}
+Teléfono: ${representativePhone}
+Correo: ${representativeEmail}
+
+<b>Resumen de asistencia</b>
+Registros: <b>${Number(attendance.total || 0)}</b>
+🟢 Presentes: <b>${Number(attendance.presentes || 0)}</b>
+🔴 Ausentes: <b>${Number(attendance.ausentes || 0)}</b>
+🟠 Tardanzas: <b>${Number(attendance.tardanzas || 0)}</b>
+🟣 Justificadas: <b>${Number(attendance.justificadas || 0)}</b>
+Asistencia efectiva: <b>${Number(attendance.porcentajeAsistencia || 0).toFixed(2)}%</b>`,
+    { reply_markup: studentDetailKeyboard() },
+  );
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -514,7 +701,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -547,6 +734,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/estudiantes(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showStudentsMenu(chatId, message);
+    return;
+  }
+
   if (/^\/estado(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showAccountStatus(chatId, message);
     return;
@@ -558,6 +750,29 @@ async function handleMessage(message) {
   }
 
   if (text && !text.startsWith('/')) {
+    const mode = pendingTextMode.get(String(chatId));
+    if (mode === 'student-search') {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        pendingTextMode.delete(String(chatId));
+        await showStudentsMenu(chatId, message);
+      } else {
+        try {
+          await searchStudents(chatId, message, text);
+        } catch (error) {
+          if (error.code === 'BAD_REQUEST') {
+            await sendMessage(
+              chatId,
+              `⚠️ ${escapeHtml(error.message)}`,
+              { reply_markup: studentsMenuKeyboard() },
+            );
+            return;
+          }
+          throw error;
+        }
+      }
+      return;
+    }
+
     try {
       await previewAttendance(chatId, message, text);
     } catch (error) {
@@ -623,8 +838,21 @@ async function handleCallbackQuery(callbackQuery) {
     await openClass(chatId, callbackQuery, index);
     return;
   }
-  if (data === 'students:soon') {
-    await showSoonMessage(chatId, 'Mis estudiantes', 'Fase 3.2');
+  if (data === 'students:menu') {
+    await showStudentsMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'students:list') {
+    await showStudentsList(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'students:search') {
+    await requestStudentSearch(chatId);
+    return;
+  }
+  if (data.startsWith('students:open:')) {
+    const index = Number(data.split(':')[2]);
+    await showStudentDetail(chatId, callbackQuery, index);
     return;
   }
   if (data === 'planning:soon') {
@@ -689,7 +917,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.1.1-consult-loop-fixed',
+        status: 'phase3.2-students-ready',
       });
     }
 
