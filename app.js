@@ -3883,7 +3883,11 @@ Archivo enviado directamente desde EduGestión.`);
     set('admin-history-total', resumen.total ?? datos.length);
     set('admin-history-sent', resumen.enviados ?? datos.filter(x => String(x.estado || 'enviado').toLowerCase() !== 'error').length);
     set('admin-history-errors', resumen.errores ?? datos.filter(x => String(x.estado || '').toLowerCase() === 'error').length);
-    set('admin-history-teachers', resumen.docentes ?? new Set(datos.map(x => x.idProfesor)).size);
+    const docentesUnicos = new Set(datos.map(x => {
+      const id = String(x.idProfesor || '').trim();
+      return id || `nombre:${String(x.docente || 'Docente').trim().toLowerCase()}`;
+    }));
+    set('admin-history-teachers', resumen.docentes ?? docentesUnicos.size);
     set('admin-history-visible', `${datos.length} registro${datos.length === 1 ? '' : 's'}`);
 
     const body = document.getElementById(ids.body);
