@@ -52,6 +52,188 @@ async function telegramRequest(method, payload = {}) {
   return data;
 }
 
+
+function pdfEscape(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[^\x20-\x7EáéíóúÁÉÍÓÚñÑüÜ¿?¡!]/g, '');
+}
+
+function wrapPdfText(text, maxChars = 92) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = '';
+  words.forEach(word => {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  });
+  if (current) lines.push(current);
+  return lines;
+}
+
+function buildSimplePdf(report) {
+  const lines = [];
+  const add = (text = '', size = 10, bold = false) => lines.push({ text: String(text), size, bold });
+
+  const periodoLabel = {
+    dia: 'Diario',
+    semana: 'Semanal',
+    mes: 'Mensual',
+  }[report.periodo] || 'Mensual';
+
+  const range = report.rango || {};
+  const summary = report.resumen || {};
+  const ranking = Array.isArray(report.ranking) ? report.ranking : [];
+
+  add(report.institucion || 'EduGestion', 16, true);
+  add('Informe de asistencia', 14, true);
+  add(`Docente: ${report.profesor?.nombre || 'Docente'}`, 10);
+  add(`Materia: ${report.profesor?.materia || 'No registrada'}`, 10);
+  add(`Periodo: ${periodoLabel}`, 10);
+  add(`Rango: ${range.inicio || ''} al ${range.fin || ''}`, 10);
+  add(`Seccion: ${report.seccion || 'Todas las secciones'}`, 10);
+  add('', 8);
+
+  add('Resumen general', 12, true);
+  add(`Registros: ${Number(summary.total || 0)}`, 10);
+  add(`Estudiantes: ${Number(summary.estudiantes || 0)}`, 10);
+  add(`Secciones: ${Number(summary.secciones || 0)}`, 10);
+  add(`Presentes: ${Number(summary.presentes || 0)}`, 10);
+  add(`Ausentes: ${Number(summary.ausentes || 0)}`, 10);
+  add(`Tardanzas: ${Number(summary.tardanzas || 0)}`, 10);
+  add(`Justificadas: ${Number(summary.justificadas || 0)}`, 10);
+  add(`Asistencia efectiva: ${Number(summary.porcentajeAsistencia || 0).toFixed(2)}%`, 10);
+  add('', 8);
+
+  add('Estudiantes con mas ausencias', 12, true);
+  if (!ranking.length) {
+    add('No hay ausencias o tardanzas registradas en el periodo.', 10);
+  } else {
+    ranking.slice(0, 10).forEach((item, index) => {
+      add(
+        `${index + 1}. ${item.alumno || 'Estudiante'} - ${item.ano || ''} ${item.seccion || ''} - Ausencias: ${Number(item.ausentes || 0)} - Tardanzas: ${Number(item.tardanzas || 0)}`,
+        9,
+      );
+    });
+  }
+  add('', 8);
+  add(`Generado: ${new Date().toLocaleString('es-ES')}`, 8);
+  add('Documento generado por EduGestion desde Telegram.', 8);
+
+  const expanded = [];
+  lines.forEach(line => {
+    if (!line.text) {
+      expanded.push(line);
+      return;
+    }
+    wrapPdfText(line.text, line.size >= 12 ? 70 : 92).forEach(text => {
+      expanded.push({ ...line, text });
+    });
+  });
+
+  const pageHeight = 792;
+  const marginTop = 52;
+  const marginBottom = 45;
+  const usable = pageHeight - marginTop - marginBottom;
+  const pages = [];
+  let page = [];
+  let used = 0;
+
+  expanded.forEach(line => {
+    const height = line.text ? Math.max(13, line.size + 5) : 8;
+    if (used + height > usable && page.length) {
+      pages.push(page);
+      page = [];
+      used = 0;
+    }
+    page.push(line);
+    used += height;
+  });
+  if (page.length) pages.push(page);
+
+  const objects = [];
+  const addObject = body => {
+    objects.push(body);
+    return objects.length;
+  };
+
+  const catalogId = addObject('');
+  const pagesId = addObject('');
+  const fontRegularId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const fontBoldId = addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
+
+  const pageIds = [];
+  pages.forEach(pageLines => {
+    let y = pageHeight - marginTop;
+    const commands = ['BT'];
+    pageLines.forEach(line => {
+      if (!line.text) {
+        y -= 8;
+        return;
+      }
+      const font = line.bold ? 'F2' : 'F1';
+      commands.push(`/${font} ${line.size} Tf`);
+      commands.push(`1 0 0 1 48 ${y} Tm`);
+      commands.push(`(${pdfEscape(line.text)}) Tj`);
+      y -= Math.max(13, line.size + 5);
+    });
+    commands.push('ET');
+
+    const stream = commands.join('\n');
+    const contentId = addObject(`<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}\nendstream`);
+    const pageId = addObject(`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontRegularId} 0 R /F2 ${fontBoldId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pageIds.push(pageId);
+  });
+
+  objects[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(pdf, 'latin1'));
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+
+  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  offsets.slice(1).forEach(offset => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return Buffer.from(pdf, 'latin1');
+}
+
+async function sendPdfDocument(chatId, buffer, filename, caption) {
+  const token = getRequiredEnv('TELEGRAM_BOT_TOKEN');
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  form.append('document', new Blob([buffer], { type: 'application/pdf' }), filename);
+  form.append('caption', String(caption || '').slice(0, 900));
+
+  const response = await fetch(`${BOT_API_BASE}/bot${token}/sendDocument`, {
+    method: 'POST',
+    body: form,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.ok === false) {
+    const error = new Error(data.description || `Telegram respondió con estado ${response.status}`);
+    error.code = 'TELEGRAM_SEND_FAILED';
+    throw error;
+  }
+  return data.result || {};
+}
+
 async function sendMessage(chatId, text, options = {}) {
   return telegramRequest('sendMessage', {
     chat_id: chatId,
@@ -110,7 +292,7 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '📊 Estadísticas', callback_data: 'stats:menu' },
-      { text: '📄 Generar informe', callback_data: 'reports:soon' },
+      { text: '📄 Generar informe', callback_data: 'reports:menu' },
     ]);
     rows.push([
       { text: '👤 Mi cuenta', callback_data: 'account:status' },
@@ -238,6 +420,26 @@ function statsResultKeyboard() {
   return {
     inline_keyboard: [
       [{ text: '📊 Volver a estadísticas', callback_data: 'stats:menu' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function reportsMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📅 Informe diario', callback_data: 'reports:day' }],
+      [{ text: '🗓 Informe semanal', callback_data: 'reports:week' }],
+      [{ text: '📆 Informe mensual', callback_data: 'reports:month' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function reportsResultKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📄 Generar otro informe', callback_data: 'reports:menu' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
     ],
   };
@@ -925,6 +1127,98 @@ ${body}`,
   );
 }
 
+async function showReportsMenu(chatId, source) {
+  const profile = await linkedProfile(teacherTelegramId(source));
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📄 <b>Generar informe PDF</b>
+
+Selecciona el periodo. El documento se generará y se enviará directamente a este chat.`,
+    { reply_markup: reportsMenuKeyboard() },
+  );
+}
+
+async function generateAndSendReport(chatId, source, period) {
+  const telegramId = teacherTelegramId(source);
+  const labels = {
+    dia: 'Diario',
+    semana: 'Semanal',
+    mes: 'Mensual',
+  };
+
+  await sendMessage(
+    chatId,
+    `⏳ <b>Generando informe ${escapeHtml(labels[period] || 'Mensual')}...</b>
+
+Espera unos segundos.`,
+  );
+
+  let filename = '';
+  try {
+    const report = await callEduGestion('botDatosInformeAsistencia', {
+      telegramId,
+      periodo: period,
+    });
+
+    const date = new Date().toISOString().slice(0, 10);
+    filename = `Informe_Asistencia_${period}_${date}.pdf`;
+    const pdf = buildSimplePdf(report);
+
+    const sent = await sendPdfDocument(
+      chatId,
+      pdf,
+      filename,
+      `Informe ${labels[period] || 'Mensual'} de asistencia · EduGestión`,
+    );
+
+    await callEduGestion('botRegistrarInformeTelegram', {
+      telegramId,
+      archivo: filename,
+      periodo: labels[period] || period,
+      seccion: report.seccion || 'Todas las secciones',
+      mensajeId: String(sent.message_id || ''),
+      tamanoBytes: pdf.length,
+      estado: 'enviado',
+      codigo: '',
+      detalle: 'Informe generado desde el bot de Telegram.',
+    });
+
+    await sendMessage(
+      chatId,
+      `✅ <b>Informe enviado correctamente</b>
+
+Archivo: <code>${escapeHtml(filename)}</code>
+Periodo: <b>${escapeHtml(labels[period] || period)}</b>
+Tamaño: <b>${Math.max(1, Math.round(pdf.length / 1024))} KB</b>
+
+El envío quedó registrado en el historial de EduGestión.`,
+      { reply_markup: reportsResultKeyboard() },
+    );
+  } catch (error) {
+    try {
+      await callEduGestion('botRegistrarInformeTelegram', {
+        telegramId,
+        archivo: filename || 'Informe_Asistencia_Telegram.pdf',
+        periodo: labels[period] || period,
+        seccion: 'Todas las secciones',
+        mensajeId: '',
+        tamanoBytes: 0,
+        estado: 'error',
+        codigo: error.code || 'REPORT_ERROR',
+        detalle: error.message || 'No se pudo generar el informe.',
+      });
+    } catch (auditError) {
+      console.error('No se pudo registrar el error del informe:', auditError);
+    }
+    throw error;
+  }
+}
+
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
     chatId,
@@ -951,7 +1245,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -996,6 +1290,11 @@ async function handleMessage(message) {
 
   if (/^\/estadisticas(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showStatsMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/informe(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showReportsMenu(chatId, message);
     return;
   }
 
@@ -1153,8 +1452,20 @@ async function handleCallbackQuery(callbackQuery) {
     await showAbsenceRanking(chatId, callbackQuery);
     return;
   }
-  if (data === 'reports:soon') {
-    await showSoonMessage(chatId, 'Generar informe', 'Fase 3.4');
+  if (data === 'reports:menu') {
+    await showReportsMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'reports:day') {
+    await generateAndSendReport(chatId, callbackQuery, 'dia');
+    return;
+  }
+  if (data === 'reports:week') {
+    await generateAndSendReport(chatId, callbackQuery, 'semana');
+    return;
+  }
+  if (data === 'reports:month') {
+    await generateAndSendReport(chatId, callbackQuery, 'mes');
     return;
   }
   if (data.startsWith('class:open:')) {
@@ -1207,7 +1518,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.4A-stats-ready',
+        status: 'phase3.4B-pdf-reports-ready',
       });
     }
 
