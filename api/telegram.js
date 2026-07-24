@@ -131,6 +131,27 @@ function classesKeyboard(classes = []) {
   return { inline_keyboard: rows };
 }
 
+function attendanceConsultKeyboard(classes = []) {
+  const rows = classes.map((item, index) => [{
+    text: `${item.registrada ? '✅' : '🟡'} ${item.horaInicio || '--:--'} · ${item.ano} ${item.seccion}`,
+    callback_data: `consult:open:${index}`,
+  }]);
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function attendanceDetailKeyboard(index, registered = false) {
+  const rows = [];
+  if (registered) {
+    rows.push([{ text: '✏️ Corregir asistencia', callback_data: `consult:edit:${index}` }]);
+  } else {
+    rows.push([{ text: '✅ Pasar asistencia', callback_data: `class:open:${index}` }]);
+  }
+  rows.push([{ text: '📋 Volver a consultar', callback_data: 'attendance:consult' }]);
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
 function attendanceInputKeyboard() {
   return {
     inline_keyboard: [
@@ -359,8 +380,113 @@ async function cancelAttendance(chatId, source) {
 }
 
 async function showAttendanceConsultation(chatId, source) {
-  await showTodayClasses(chatId, source);
+  const telegramId = teacherTelegramId(source);
+  try {
+    const result = await callEduGestion('botClasesHoy', { telegramId });
+    const classes = Array.isArray(result.clases) ? result.clases : [];
+
+    if (!classes.length) {
+      await sendMessage(
+        chatId,
+        `📋 <b>Consultar asistencia</b>
+
+No hay clases registradas en tu horario para ${escapeHtml(result.dia || 'hoy')}.`,
+        { reply_markup: mainMenuKeyboard(true) },
+      );
+      return;
+    }
+
+    const body = classes.map((item, index) => {
+      const estado = item.registrada
+        ? `✅ Registrada · P:${item.presentes || 0} · A:${item.ausentes || 0} · T:${item.tardanzas || 0} · J:${item.justificadas || 0}`
+        : '🟡 Asistencia pendiente';
+      return `${index + 1}. <b>${escapeHtml(item.horaInicio || '--:--')}–${escapeHtml(item.horaFin || '--:--')}</b>
+${escapeHtml(item.ano || '')} · Sección ${escapeHtml(item.seccion || '')}
+${estado}`;
+    }).join('\n\n');
+
+    await sendMessage(
+      chatId,
+      `📋 <b>Consulta de asistencia</b>
+${escapeHtml(result.dia || '')} · ${escapeHtml(result.fecha || '')}
+
+${body}
+
+Selecciona una clase para ver el detalle:`,
+      { reply_markup: attendanceConsultKeyboard(classes) },
+    );
+  } catch (error) {
+    if (error.code === 'TELEGRAM_NOT_LINKED') {
+      await showLinkInstructions(chatId);
+      return;
+    }
+    throw error;
+  }
 }
+
+async function showAttendanceDetail(chatId, source, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botAbrirClase', {
+    telegramId,
+    indice: Number(index),
+  });
+
+  const clase = result.clase || {};
+  const students = Array.isArray(result.alumnos) ? result.alumnos : [];
+  const resumen = result.resumenActual || {};
+
+  if (!students.length) {
+    await sendMessage(
+      chatId,
+      `⚠️ <b>Consulta de asistencia</b>
+
+La sección ${escapeHtml(clase.ano || '')} ${escapeHtml(clase.seccion || '')} no tiene estudiantes registrados.`,
+      { reply_markup: mainMenuKeyboard(true) },
+    );
+    return;
+  }
+
+  const estados = { Presente: [], Ausente: [], Tardanza: [], Justificada: [] };
+
+  students.forEach(student => {
+    const estado = String(student.estado || 'Presente');
+    if (!estados[estado]) estados[estado] = [];
+    estados[estado].push(student);
+  });
+
+  const lista = items => items.length
+    ? items.map(item => `${item.numero}. ${escapeHtml(item.nombre || 'Estudiante')}`).join('\n')
+    : 'Ninguno';
+
+  const aviso = result.registrada
+    ? 'Esta asistencia ya está registrada.'
+    : 'Esta clase todavía no tiene asistencia registrada.';
+
+  await sendMessage(
+    chatId,
+    `📋 <b>Detalle de asistencia</b>
+
+Curso: <b>${escapeHtml(clase.ano || '')} · Sección ${escapeHtml(clase.seccion || '')}</b>
+Fecha: <b>${escapeHtml(clase.fecha || '')}</b>
+Horario: <b>${escapeHtml(clase.horaInicio || '')}–${escapeHtml(clase.horaFin || '')}</b>
+
+🟢 Presentes: <b>${resumen.presentes || estados.Presente.length}</b>
+${lista(estados.Presente)}
+
+🔴 Ausentes: <b>${resumen.ausentes || estados.Ausente.length}</b>
+${lista(estados.Ausente)}
+
+🟠 Tardanzas: <b>${resumen.tardanzas || estados.Tardanza.length}</b>
+${lista(estados.Tardanza)}
+
+🟣 Justificadas: <b>${resumen.justificadas || estados.Justificada.length}</b>
+${lista(estados.Justificada)}
+
+${escapeHtml(aviso)}`,
+    { reply_markup: attendanceDetailKeyboard(Number(index), Boolean(result.registrada)) },
+  );
+}
+
 
 async function showSoonMessage(chatId, title, phase) {
   await sendMessage(
@@ -388,7 +514,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estado muestra la cuenta vinculada.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -413,6 +539,11 @@ async function handleMessage(message) {
 
   if (/^\/(hoy|asistencia)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showTodayClasses(chatId, message);
+    return;
+  }
+
+  if (/^\/consultar(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showAttendanceConsultation(chatId, message);
     return;
   }
 
@@ -548,7 +679,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase3.0A-menu-safe-ready',
+        status: 'phase3.1-attendance-consult-ready',
       });
     }
 
