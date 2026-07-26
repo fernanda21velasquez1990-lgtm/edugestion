@@ -6495,7 +6495,7 @@ body.user-guide-open { overflow: hidden; }
   .login-panel { min-height: 100vh; padding: 28px 20px; }
   .login-card { width: 100%; padding: 24px 20px; }
   .app-shell { min-width: 0; }
-  .app-sidebar { width: min(86vw, 290px); }
+  .app-sidebar { width: 100%; max-width: none; }
   .topbar {
     min-height: auto;
     align-items: flex-start;
