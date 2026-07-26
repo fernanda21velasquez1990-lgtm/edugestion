@@ -7709,3 +7709,109 @@ body.library-modal-open { overflow:hidden; }
 .teacher-absence-modal__card footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 18px;border-top:1px solid #e7edf3}.teacher-absence-modal__card footer button{min-width:110px;min-height:39px;border:1px solid #d6e1eb;border-radius:10px;color:#60758a;background:#fff;font-size:.6rem;font-weight:800}.teacher-absence-modal__card footer button[type=submit]{color:#fff;border-color:var(--platform-blue-800);background:var(--platform-blue-800)}
 @media(max-width:1050px){.teacher-clock-card{grid-template-columns:1fr 1fr}.teacher-clock-actions{grid-column:1/3}.teacher-attendance-layout{grid-template-columns:1fr}}
 @media(max-width:700px){.teacher-clock-card,.teacher-hours-summary{grid-template-columns:1fr}.teacher-clock-actions{grid-column:1}.teacher-clock-actions{grid-template-columns:1fr}.teacher-hours-summary{gap:8px}.teacher-attendance-layout{grid-template-columns:1fr}}
+
+
+/* Navegación móvil lateral, plegable y segura para pantallas pequeñas */
+.mobile-nav-toggle { display: none; }
+
+@media (max-width: 900px) {
+  .app-sidebar {
+    inset: 0 auto 0 0;
+    width: min(78vw, 290px);
+    height: 100dvh;
+    padding: calc(18px + env(safe-area-inset-top)) 12px calc(18px + env(safe-area-inset-bottom));
+    border-top: 0;
+    border-right: 1px solid #dce3ec;
+    transform: translateX(-105%);
+    transition: transform .24s ease;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    z-index: 1200;
+  }
+
+  .app-sidebar.is-mobile-open {
+    transform: translateX(0);
+  }
+
+  .app-nav {
+    display: flex;
+    height: auto;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .nav-item {
+    width: 100%;
+    min-height: 54px;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 10px 13px;
+    border-radius: 13px;
+    font-size: .76rem;
+    text-align: left;
+  }
+
+  .nav-item i {
+    width: 27px;
+    flex: 0 0 27px;
+    font-size: 1rem;
+    text-align: center;
+  }
+
+  .nav-item.is-active::after {
+    top: 50%;
+    left: 0;
+    width: 3px;
+    height: 26px;
+    border-radius: 0 5px 5px 0;
+    transform: translateY(-50%);
+  }
+
+  .mobile-nav-toggle {
+    position: fixed;
+    z-index: 1210;
+    right: 12px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    display: inline-flex;
+    min-width: 58px;
+    height: 50px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 13px;
+    border: 0;
+    border-radius: 16px;
+    color: #fff;
+    background: var(--brand-700);
+    box-shadow: 0 10px 28px rgba(18, 50, 82, .28);
+    font: inherit;
+    font-size: .68rem;
+    font-weight: 800;
+  }
+
+  .mobile-nav-toggle i { font-size: 1rem; }
+  .mobile-nav-toggle.is-open { background: #173f67; }
+
+  .app-workspace {
+    margin-left: 0;
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
+  }
+
+  body.mobile-nav-open::after {
+    position: fixed;
+    z-index: 1190;
+    inset: 0;
+    background: rgba(13, 35, 57, .38);
+    backdrop-filter: blur(2px);
+    content: "";
+  }
+
+  body.mobile-nav-open { overflow: hidden; }
+}
+
+@media (max-width: 380px) {
+  .app-sidebar { width: min(84vw, 280px); }
+  .mobile-nav-toggle span { display: none; }
+  .mobile-nav-toggle { min-width: 50px; width: 50px; padding: 0; }
+}

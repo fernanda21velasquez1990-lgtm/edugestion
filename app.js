@@ -5280,3 +5280,72 @@ Archivo enviado directamente desde EduGestión.`);
     agregarCintilloHorario();
   }
 })();
+
+
+// Menú lateral responsive para celulares: se abre con un botón y se oculta solo.
+(() => {
+  const MOBILE_BREAKPOINT = 900;
+  const AUTO_CLOSE_MS = 5500;
+  let closeTimer = null;
+
+  function initMobileNavigation() {
+    const sidebar = document.querySelector('.app-sidebar');
+    const nav = document.getElementById('app-nav');
+    const toggle = document.getElementById('mobile-nav-toggle');
+    if (!sidebar || !nav || !toggle) return;
+
+    const isMobile = () => window.innerWidth <= MOBILE_BREAKPOINT;
+
+    const setOpen = (open) => {
+      if (!isMobile()) open = false;
+      sidebar.classList.toggle('is-mobile-open', open);
+      toggle.classList.toggle('is-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'Cerrar menú de navegación' : 'Abrir menú de navegación');
+      toggle.querySelector('i')?.classList.toggle('fa-xmark', open);
+      toggle.querySelector('i')?.classList.toggle('fa-bars', !open);
+      document.body.classList.toggle('mobile-nav-open', open);
+      clearTimeout(closeTimer);
+      if (open) closeTimer = setTimeout(() => setOpen(false), AUTO_CLOSE_MS);
+    };
+
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setOpen(!sidebar.classList.contains('is-mobile-open'));
+    });
+
+    nav.addEventListener('click', (event) => {
+      if (event.target.closest('.nav-item') && isMobile()) {
+        setTimeout(() => setOpen(false), 160);
+      }
+    });
+
+    sidebar.addEventListener('pointerdown', () => {
+      if (sidebar.classList.contains('is-mobile-open')) {
+        clearTimeout(closeTimer);
+        closeTimer = setTimeout(() => setOpen(false), AUTO_CLOSE_MS);
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      if (isMobile() && sidebar.classList.contains('is-mobile-open') &&
+          !sidebar.contains(event.target) && !toggle.contains(event.target)) {
+        setOpen(false);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    });
+
+    window.addEventListener('resize', () => {
+      if (!isMobile()) setOpen(false);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMobileNavigation, { once: true });
+  } else {
+    initMobileNavigation();
+  }
+})();
