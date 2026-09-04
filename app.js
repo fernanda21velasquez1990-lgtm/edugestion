@@ -8334,3 +8334,116 @@ Archivo enviado directamente desde EduGestión.`);
   window.addEventListener('storage',()=>{if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))render()});
 })();
 /* EDUGESTION_CUADERNILLO_EF_FASE7_LAPSOS_END */
+
+/* ================================================================
+   EduGestión · Cuadernillo Educación Física · FASE 8
+   Plan anual de Educación Física
+   ================================================================ */
+(() => {
+  const TAB_ID='tab-plan-anual-ef';
+  const SECTION_ID='section-plan-anual-ef';
+  const STYLE_ID='style-plan-anual-ef';
+  const ASSIGN_KEY='edugestion_cuadernillo_ef_lapsos_v1';
+  const TRACK_KEY='edugestion_cuadernillo_ef_seguimiento_v1';
+  const HISTORY_KEY='edugestion_cuadernillo_ef_historial_v1';
+  const SELECT_KEY='edugestion_cuadernillo_ef_seleccion';
+  const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
+  const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
+  const key=(g,t)=>`${norm(g)}|||${norm(t)}`;
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(_){return f}};
+  const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  let gradoActual='';
+
+  function styles(){
+    if(document.getElementById(STYLE_ID))return;
+    const s=document.createElement('style');s.id=STYLE_ID;s.textContent=`
+      #${SECTION_ID}{padding-bottom:34px}.pa-hero{border-radius:24px;padding:24px;background:linear-gradient(135deg,#223b6e,#386fa4);color:#fff;margin-bottom:18px}.pa-hero small{font-weight:900;letter-spacing:.08em;text-transform:uppercase}.pa-hero h2{margin:7px 0 6px;font-size:1.8rem}.pa-hero p{margin:0;opacity:.93;max-width:980px;line-height:1.55}
+      .pa-controls{display:grid;grid-template-columns:1.1fr repeat(3,1fr);gap:10px;margin-bottom:15px}.pa-field{border:1px solid var(--border-color,#d8e2ec);background:var(--card-bg,#fff);border-radius:14px;padding:11px}.pa-field label{display:block;font-size:.74rem;font-weight:900;color:#60758a;margin-bottom:5px}.pa-field select,.pa-field input{width:100%;border:1px solid #cbd8e5;background:var(--card-bg,#fff);color:var(--text-color,#25394d);border-radius:10px;padding:9px 10px;outline:none}
+      .pa-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:15px}.pa-kpi{border:1px solid var(--border-color,#d8e2ec);background:var(--card-bg,#fff);border-radius:15px;padding:13px}.pa-kpi small{display:block;font-size:.72rem;font-weight:850;color:#72879a}.pa-kpi strong{display:block;font-size:1.45rem;color:var(--text-color,#24394e);margin-top:2px}.pa-kpi.warn strong{color:#b36a00}.pa-kpi.good strong{color:#177156}
+      .pa-actions{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:15px}.pa-btn{border:0;border-radius:11px;padding:10px 14px;font-weight:900;cursor:pointer}.pa-btn.primary{background:#176ea7;color:#fff}.pa-btn.soft{background:#edf5fb;color:#195e8c}.pa-btn.print{background:#eff6f1;color:#19664e}.pa-btn:disabled{opacity:.5;cursor:not-allowed}
+      .pa-lapsos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}.pa-lapso{border:1px solid var(--border-color,#d8e2ec);background:var(--card-bg,#fff);border-radius:18px;overflow:hidden}.pa-lapso-head{padding:14px 15px;background:#f3f8fc;border-bottom:1px solid var(--border-color,#d8e2ec)}.pa-lapso-head h3{margin:0;color:var(--text-color,#24394e);font-size:1rem}.pa-lapso-head small{color:#6c8194;font-weight:800}.pa-topic-list{padding:10px;display:flex;flex-direction:column;gap:8px}.pa-topic{border:1px solid #e0e8ef;border-radius:12px;padding:10px}.pa-topic h4{margin:0 0 6px;font-size:.88rem;color:var(--text-color,#273b4e)}.pa-meta{display:flex;gap:6px;flex-wrap:wrap}.pa-chip{font-size:.68rem;font-weight:850;border-radius:999px;padding:4px 7px;background:#eef3f7;color:#5d7184}.pa-chip.Evaluado{background:#e8f6ef;color:#176849}.pa-chip.Trabajado{background:#fff5df;color:#9a6200}.pa-chip.Planificado{background:#e8f3fb;color:#196b9c}.pa-empty{padding:22px;text-align:center;color:#71869a;font-size:.82rem}
+      .pa-note{margin-top:14px;border:1px dashed #b8c9d8;background:var(--card-bg,#fff);border-radius:14px;padding:12px;color:#63788c;font-size:.82rem;line-height:1.45}.pa-note.warn{border-color:#e0b77d;background:#fff9ef;color:#8c5b12}
+      .dark-mode .pa-lapso-head,.edugestion-dark .pa-lapso-head{background:#1b2e40}.dark-mode .pa-topic,.edugestion-dark .pa-topic{border-color:#3d5367}.dark-mode .pa-btn.soft,.edugestion-dark .pa-btn.soft{background:#1b3448;color:#d9edfa}.dark-mode .pa-btn.print,.edugestion-dark .pa-btn.print{background:#17352e;color:#d8f3e9}
+      @media(max-width:1000px){.pa-controls{grid-template-columns:1fr 1fr}.pa-summary{grid-template-columns:repeat(3,1fr)}.pa-lapsos{grid-template-columns:1fr}}
+      @media(max-width:600px){.pa-controls{grid-template-columns:1fr}.pa-summary{grid-template-columns:1fr 1fr}.pa-actions .pa-btn{width:100%}}
+    `;document.head.appendChild(s);
+  }
+
+  function assignments(){return readJSON(ASSIGN_KEY,{})}
+  function track(){return readJSON(TRACK_KEY,{})}
+  function history(){return readJSON(HISTORY_KEY,{})}
+  function addHistory(grado,tema,estado,accion,detalle){const all=history(),k=key(grado,tema);if(!Array.isArray(all[k]))all[k]=[];all[k].push({fecha:new Date().toISOString(),grado,tema,estado,accion,detalle});if(all[k].length>80)all[k]=all[k].slice(-80);writeJSON(HISTORY_KEY,all)}
+
+  function rows(){
+    const data=window.EDUGESTION_CEF_DATA||{},a=assignments(),tr=track();
+    return (data[gradoActual]||[]).map(x=>{const k=key(gradoActual,x.tema);return {...x,grado:gradoActual,lapso:a[k]||'',estado:tr[k]?.estado||'Pendiente'}})
+  }
+
+  function create(){
+    if(document.getElementById(SECTION_ID))return true;
+    const data=window.EDUGESTION_CEF_DATA,nav=document.getElementById('app-nav')||document.querySelector('.app-sidebar nav'),main=document.getElementById('app-main')||document.querySelector('main');
+    if(!data||!nav||!main)return false;styles();gradoActual=gradoActual||Object.keys(data)[0]||'';
+    const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Plan anual Educación Física';tab.dataset.description='Organiza y genera una visión anual a partir de los tres lapsos del cuadernillo curricular.';tab.innerHTML='<i class="fa-solid fa-calendar-days"></i><span>Plan anual Educación Física</span>';
+    const ref=document.getElementById('tab-panel-lapsos-ef')||document.getElementById('tab-resumen-curricular-ef')||document.getElementById('tab-cuadernillo-ef');if(ref?.nextSibling)nav.insertBefore(tab,ref.nextSibling);else nav.appendChild(tab);
+    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
+      <header class="pa-hero"><small><i class="fa-solid fa-calendar-days"></i> Fase 8 · Organización anual</small><h2>Plan anual de Educación Física</h2><p>Reúne los temas de los tres lapsos de un grado o año, muestra el avance curricular y prepara una base anual para generar con IA una planificación coherente con el Cuadernillo Curricular.</p></header>
+      <div class="pa-controls"><div class="pa-field"><label>Grado / año</label><select id="pa-grade"></select></div><div class="pa-field"><label>Institución</label><input id="pa-inst" placeholder="Nombre de la institución"></div><div class="pa-field"><label>Docente</label><input id="pa-doc" placeholder="Nombre del docente"></div><div class="pa-field"><label>Año escolar</label><input id="pa-year" value="2026 - 2027" placeholder="2026 - 2027"></div></div>
+      <div class="pa-summary" id="pa-summary"></div>
+      <div class="pa-actions"><button class="pa-btn primary" id="pa-generate"><i class="fa-solid fa-wand-magic-sparkles"></i> Crear plan anual con IA</button><button class="pa-btn soft" id="pa-open-lapsos"><i class="fa-solid fa-table-columns"></i> Organizar lapsos</button><button class="pa-btn print" id="pa-print"><i class="fa-solid fa-print"></i> Imprimir vista anual</button></div>
+      <div class="pa-lapsos" id="pa-lapsos"></div><div class="pa-note" id="pa-note"></div>`;
+    main.appendChild(sec);tab.addEventListener('click',()=>open(tab,sec));
+    const sel=sec.querySelector('#pa-grade');sel.innerHTML=Object.keys(data).map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');sel.value=gradoActual;sel.addEventListener('change',()=>{gradoActual=sel.value;render()});
+    sec.querySelector('#pa-open-lapsos').addEventListener('click',()=>{document.getElementById('tab-panel-lapsos-ef')?.click()});
+    sec.querySelector('#pa-generate').addEventListener('click',generateAnnual);
+    sec.querySelector('#pa-print').addEventListener('click',printAnnual);
+    render();return true;
+  }
+
+  function open(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;render();window.scrollTo({top:0,behavior:'smooth'})}
+
+  function render(){
+    const all=rows(),assigned=all.filter(x=>x.lapso),unassigned=all.filter(x=>!x.lapso),status={Pendiente:0,Planificado:0,Trabajado:0,Evaluado:0};all.forEach(x=>status[x.estado]=(status[x.estado]||0)+1);
+    const done=(status.Trabajado||0)+(status.Evaluado||0),pct=all.length?Math.round((done/all.length)*100):0;
+    const sum=document.getElementById('pa-summary');if(sum)sum.innerHTML=`<div class="pa-kpi"><small>Total de temas</small><strong>${all.length}</strong></div><div class="pa-kpi"><small>Asignados a lapsos</small><strong>${assigned.length}</strong></div><div class="pa-kpi warn"><small>Sin asignar</small><strong>${unassigned.length}</strong></div><div class="pa-kpi"><small>Trabajados / Evaluados</small><strong>${done}</strong></div><div class="pa-kpi good"><small>Avance anual</small><strong>${pct}%</strong></div>`;
+    const box=document.getElementById('pa-lapsos');if(box)box.innerHTML=LAPSOS.map(l=>lapsoHtml(l,all.filter(x=>x.lapso===l))).join('');
+    const note=document.getElementById('pa-note');if(note){if(unassigned.length){note.className='pa-note warn';note.innerHTML=`<b><i class="fa-solid fa-triangle-exclamation"></i> Faltan ${unassigned.length} tema${unassigned.length===1?'':'s'} por asignar.</b> Para que el plan anual quede completo, entra en <b>Panel por lapso</b> y distribuye esos contenidos entre 1er, 2do y 3er Lapso.`}else{note.className='pa-note';note.innerHTML='<b><i class="fa-solid fa-circle-check"></i> Distribución completa.</b> Todos los temas de este grado/año ya están asignados a un lapso y pueden utilizarse para generar el plan anual.'}}
+    const gen=document.getElementById('pa-generate');if(gen)gen.disabled=!assigned.length;
+  }
+
+  function lapsoHtml(l,arr){return `<article class="pa-lapso"><div class="pa-lapso-head"><h3>${esc(l)}</h3><small>${arr.length} tema${arr.length===1?'':'s'} asignado${arr.length===1?'':'s'}</small></div>${arr.length?`<div class="pa-topic-list">${arr.map(x=>`<div class="pa-topic"><h4>${esc(x.tema)}</h4><div class="pa-meta"><span class="pa-chip ${esc(x.estado)}">${esc(x.estado)}</span>${x.pagina?`<span class="pa-chip">p. ${esc(x.pagina)}</span>`:''}</div></div>`).join('')}</div>`:`<div class="pa-empty">No hay temas asignados a este lapso.</div>`}</article>`}
+
+  function annualSynthetic(){
+    const all=rows(),assigned=all.filter(x=>x.lapso),byLapso={};LAPSOS.forEach(l=>byLapso[l]=assigned.filter(x=>x.lapso===l));
+    const inst=document.getElementById('pa-inst')?.value.trim()||'',doc=document.getElementById('pa-doc')?.value.trim()||'',year=document.getElementById('pa-year')?.value.trim()||'2026 - 2027';
+    const topicText=t=>`${t.tema}${t.intencionalidad?`\nIntencionalidad pedagógica: ${t.intencionalidad}`:''}${t.tejido?`\nTejido temático: ${t.tejido}`:''}${t.temaIndispensable?`\nTema indispensable: ${t.temaIndispensable}`:''}${t.referentes?`\nReferentes teórico-prácticos: ${t.referentes}`:''}`;
+    const body=LAPSOS.map(l=>`${l.toUpperCase()}\n${byLapso[l].length?byLapso[l].map((t,i)=>`${i+1}. ${topicText(t)}`).join('\n\n'):'Sin temas asignados'}`).join('\n\n====================\n\n');
+    return {grado:gradoActual,tema:`Plan anual de Educación Física · ${gradoActual} · Año escolar ${year}`,intencionalidad:'Construir una planificación anual coherente, progresiva y organizada por los tres lapsos, respetando estrictamente la base curricular del cuadernillo.',tejido:body,referentes:'',fuente:'Cuadernillo Curricular MPPE · Educación Física',tipo:'plan-anual',institucion:inst,docente:doc,anioEscolar:year,seleccionadoEn:new Date().toISOString(),cantidadTemas:assigned.length};
+  }
+
+  function generateAnnual(){
+    const s=annualSynthetic();if(!s.cantidadTemas)return;writeJSON(SELECT_KEY,s);
+    rows().filter(x=>x.lapso).forEach(t=>addHistory(gradoActual,t.tema,t.estado,'Incluido en plan anual',`Incluido en el plan anual ${s.anioEscolar}, ${t.lapso}.`));
+    document.getElementById('tab-planificacion')?.click();setTimeout(()=>fillPlanning(s),180);
+  }
+
+  function fillPlanning(s){
+    const grado=document.getElementById('plan-ia-grado'),area=document.getElementById('plan-ia-area'),tema=document.getElementById('plan-ia-tema'),obj=document.getElementById('plan-ia-objetivo'),extra=document.getElementById('plan-ia-indicaciones')||document.getElementById('plan-ia-notas');
+    if(grado){const opts=[...(grado.options||[])],m=opts.find(o=>o.value===s.grado||norm(o.textContent)===norm(s.grado));if(m)grado.value=m.value;else if(grado.tagName==='INPUT')grado.value=s.grado}if(area)area.value='Educación Física';if(tema)tema.value=s.tema;if(obj)obj.value=s.intencionalidad;
+    if(extra)extra.value=`Genera un PLAN ANUAL de Educación Física para ${s.grado}, año escolar ${s.anioEscolar}.${s.institucion?` Institución: ${s.institucion}.`:''}${s.docente?` Docente: ${s.docente}.`:''}\n\nUsa exclusivamente como base curricular los temas distribuidos por lapso que se muestran en la base curricular seleccionada. Organiza el resultado por 1er, 2do y 3er Lapso. Para cada lapso incluye: temas generadores, propósito/objetivos, secuencia sugerida, estrategias y actividades, recursos, evidencias de aprendizaje, estrategias de evaluación e instrumentos sugeridos. Mantén una progresión pedagógica anual. No inventes temas curriculares que no estén en la base. Puedes proponer estrategias y actividades prácticas adecuadas a Educación Física.`;
+    const sec=document.getElementById('section-planificacion');if(sec){let p=document.getElementById('plan-anual-base');if(!p){p=document.createElement('div');p.id='plan-anual-base';p.className='card';p.style.cssText='margin:0 0 18px;padding:18px;border:1px solid var(--border-color,#d9e2ec);border-radius:18px;background:var(--card-bg,#fff)';const f=document.getElementById('btn-planificacion-ia')?.closest('.card')||document.getElementById('btn-planificacion-ia')?.parentElement;sec.insertBefore(p,f||sec.firstChild)}p.innerHTML=`<div style="font-size:.78rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#176da4"><i class="fa-solid fa-calendar-days"></i> Base curricular anual seleccionada</div><h3 style="margin:6px 0 4px">${esc(s.grado)} · ${esc(s.anioEscolar)}</h3><div style="font-size:.85rem;color:#64748b">${s.cantidadTemas} temas distribuidos entre los tres lapsos. Gemini debe respetar esta base curricular del Cuadernillo de Educación Física.</div>`}
+    if(typeof mostrarToast==='function')mostrarToast(`Plan anual cargado: ${s.cantidadTemas} temas de ${s.grado}.`,'success','Planificación IA');window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function printAnnual(){
+    const all=rows(),year=document.getElementById('pa-year')?.value.trim()||'2026 - 2027',inst=document.getElementById('pa-inst')?.value.trim()||'',doc=document.getElementById('pa-doc')?.value.trim()||'';
+    const w=window.open('','_blank','width=1050,height=800');if(!w)return;
+    const sections=LAPSOS.map(l=>{const arr=all.filter(x=>x.lapso===l);return `<h2>${esc(l)}</h2>${arr.length?`<table><thead><tr><th>Tema</th><th>Estado</th><th>Intencionalidad / tejido temático</th></tr></thead><tbody>${arr.map(x=>`<tr><td><b>${esc(x.tema)}</b></td><td>${esc(x.estado)}</td><td>${esc((x.intencionalidad||x.tejido||x.referentes||'').slice(0,500))}</td></tr>`).join('')}</tbody></table>`:'<p>Sin temas asignados.</p>'}`}).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Plan anual ${esc(gradoActual)}</title><style>body{font-family:Arial,sans-serif;color:#203447;margin:28px}h1{margin-bottom:4px}h2{margin-top:26px;color:#175f8f}p.meta{color:#60758a}table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}th,td{border:1px solid #c9d4dd;padding:8px;vertical-align:top;text-align:left}th{background:#eef5fa}@media print{button{display:none}}</style></head><body><button onclick="window.print()">Imprimir / Guardar PDF</button><h1>Plan anual de Educación Física</h1><p class="meta"><b>${esc(gradoActual)}</b> · Año escolar ${esc(year)}${inst?` · ${esc(inst)}`:''}${doc?` · Docente: ${esc(doc)}`:''}</p>${sections}<script>setTimeout(()=>window.print(),400)<\/script></body></html>`);w.document.close();
+  }
+
+  function init(){try{return create()}catch(e){console.warn('EduGestión Plan Anual EF:',e);return false}}
+  if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>35)clearInterval(tm)},250)}
+  window.addEventListener('storage',()=>{if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))render()});
+})();
+/* EDUGESTION_CUADERNILLO_EF_FASE8_PLAN_ANUAL_END */
