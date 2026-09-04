@@ -6606,6 +6606,130 @@ Archivo enviado directamente desde EduGestión.`);
     const section = document.getElementById(SECTION_ID);
     if (!section || document.getElementById(CARD_ID)) return;
 
+    if (!document.getElementById('teacher-attendance-ai-styles')) {
+      const style = document.createElement('style');
+      style.id = 'teacher-attendance-ai-styles';
+      style.textContent = `
+        #teacher-attendance-ai-card {
+          margin-top: 22px !important;
+          padding: 0 !important;
+          overflow: hidden;
+          border-radius: 18px;
+          border: 1px solid rgba(148,163,184,.28);
+          background: var(--surface, #fff);
+          box-shadow: 0 10px 28px rgba(15,23,42,.06);
+        }
+        #teacher-attendance-ai-card > header {
+          padding: 20px 22px 16px;
+          border-bottom: 1px solid rgba(148,163,184,.22);
+        }
+        #teacher-attendance-ai-card > header > div {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+        #teacher-attendance-ai-card > header > div > span {
+          width: 46px;
+          height: 46px;
+          min-width: 46px;
+          display: grid;
+          place-items: center;
+          border-radius: 14px;
+          background: rgba(37,99,235,.09);
+          color: #2563eb;
+          font-size: 18px;
+        }
+        #teacher-attendance-ai-card h3 {
+          margin: 0 0 5px;
+          line-height: 1.25;
+          font-size: 1.04rem;
+        }
+        #teacher-attendance-ai-card header p {
+          margin: 0;
+          line-height: 1.5;
+          font-size: .86rem;
+          opacity: .72;
+        }
+        #teacher-attendance-ai-card .teacher-ai-body {
+          padding: 20px 22px 22px;
+        }
+        #teacher-attendance-ai-card .teacher-ai-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0,1fr));
+          gap: 18px;
+          margin: 0;
+        }
+        #teacher-attendance-ai-card .teacher-ai-field {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 0;
+        }
+        #teacher-attendance-ai-card .teacher-ai-field > span {
+          display: block;
+          font-weight: 800;
+          font-size: .88rem;
+          line-height: 1.25;
+          color: var(--text, inherit);
+        }
+        #teacher-attendance-ai-card select,
+        #teacher-attendance-ai-card textarea {
+          width: 100%;
+          box-sizing: border-box;
+          border: 1px solid #d9e2ef !important;
+          border-radius: 12px !important;
+          background: var(--surface, #fff);
+          color: inherit;
+          font: inherit;
+        }
+        #teacher-attendance-ai-card select {
+          min-height: 48px;
+          padding: 0 14px !important;
+        }
+        #teacher-attendance-ai-card textarea {
+          min-height: 104px;
+          padding: 14px !important;
+          line-height: 1.45;
+          resize: vertical;
+        }
+        #teacher-attendance-ai-card .teacher-ai-note {
+          margin-top: 18px;
+        }
+        #teacher-attendance-ai-card .teacher-ai-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          margin-top: 18px;
+          padding-top: 2px;
+        }
+        #teacher-attendance-ai-card #teacher-ai-generate {
+          min-height: 48px;
+          padding: 0 20px !important;
+          border-radius: 12px !important;
+          white-space: nowrap;
+        }
+        #teacher-attendance-ai-card .teacher-ai-mode {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          line-height: 1.35;
+          text-align: right;
+          font-size: .82rem;
+          opacity: .7;
+        }
+        @media (max-width: 760px) {
+          #teacher-attendance-ai-card > header,
+          #teacher-attendance-ai-card .teacher-ai-body { padding-left: 16px; padding-right: 16px; }
+          #teacher-attendance-ai-card .teacher-ai-grid { grid-template-columns: 1fr; gap: 14px; }
+          #teacher-attendance-ai-card .teacher-ai-actions { align-items: stretch; flex-direction: column; }
+          #teacher-attendance-ai-card #teacher-ai-generate { width: 100%; justify-content: center; }
+          #teacher-attendance-ai-card .teacher-ai-mode { justify-content: center; text-align: center; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     const card = document.createElement('section');
     card.id = CARD_ID;
     card.className = 'stats-table-card';
@@ -6859,3 +6983,136 @@ Archivo enviado directamente desde EduGestión.`);
   observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
 /* EDUGESTION_AUDITORIA_AI_V1_END */
+
+/* EDUGESTION_ASISTENCIA_LABORAL_IA_V1_START */
+(() => {
+  const SECTION_ID = 'section-asistencia-docente';
+  const CARD_ID = 'teacher-attendance-ai-card';
+
+  const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+  const val = id => clean(document.getElementById(id)?.value);
+
+  function asegurarTarjetaIA() {
+    const section = document.getElementById(SECTION_ID);
+    if (!section || document.getElementById(CARD_ID)) return;
+
+    const card = document.createElement('section');
+    card.id = CARD_ID;
+    card.className = 'teacher-attendance-panel';
+    card.style.marginTop = '18px';
+    card.innerHTML = `
+      <header>
+        <div>
+          <span><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+          <div>
+            <h3>Resumen laboral con Gemini</h3>
+            <p>Analiza tu asistencia del mes actual, horas trabajadas, ausencias y observaciones usando solo los datos visibles en EduGestión.</p>
+          </div>
+        </div>
+      </header>
+      <div class="teacher-ai-body">
+        <div class="teacher-ai-grid">
+          <label class="teacher-ai-field">
+            <span>Tipo de informe</span>
+            <select id="teacher-ai-type">
+              <option value="mensual">Resumen mensual</option>
+              <option value="horas">Analizar horas trabajadas</option>
+              <option value="ausencias">Revisar ausencias</option>
+              <option value="tendencias">Detectar tendencias</option>
+              <option value="informe">Preparar informe formal</option>
+              <option value="recomendaciones">Conclusiones y recomendaciones</option>
+            </select>
+          </label>
+          <label class="teacher-ai-field">
+            <span>Enfoque</span>
+            <select id="teacher-ai-focus">
+              <option value="general">Asistencia laboral general</option>
+              <option value="horario">Llegadas y salidas</option>
+              <option value="carga">Carga horaria</option>
+              <option value="ausencias">Ausencias registradas</option>
+              <option value="seguimiento">Seguimiento personal</option>
+            </select>
+          </label>
+        </div>
+        <label class="teacher-ai-field teacher-ai-note">
+          <span>Observación adicional (opcional)</span>
+          <textarea id="teacher-ai-note" rows="3" placeholder="Ej.: Quiero un resumen corto para mi informe mensual."></textarea>
+        </label>
+        <div class="teacher-ai-actions">
+          <button id="teacher-ai-generate" type="button" style="border:0;background:#4f46e5;color:#fff;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:.5rem;">
+            <i class="fa-solid fa-sparkles"></i> Generar resumen con IA
+          </button>
+          <small class="teacher-ai-mode"><i class="fa-solid fa-shield-halved"></i> Modo gratuito · sin búsqueda web · no inventa datos.</small>
+        </div>
+      </div>`;
+
+    const summary = section.querySelector('#teacher-hours-summary');
+    if (summary?.parentNode) summary.parentNode.insertBefore(card, summary.nextSibling);
+    else section.appendChild(card);
+
+    document.getElementById('teacher-ai-generate')?.addEventListener('click', enviarAsistenciaLaboralIA);
+  }
+
+  function objetivo(tipo) {
+    return ({
+      mensual: 'Prepara un resumen del mes actual con días trabajados, horas registradas, promedio diario, ausencias visibles y una conclusión breve.',
+      horas: 'Analiza las horas trabajadas visibles y explica de forma objetiva la carga horaria registrada.',
+      ausencias: 'Resume únicamente las ausencias visibles, sus fechas y motivos registrados. No infieras causas adicionales.',
+      tendencias: 'Identifica tendencias observables en jornadas, horarios, horas o ausencias, solo si los datos visibles permiten hacerlo.',
+      informe: 'Redacta un informe formal y breve de asistencia laboral del docente para el periodo visible.',
+      recomendaciones: 'Genera conclusiones y recomendaciones prudentes de seguimiento personal basadas únicamente en los datos visibles.'
+    })[tipo] || 'Resume la asistencia laboral visible.';
+  }
+
+  function datosVisibles() {
+    const resumen = [...document.querySelectorAll('#teacher-hours-summary article')].map(a => clean(a.innerText || a.textContent)).filter(Boolean);
+    const historial = [...document.querySelectorAll('#teacher-attendance-history article')].slice(0, 12).map(a => clean(a.innerText || a.textContent)).filter(Boolean);
+    const grafico = [...document.querySelectorAll('#teacher-hours-chart article')].slice(0, 10).map(a => clean(a.innerText || a.textContent)).filter(Boolean);
+    const estadoHoy = clean(document.getElementById('teacher-attendance-status')?.innerText || document.getElementById('teacher-attendance-status')?.textContent);
+    return { resumen, historial, grafico, estadoHoy };
+  }
+
+  function enviarAsistenciaLaboralIA() {
+    const datos = datosVisibles();
+    if (!datos.resumen.length && !datos.historial.length && !datos.estadoHoy) {
+      if (typeof mostrarToast === 'function') mostrarToast('Primero carga tu asistencia laboral.', 'warning', 'Asistencia laboral con IA');
+      return;
+    }
+
+    const tipo = val('teacher-ai-type') || 'mensual';
+    const enfoque = document.getElementById('teacher-ai-focus')?.selectedOptions?.[0]?.textContent?.trim() || 'Asistencia laboral general';
+    const nota = val('teacher-ai-note');
+    const periodo = new Date().toLocaleDateString('es-VE', { month: 'long', year: 'numeric' });
+
+    const prompt = `Analiza mi asistencia laboral registrada en EduGestión como apoyo personal para un docente. No realices búsqueda web. Usa ÚNICAMENTE los datos que te proporciono. No inventes horarios, ausencias, motivos, horas, fechas ni causas. Si falta información para una conclusión, indícalo claramente.\n\nPeriodo de referencia: ${periodo}.\nObjetivo: ${objetivo(tipo)}\nEnfoque: ${enfoque}.\n${nota ? `Observación del docente: ${nota}\n` : ''}\nEstado de hoy:\n- ${datos.estadoHoy || 'Sin información visible'}\n\nResumen visible de EduGestión:\n${datos.resumen.length ? datos.resumen.map(x => `- ${x}`).join('\n') : '- Sin resumen visible'}\n\nJornadas visibles en el gráfico:\n${datos.grafico.length ? datos.grafico.map(x => `- ${x}`).join('\n') : '- Sin jornadas completas visibles'}\n\nHistorial reciente:\n${datos.historial.length ? datos.historial.map(x => `- ${x}`).join('\n') : '- Sin historial visible'}\n\nPresenta la respuesta con estos apartados cuando apliquen: Resumen del periodo, Días y horas registradas, Ausencias registradas, Tendencias observables, Observaciones, Conclusión y Recomendaciones. Mantén un tono profesional y distingue claramente los datos registrados de cualquier recomendación.`;
+
+    const tabIA = document.getElementById('tab-gemini');
+    const inputIA = document.getElementById('gemini-input');
+    const formIA = document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Asistencia laboral con IA');
+      return;
+    }
+
+    tabIA.click();
+    setTimeout(() => {
+      inputIA.value = prompt;
+      inputIA.dispatchEvent(new Event('input', { bubbles: true }));
+      inputIA.focus();
+      try {
+        if (location.protocol !== 'file:') formIA.requestSubmit();
+        else if (typeof mostrarToast === 'function') mostrarToast('Solicitud preparada. La respuesta real de Gemini se prueba desde Vercel.', 'success', 'Asistencia laboral con IA');
+      } catch (_) {}
+    }, 120);
+  }
+
+  function iniciar() {
+    asegurarTarjetaIA();
+    const observer = new MutationObserver(asegurarTarjetaIA);
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, { once: true });
+  else iniciar();
+})();
+/* EDUGESTION_ASISTENCIA_LABORAL_IA_V1_END */
