@@ -6345,7 +6345,7 @@ Archivo enviado directamente desde EduGestión.`);
     const modal = document.createElement('div');
     modal.id = 'ia-save-modal';
     modal.className = 'ia-save-modal hidden';
-    modal.innerHTML = `<div class="ia-save-dialog" role="dialog" aria-modal="true" aria-labelledby="ia-save-title"><h3 id="ia-save-title">Guardar respuesta de Gemini</h3><p>Agrega un título para encontrarla fácilmente después.</p><div class="ia-save-grid"><div class="ia-save-field full"><label for="ia-save-name">Título</label><input id="ia-save-name" maxlength="120" placeholder="Ej.: Planificación de coordinación motriz"></div><div class="ia-save-field"><label for="ia-save-category">Categoría</label><select id="ia-save-category"><option>Planificación</option><option>Actividad</option><option>Observación pedagógica</option><option>Resumen</option><option>Preguntas</option><option>Guía de estudio</option><option>Efeméride</option><option>Acta</option><option>General</option></select></div><div class="ia-save-field"><label for="ia-save-origin">Origen</label><select id="ia-save-origin"><option>Asistente IA</option><option>Planificación</option><option>Estudiantes</option><option>Calendario</option><option>Biblioteca digital</option><option>Actas</option></select></div></div><div class="ia-save-actions"><button type="button" class="ia-save-cancel">Cancelar</button><button type="button" class="ia-save-confirm"><i class="fa-solid fa-floppy-disk"></i> Guardar</button></div></div>`;
+    modal.innerHTML = `<div class="ia-save-dialog" role="dialog" aria-modal="true" aria-labelledby="ia-save-title"><h3 id="ia-save-title">Guardar respuesta de Gemini</h3><p>Agrega un título para encontrarla fácilmente después.</p><div class="ia-save-grid"><div class="ia-save-field full"><label for="ia-save-name">Título</label><input id="ia-save-name" maxlength="120" placeholder="Ej.: Planificación de coordinación motriz"></div><div class="ia-save-field"><label for="ia-save-category">Categoría</label><select id="ia-save-category"><option>Planificación</option><option>Actividad</option><option>Observación pedagógica</option><option>Resumen</option><option>Preguntas</option><option>Guía de estudio</option><option>Efeméride</option><option>Acta</option><option>Estadísticas</option><option>General</option></select></div><div class="ia-save-field"><label for="ia-save-origin">Origen</label><select id="ia-save-origin"><option>Asistente IA</option><option>Planificación</option><option>Estudiantes</option><option>Calendario</option><option>Biblioteca digital</option><option>Actas</option><option>Estadísticas</option></select></div></div><div class="ia-save-actions"><button type="button" class="ia-save-cancel">Cancelar</button><button type="button" class="ia-save-confirm"><i class="fa-solid fa-floppy-disk"></i> Guardar</button></div></div>`;
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('.ia-save-cancel')) modal.classList.add('hidden'); });
   }
@@ -6591,3 +6591,140 @@ Archivo enviado directamente desde EduGestión.`);
     }, 180);
   });
 })();
+
+
+/* EDUGESTION_STATS_AI_V1_START */
+(() => {
+  const TAB_ID = 'tab-estadisticas';
+  const SECTION_ID = 'section-estadisticas';
+  const CARD_ID = 'estadisticas-ia-card';
+
+  const text = id => String(document.getElementById(id)?.textContent || '').trim();
+  const val = id => String(document.getElementById(id)?.value || '').trim();
+
+  function asegurarTarjetaIA() {
+    const section = document.getElementById(SECTION_ID);
+    if (!section || document.getElementById(CARD_ID)) return;
+
+    const card = document.createElement('section');
+    card.id = CARD_ID;
+    card.className = 'stats-table-card';
+    card.innerHTML = `
+      <div class="stats-table-card__header">
+        <div><span><i class="fa-solid fa-wand-magic-sparkles"></i></span><div><h3>Explicar estadísticas con Gemini</h3><p>Convierte los indicadores visibles en conclusiones claras y útiles para tu trabajo docente.</p></div></div>
+        <span class="stats-count"><i class="fa-solid fa-gift"></i> Modo gratuito</span>
+      </div>
+      <div style="padding:20px;display:grid;gap:16px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;">
+          <label class="stats-field"><span>Tipo de análisis</span><select id="estadisticas-ia-tipo">
+            <option value="explicar">Explicar resultados</option>
+            <option value="conclusiones">Conclusiones y recomendaciones</option>
+            <option value="alertas">Detectar alertas de asistencia</option>
+            <option value="informe">Resumen para informe docente</option>
+            <option value="comparar">Comparar secciones</option>
+          </select></label>
+          <label class="stats-field"><span>Enfoque</span><select id="estadisticas-ia-enfoque">
+            <option value="general">General</option>
+            <option value="asistencia">Asistencia</option>
+            <option value="tardanzas">Tardanzas</option>
+            <option value="ausencias">Ausencias</option>
+            <option value="cumplimiento">Cumplimiento</option>
+          </select></label>
+        </div>
+        <label class="stats-field"><span>Nota adicional para Gemini (opcional)</span><textarea id="estadisticas-ia-nota" rows="3" placeholder="Ej.: Dame recomendaciones sencillas para mejorar la asistencia del grupo." style="width:100%;resize:vertical;"></textarea></label>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+          <button id="estadisticas-ia-generar" type="button" class="stats-button stats-button--primary"><i class="fa-solid fa-sparkles"></i> Analizar estadísticas con IA</button>
+          <small style="opacity:.72;"><i class="fa-solid fa-shield-halved"></i> Usa solamente los datos visibles de EduGestión y no realiza búsqueda web.</small>
+        </div>
+      </div>`;
+
+    const metrics = section.querySelector('.stats-metrics');
+    if (metrics?.parentNode) metrics.parentNode.insertBefore(card, metrics.nextSibling);
+    else section.appendChild(card);
+
+    document.getElementById('estadisticas-ia-generar')?.addEventListener('click', enviarAnalisisIA);
+  }
+
+  function filasTabla(id, max = 12) {
+    const body = document.getElementById(id);
+    if (!body) return [];
+    return [...body.querySelectorAll('tr')].slice(0, max).map(tr =>
+      [...tr.querySelectorAll('td')].map(td => String(td.innerText || td.textContent || '').replace(/\s+/g, ' ').trim()).join(' | ')
+    ).filter(Boolean);
+  }
+
+  function fechasVisibles(max = 10) {
+    const cont = document.getElementById('estadisticas-fechas');
+    if (!cont) return [];
+    return [...cont.querySelectorAll('.stats-daily-item')].slice(0, max).map(x => String(x.innerText || x.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+  }
+
+  function resumenActual() {
+    const total = text('stats-total');
+    if (!total || Number(total.replace(/\D/g,'')) === 0) return null;
+    const seccionSel = document.getElementById('estadisticas-seccion')?.selectedOptions?.[0]?.textContent?.trim() || 'Todas las secciones';
+    return {
+      desde: val('estadisticas-desde') || 'No indicado',
+      hasta: val('estadisticas-hasta') || 'No indicado',
+      seccion: seccionSel,
+      busqueda: val('estadisticas-buscar') || 'Sin filtro por estudiante',
+      total,
+      presentes: text('stats-presentes'),
+      ausentes: text('stats-ausentes'),
+      tardanzas: text('stats-tardanzas'),
+      justificadas: text('stats-justificadas'),
+      asistencia: text('stats-score-asistencia') || text('stats-porcentaje'),
+      cumplimiento: text('stats-score-cumplimiento'),
+      alumnos: filasTabla('estadisticas-alumnos-body'),
+      secciones: filasTabla('estadisticas-secciones-body'),
+      fechas: fechasVisibles()
+    };
+  }
+
+  function objetivoSegunTipo(tipo) {
+    return ({
+      explicar: 'Explica qué significan estos resultados en lenguaje claro para un docente.',
+      conclusiones: 'Redacta conclusiones pedagógicas y recomendaciones prácticas basadas únicamente en estos datos.',
+      alertas: 'Identifica posibles alertas de asistencia, ausencias o tardanzas que merezcan seguimiento. No diagnostiques ni atribuyas causas que no estén en los datos.',
+      informe: 'Prepara un resumen formal y breve que pueda incorporarse a un informe docente.',
+      comparar: 'Compara las secciones visibles e indica diferencias objetivas, fortalezas y aspectos que conviene revisar.'
+    })[tipo] || 'Explica los resultados.';
+  }
+
+  function enviarAnalisisIA() {
+    const datos = resumenActual();
+    if (!datos) {
+      if (typeof mostrarToast === 'function') mostrarToast('Primero carga estadísticas con registros en el periodo seleccionado.', 'warning', 'Estadísticas con IA');
+      return;
+    }
+    const tipo = val('estadisticas-ia-tipo') || 'explicar';
+    const enfoque = val('estadisticas-ia-enfoque') || 'general';
+    const nota = val('estadisticas-ia-nota');
+    const lista = (arr, vacio='Sin datos visibles') => arr.length ? arr.map(x => `- ${x}`).join('\n') : vacio;
+
+    const prompt = `Analiza las siguientes estadísticas de EduGestión como asistente para un docente. No realices búsqueda web. Usa ÚNICAMENTE los datos proporcionados y no inventes causas, antecedentes, nombres ni cifras. Si un dato no permite llegar a una conclusión, dilo claramente.\n\nObjetivo del análisis: ${objetivoSegunTipo(tipo)}\nEnfoque solicitado: ${enfoque}.\n${nota ? `Nota del docente: ${nota}\n` : ''}\nPeriodo: ${datos.desde} al ${datos.hasta}\nFiltro de sección: ${datos.seccion}\nFiltro de estudiante: ${datos.busqueda}\n\nResumen general:\n- Registros: ${datos.total}\n- Presentes: ${datos.presentes}\n- Ausentes: ${datos.ausentes}\n- Tardanzas: ${datos.tardanzas}\n- Justificadas: ${datos.justificadas}\n- Asistencia efectiva: ${datos.asistencia}\n- Cumplimiento registrado: ${datos.cumplimiento}\n\nEstudiantes visibles:\n${lista(datos.alumnos)}\n\nSecciones visibles:\n${lista(datos.secciones)}\n\nEvolución por fecha visible:\n${lista(datos.fechas)}\n\nOrganiza la respuesta con: 1) Resumen ejecutivo, 2) Hallazgos principales, 3) Aspectos que requieren atención, 4) Recomendaciones prácticas y 5) Conclusión. Mantén un tono profesional, claro y útil para un docente. No etiquetes a estudiantes ni hagas inferencias clínicas o familiares.`;
+
+    const tabIA = document.getElementById('tab-gemini');
+    const inputIA = document.getElementById('gemini-input');
+    const formIA = document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Estadísticas con IA');
+      return;
+    }
+    tabIA.click();
+    inputIA.value = prompt;
+    setTimeout(() => {
+      inputIA.focus();
+      if (typeof formIA.requestSubmit === 'function') formIA.requestSubmit();
+      else formIA.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }, 180);
+  }
+
+  function iniciar() {
+    asegurarTarjetaIA();
+    document.getElementById(TAB_ID)?.addEventListener('click', () => setTimeout(asegurarTarjetaIA, 120));
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, { once: true });
+  else iniciar();
+})();
+/* EDUGESTION_STATS_AI_V1_END */
