@@ -1,10 +1,10 @@
-/* EduGestión — API privada de Gemini + Google Search */
+/* EduGestión — API privada de Gemini (modo gratuito, sin búsqueda web) */
 
 const ALLOWED_ORIGINS = new Set([
   'https://edugestion-a2xh.vercel.app',
   'http://127.0.0.1:5500',
   'http://localhost:5500',
-  'null', // permite pruebas abriendo index.html directamente desde el PC
+  'null',
 ]);
 
 function corsHeaders(request) {
@@ -56,27 +56,6 @@ function extractText(data) {
     .trim();
 }
 
-function extractSources(data) {
-  const metadata = data?.candidates?.[0]?.groundingMetadata || {};
-  const chunks = Array.isArray(metadata.groundingChunks) ? metadata.groundingChunks : [];
-  const seen = new Set();
-  const sources = [];
-
-  for (const chunk of chunks) {
-    const web = chunk?.web;
-    if (!web?.uri) continue;
-    const uri = String(web.uri);
-    if (seen.has(uri)) continue;
-    seen.add(uri);
-    sources.push({
-      title: cleanText(web.title || 'Fuente web', 300),
-      url: uri,
-    });
-  }
-
-  return sources.slice(0, 12);
-}
-
 function statusFromError(error) {
   if (error?.code === 'BAD_REQUEST') return 400;
   if (error?.code === 'SERVER_NOT_CONFIGURED') return 500;
@@ -88,24 +67,16 @@ function statusFromError(error) {
 export default {
   async fetch(request) {
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders(request),
-      });
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
 
     if (request.method !== 'POST') {
-      return jsonResponse(
-        { ok: false, message: 'Método no permitido.' },
-        405,
-        request,
-      );
+      return jsonResponse({ ok: false, message: 'Método no permitido.' }, 405, request);
     }
 
     try {
       const body = await request.json().catch(() => ({}));
       const message = cleanText(body?.message, 8000);
-      const useSearch = body?.useSearch !== false;
 
       if (!message) {
         const error = new Error('Escribe una pregunta para Gemini.');
@@ -118,31 +89,21 @@ export default {
 
       const systemInstruction = [
         'Eres el asistente educativo privado de EduGestión.',
-        'Responde siempre en español claro y útil para un docente.',
-        'Prioriza información educativa, planificación, actividades, efemérides, investigación y apoyo pedagógico.',
-        'Cuando uses información obtenida de Internet, sé preciso, evita inventar datos y conserva las fuentes disponibles.',
+        'Responde siempre en español claro, práctico y útil para un docente.',
+        'Ayuda con planificación, actividades, explicaciones, resúmenes, efemérides, estrategias y apoyo pedagógico.',
+        'No afirmes que consultaste Internet ni inventes fuentes actuales.',
+        'Si el usuario pide información reciente o en tiempo real, explica brevemente que esta versión trabaja sin búsqueda web y ofrece ayuda con conocimiento general.',
         'No reveles claves, variables de entorno ni información interna del servidor.',
       ].join(' ');
 
       const payload = {
-        system_instruction: {
-          parts: [{ text: systemInstruction }],
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: message }],
-          },
-        ],
+        system_instruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: message }] }],
         generationConfig: {
           temperature: 0.4,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 3072,
         },
       };
-
-      if (useSearch) {
-        payload.tools = [{ google_search: {} }];
-      }
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
       const response = await fetch(endpoint, {
@@ -168,32 +129,16 @@ export default {
       }
 
       const answer = extractText(data);
-      if (!answer) {
-        throw new Error('Gemini no devolvió una respuesta de texto.');
-      }
+      if (!answer) throw new Error('Gemini no devolvió una respuesta de texto.');
 
-      return jsonResponse(
-        {
-          ok: true,
-          answer,
-          sources: extractSources(data),
-          usedSearch: useSearch,
-          model,
-        },
-        200,
-        request,
-      );
+      return jsonResponse({ ok: true, answer, sources: [], usedSearch: false, model }, 200, request);
     } catch (error) {
       console.error('EduGestión Gemini API:', error);
-      return jsonResponse(
-        {
-          ok: false,
-          message: error?.message || 'No se pudo consultar Gemini en este momento.',
-          code: error?.code || 'GEMINI_ERROR',
-        },
-        statusFromError(error),
-        request,
-      );
+      return jsonResponse({
+        ok: false,
+        message: error?.message || 'No se pudo consultar Gemini en este momento.',
+        code: error?.code || 'GEMINI_ERROR',
+      }, statusFromError(error), request);
     }
   },
 };

@@ -1580,7 +1580,7 @@
        <div>
         <span class="gemini-eyebrow"><i class="fa-solid fa-sparkles"></i> Asistente educativo con Gemini</span>
         <h2>Buscar, investigar y preparar clases</h2>
-        <p>Haz preguntas educativas y, cuando lo necesites, permite que Gemini consulte Google para encontrar información reciente con sus fuentes.</p>
+        <p>Haz preguntas educativas, prepara actividades, explicaciones, ideas de planificación y apoyo pedagógico con Gemini.</p>
        </div>
        <div class="gemini-hero__icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
       </header>
@@ -1593,23 +1593,22 @@
           <h3>¿Qué necesitas preparar hoy?</h3>
           <p>Escribe una consulta o usa uno de los accesos rápidos.</p>
          </div>
-         <label class="gemini-search-toggle" for="gemini-use-search">
-          <input id="gemini-use-search" type="checkbox" checked>
-          <span><i class="fa-brands fa-google"></i> Buscar en Internet</span>
-         </label>
+         <div class="gemini-search-toggle" aria-label="Modo gratuito de Gemini">
+          <span><i class="fa-solid fa-wand-magic-sparkles"></i> Modo gratuito</span>
+         </div>
         </div>
 
         <div class="gemini-quick-actions" aria-label="Consultas rápidas">
          <button type="button" data-gemini-prompt="Dame una actividad didáctica breve y creativa para trabajar con mis alumnos hoy."><i class="fa-solid fa-puzzle-piece"></i> Crear actividad</button>
          <button type="button" data-gemini-prompt="Ayúdame a investigar una efeméride escolar y preparar una explicación sencilla para estudiantes."><i class="fa-solid fa-landmark"></i> Investigar efeméride</button>
-         <button type="button" data-gemini-prompt="Busca recursos educativos actuales y confiables que pueda usar en clase."><i class="fa-solid fa-book-open-reader"></i> Buscar recursos</button>
+         <button type="button" data-gemini-prompt="Dame una lista de recursos, materiales y estrategias educativas que pueda usar en clase sobre el tema que te indique."><i class="fa-solid fa-book-open-reader"></i> Sugerir recursos</button>
          <button type="button" data-gemini-prompt="Ayúdame a explicar un tema escolar de forma sencilla, con ejemplo y una actividad de cierre."><i class="fa-solid fa-chalkboard-user"></i> Explicar un tema</button>
         </div>
 
         <div class="gemini-conversation" id="gemini-conversation" aria-live="polite">
          <div class="gemini-message gemini-message--assistant">
           <div class="gemini-avatar"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-          <div class="gemini-bubble"><strong>Asistente IA</strong><p>Estoy listo. Puedes pedirme actividades, explicaciones, ideas para planificación o una búsqueda actual en Internet.</p></div>
+          <div class="gemini-bubble"><strong>Asistente IA</strong><p>Estoy listo. Puedes pedirme actividades, explicaciones, ideas para planificación, resúmenes y apoyo pedagógico.</p></div>
          </div>
         </div>
 
@@ -1628,9 +1627,9 @@
          <button type="button" data-gemini-prompt="Prepara una actividad escolar relacionada con la fecha de hoy y su efeméride, con inicio, desarrollo y cierre."><i class="fa-solid fa-calendar-day"></i><span><strong>Actividad del día</strong><small>Relacionada con una efeméride.</small></span></button>
          <button type="button" data-gemini-prompt="Dame cinco ideas de actividades para educación física que requieran pocos materiales y sean seguras para estudiantes."><i class="fa-solid fa-person-running"></i><span><strong>Educación física</strong><small>Ideas prácticas para la clase.</small></span></button>
          <button type="button" data-gemini-prompt="Crea una explicación para estudiantes con lenguaje sencillo, ejemplos cotidianos y tres preguntas de comprobación."><i class="fa-solid fa-comments"></i><span><strong>Explicación sencilla</strong><small>Adaptada para alumnos.</small></span></button>
-         <button type="button" data-gemini-prompt="Busca información actual y confiable sobre un tema educativo y resume los puntos principales indicando las fuentes."><i class="fa-solid fa-magnifying-glass"></i><span><strong>Investigación en línea</strong><small>Con fuentes web.</small></span></button>
+         <button type="button" data-gemini-prompt="Ayúdame a organizar una investigación educativa sobre un tema, con puntos clave, preguntas guía y una explicación clara."><i class="fa-solid fa-magnifying-glass"></i><span><strong>Apoyo para investigar</strong><small>Sin búsqueda web.</small></span></button>
         </div>
-        <div class="gemini-note"><i class="fa-solid fa-circle-info"></i><p><strong>Importante:</strong> la búsqueda en Internet funcionará cuando esta versión esté publicada en Vercel. Al abrir el archivo directamente desde tu PC, la interfaz puede verse, pero la API necesita Vercel.</p></div>
+        <div class="gemini-note"><i class="fa-solid fa-circle-info"></i><p><strong>Modo gratuito:</strong> Gemini puede ayudarte a crear, explicar, resumir y planificar. La búsqueda web en tiempo real queda desactivada para evitar cargos y problemas de cuota.</p></div>
        </aside>
       </div>
      </section>

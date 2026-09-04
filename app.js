@@ -5843,7 +5843,6 @@ Archivo enviado directamente desde EduGestión.`);
   const input = document.getElementById('gemini-input');
   const conversation = document.getElementById('gemini-conversation');
   const send = document.getElementById('gemini-send');
-  const useSearch = document.getElementById('gemini-use-search');
   if (!tab || !section) return;
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
@@ -5883,7 +5882,7 @@ Archivo enviado directamente desde EduGestión.`);
       const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ message: texto, useSearch: useSearch?.checked !== false })
+        body: JSON.stringify({ message: texto })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.ok) throw new Error(data?.message || 'No se pudo consultar Gemini.');
