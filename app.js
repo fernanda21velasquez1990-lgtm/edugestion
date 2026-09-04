@@ -3589,6 +3589,18 @@ const SESSION_KEY = 'edugestion_session_v2';
         </div>
       </section>
 
+      <section id="library-ai-tools" class="library-panel" style="margin-top:1rem">
+        <header><span><i class="fa-solid fa-wand-magic-sparkles"></i></span><div><h3>Trabajar un recurso con Gemini</h3><p>Usa un apunte guardado o pega un fragmento de texto para resumir, explicar, crear preguntas, actividades o una guía de estudio.</p></div></header>
+        <div style="display:grid;grid-template-columns:1fr 220px;gap:.75rem;align-items:start">
+          <label class="library-field" style="margin:0"><span>Contenido para trabajar con IA</span><textarea id="library-ai-content" rows="5" maxlength="12000" placeholder="Pega aquí un texto, apunte o fragmento del recurso. También puedes pulsar ‘Usar con IA’ en una tarjeta."></textarea></label>
+          <div style="display:flex;flex-direction:column;gap:.65rem">
+            <label class="library-field" style="margin:0"><span>Acción</span><select id="library-ai-action"><option value="resumir">Resumir contenido</option><option value="explicar">Explicar de forma sencilla</option><option value="preguntas">Crear preguntas</option><option value="actividad">Crear actividad</option><option value="guia">Preparar guía de estudio</option></select></label>
+            <button id="library-ai-send" type="button" style="border:0;border-radius:14px;padding:.85rem 1rem;background:#4f46e5;color:#fff;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.5rem"><i class="fa-solid fa-sparkles"></i> Enviar a Gemini</button>
+            <small style="color:#64748b;line-height:1.35">Modo gratuito: Gemini trabaja solo con el texto que tú le das. No abre enlaces ni lee archivos automáticamente.</small>
+          </div>
+        </div>
+      </section>
+
       <section class="library-summary" id="library-summary"></section>
 
       <section class="library-workspace">
@@ -3658,6 +3670,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     section.querySelector('#library-youtube-form')?.addEventListener('submit', e => abrirBusqueda(e, 'youtube'));
     section.querySelector('#library-resource-form')?.addEventListener('submit', guardarRecurso);
     section.querySelector('#library-refresh')?.addEventListener('click', () => cargarBiblioteca(true));
+    section.querySelector('#library-ai-send')?.addEventListener('click', enviarBibliotecaAGemini);
     section.querySelector('#library-local-search')?.addEventListener('input', e => {
       bibliotecaBusqueda = String(e.target.value || '').trim().toLowerCase();
       renderBiblioteca();
@@ -3788,12 +3801,63 @@ const SESSION_KEY = 'edugestion_session_v2';
         ${r.tipo === 'Apunte' ? `<details><summary>Leer apunte completo</summary><div>${escLib(r.apunte).replace(/\n/g,'<br>')}</div></details>` : ''}
         <footer>
           ${r.url ? `<a href="${escLib(r.url)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i>${r.tipo === 'Archivo' ? 'Abrir archivo' : 'Consultar recurso'}</a>` : '<span></span>'}
+          <button type="button" data-library-ai="${escLib(r.id || r.titulo || '')}" data-library-ai-default="${r.predeterminado ? '1' : '0'}" title="Usar este recurso con Gemini"><i class="fa-solid fa-wand-magic-sparkles"></i></button>
           ${r.predeterminado ? '' : `<button type="button" data-library-delete="${escLib(r.id)}"><i class="fa-solid fa-trash"></i></button>`}
         </footer>
       </article>`).join('');
 
     content.querySelectorAll('[data-library-favorite]').forEach(btn => btn.addEventListener('click', () => alternarFavorito(btn.dataset.libraryFavorite)));
     content.querySelectorAll('[data-library-delete]').forEach(btn => btn.addEventListener('click', () => eliminarRecurso(btn.dataset.libraryDelete)));
+    content.querySelectorAll('[data-library-ai]').forEach(btn => btn.addEventListener('click', () => cargarRecursoEnIA(btn.dataset.libraryAi, btn.dataset.libraryAiDefault === '1')));
+  }
+
+  function encontrarRecursoBiblioteca(id, predeterminado = false) {
+    if (!bibliotecaDatos) return null;
+    const lista = predeterminado ? (bibliotecaDatos.predeterminados || []) : (bibliotecaDatos.recursos || []);
+    return lista.find(x => String(x.id || x.titulo || '') === String(id || '')) || null;
+  }
+
+  function textoRecursoParaIA(recurso) {
+    if (!recurso) return '';
+    const partes = [];
+    if (recurso.titulo) partes.push(`Título: ${recurso.titulo}`);
+    if (recurso.area) partes.push(`Área: ${recurso.area}`);
+    if (recurso.categoria) partes.push(`Categoría: ${recurso.categoria}`);
+    if (recurso.descripcion) partes.push(`Descripción: ${recurso.descripcion}`);
+    if (recurso.apunte) partes.push(`Contenido del apunte:
+${recurso.apunte}`);
+    if (recurso.etiquetas) partes.push(`Etiquetas: ${recurso.etiquetas}`);
+    return partes.join('\n\n').trim();
+  }
+
+  function cargarRecursoEnIA(id, predeterminado = false) {
+    const recurso = encontrarRecursoBiblioteca(id, predeterminado);
+    if (!recurso) return mostrarToast('No se pudo cargar ese recurso.', 'warning', 'Biblioteca con IA');
+    const textarea = document.getElementById('library-ai-content');
+    if (!textarea) return;
+    textarea.value = textoRecursoParaIA(recurso);
+    textarea.focus();
+    document.getElementById('library-ai-tools')?.scrollIntoView({behavior:'smooth', block:'center'});
+    const aviso = recurso.tipo === 'Apunte' ? 'Apunte cargado. Ya puedes trabajarlo con Gemini.' : 'Se cargaron los datos guardados. Para trabajar el contenido completo, pega también un fragmento del documento o enlace.';
+    mostrarToast(aviso, 'success', 'Biblioteca con IA');
+  }
+
+  function enviarBibliotecaAGemini() {
+    const contenido = String(document.getElementById('library-ai-content')?.value || '').trim();
+    const accion = String(document.getElementById('library-ai-action')?.value || 'resumir');
+    if (!contenido) { mostrarToast('Pega un texto o usa un recurso antes de consultar Gemini.', 'warning', 'Biblioteca con IA'); return; }
+    const instrucciones = {
+      resumir:'Resume el contenido en español, de forma clara y fiel. Organiza las ideas principales y no inventes información que no esté en el texto.',
+      explicar:'Explica el contenido en español con lenguaje sencillo para estudiantes. Puedes usar ejemplos, pero distingue los ejemplos de la información original.',
+      preguntas:'Crea preguntas de comprensión y repaso basadas únicamente en el contenido e incluye respuestas sugeridas.',
+      actividad:'Crea una actividad educativa práctica basada en el contenido, con objetivo, materiales, inicio, desarrollo, cierre y evaluación formativa.',
+      guia:'Prepara una guía de estudio con conceptos clave, resumen por puntos, preguntas de repaso y una actividad final.'
+    };
+    const prompt = `${instrucciones[accion] || instrucciones.resumir}\n\nContenido proporcionado por el docente:\n${contenido}\n\nTrabaja únicamente con este material. Si falta información, indícalo claramente. No realices búsqueda web.`;
+    const tabIA=document.getElementById('tab-gemini'), inputIA=document.getElementById('gemini-input'), formIA=document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) return mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Biblioteca con IA');
+    tabIA.click(); inputIA.value=prompt;
+    setTimeout(() => { inputIA.focus(); if (typeof formIA.requestSubmit === 'function') formIA.requestSubmit(); else formIA.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})); }, 180);
   }
 
   function abrirFormulario(modo) {
