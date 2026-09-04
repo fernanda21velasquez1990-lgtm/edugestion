@@ -609,6 +609,33 @@
        </div>
       </div>
 
+      <section class="bg-white rounded-3xl border border-indigo-100 shadow-sm p-5 md:p-6" id="planificacion-ia-card">
+       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+        <div class="flex items-start gap-3">
+         <span class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl shrink-0"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+         <div>
+          <span class="text-[10px] font-black uppercase tracking-[.18em] text-indigo-500">Asistente docente</span>
+          <h3 class="font-black text-gray-800 text-xl mt-1">Generar planificaci&oacute;n con Gemini</h3>
+          <p class="text-sm text-gray-500 mt-1">Completa los datos b&aacute;sicos y Gemini preparar&aacute; una planificaci&oacute;n organizada para tu clase.</p>
+         </div>
+        </div>
+        <div class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-2 rounded-xl"><i class="fa-solid fa-shield-halved mr-1"></i> Modo gratuito · sin b&uacute;squeda web</div>
+       </div>
+       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Grado / A&ntilde;o</label><select id="plan-ia-grado" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold"><option>1er A&ntilde;o</option><option>2do A&ntilde;o</option><option>3er A&ntilde;o</option><option>4to A&ntilde;o</option><option>5to A&ntilde;o</option></select></div>
+        <div><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">&Aacute;rea</label><input id="plan-ia-area" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold" value="Educaci&oacute;n F&iacute;sica" placeholder="Ej: Educaci&oacute;n F&iacute;sica"></div>
+        <div><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Fecha</label><input id="plan-ia-fecha" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold" type="date"></div>
+        <div class="md:col-span-2"><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Tema</label><input id="plan-ia-tema" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold" placeholder="Ej: Coordinaci&oacute;n, sistema solar, convivencia..."></div>
+        <div><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Duraci&oacute;n</label><select id="plan-ia-duracion" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold"><option>45 minutos</option><option selected>60 minutos</option><option>90 minutos</option><option>2 horas</option></select></div>
+        <div class="md:col-span-2"><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Objetivo</label><textarea id="plan-ia-objetivo" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold min-h-[88px]" placeholder="Ej: Fortalecer la coordinaci&oacute;n motriz mediante actividades din&aacute;micas."></textarea></div>
+        <div><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Tipo de actividad</label><select id="plan-ia-tipo" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold"><option>Clase completa</option><option>Actividad pr&aacute;ctica</option><option>Actividad grupal</option><option>Evaluaci&oacute;n formativa</option><option>Proyecto breve</option></select></div>
+       </div>
+       <div class="mt-5 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+        <p class="text-xs text-gray-400"><i class="fa-solid fa-circle-info mr-1"></i> La respuesta se abrir&aacute; en Asistente IA y podr&aacute;s copiarla o adaptarla.</p>
+        <button id="btn-planificacion-ia" type="button" class="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-5 py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2"><i class="fa-solid fa-wand-magic-sparkles"></i> Generar planificaci&oacute;n con IA</button>
+       </div>
+      </section>
+
       <div class="planning-layout">
        <aside class="planning-sidebar bg-white p-4 rounded-3xl shadow-sm border border-gray-100 h-fit">
         <div class="text-center mb-6 border-b border-gray-100 pb-4">

@@ -5875,6 +5875,64 @@ Archivo enviado directamente desde EduGestión.`);
 /* EDUGESTION_SETTINGS_V1_END */
 
 
+
+/* =========================================================
+   EduGestion · Planificacion con IA
+   ========================================================= */
+(() => {
+  const btn = document.getElementById('btn-planificacion-ia');
+  if (!btn) return;
+
+  const grado = document.getElementById('plan-ia-grado');
+  const area = document.getElementById('plan-ia-area');
+  const fecha = document.getElementById('plan-ia-fecha');
+  const tema = document.getElementById('plan-ia-tema');
+  const duracion = document.getElementById('plan-ia-duracion');
+  const objetivo = document.getElementById('plan-ia-objetivo');
+  const tipo = document.getElementById('plan-ia-tipo');
+
+  if (fecha && !fecha.value) {
+    const hoy = new Date();
+    const y = hoy.getFullYear();
+    const m = String(hoy.getMonth() + 1).padStart(2, '0');
+    const d = String(hoy.getDate()).padStart(2, '0');
+    fecha.value = `${y}-${m}-${d}`;
+  }
+
+  btn.addEventListener('click', () => {
+    const temaValor = String(tema?.value || '').trim();
+    const objetivoValor = String(objetivo?.value || '').trim();
+    if (!temaValor) {
+      if (typeof mostrarToast === 'function') mostrarToast('Escribe primero el tema de la clase.', 'warning', 'Planificación con IA');
+      tema?.focus();
+      return;
+    }
+
+    const fechaValor = fecha?.value ? new Date(`${fecha.value}T12:00:00`) : null;
+    const fechaBonita = fechaValor && !Number.isNaN(fechaValor.getTime())
+      ? new Intl.DateTimeFormat('es-VE', { day:'numeric', month:'long', year:'numeric' }).format(fechaValor)
+      : 'fecha por definir';
+
+    const prompt = `Prepara una planificación docente completa y práctica en español, sin realizar búsqueda web.\n\nDatos de la clase:\n- Grado/Año: ${grado?.value || 'No indicado'}\n- Área: ${area?.value || 'No indicada'}\n- Tema: ${temaValor}\n- Fecha: ${fechaBonita}\n- Duración: ${duracion?.value || '60 minutos'}\n- Tipo de actividad: ${tipo?.value || 'Clase completa'}\n- Objetivo indicado por el docente: ${objetivoValor || 'Propón un objetivo claro y alcanzable relacionado con el tema.'}\n\nOrganiza la respuesta con estos apartados: Título, Propósito u objetivo, Aprendizajes esperados, Materiales, Inicio, Desarrollo paso a paso, Cierre, Evaluación formativa, Adaptaciones o variantes, y Observaciones para el docente. Usa lenguaje claro, aplicable en aula y actividades realistas para el tiempo indicado.`;
+
+    const tabIA = document.getElementById('tab-gemini');
+    const inputIA = document.getElementById('gemini-input');
+    const formIA = document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Planificación con IA');
+      return;
+    }
+
+    tabIA.click();
+    inputIA.value = prompt;
+    setTimeout(() => {
+      inputIA.focus();
+      if (typeof formIA.requestSubmit === 'function') formIA.requestSubmit();
+      else formIA.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
+    }, 180);
+  });
+})();
+
 /* =========================================================
    EduGestion · Asistente IA Gemini
    ========================================================= */
