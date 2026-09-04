@@ -266,8 +266,13 @@ const SESSION_KEY = 'edugestion_session_v2';
       return resultado;
     }
 
+    // FASE 12: exposición controlada para módulos administrativos del mismo frontend.
+    window.EDUGESTION_API_REQUEST = apiRequest;
+
     function aplicarPerfilDocente(profesor) {
       profesorActual = profesor;
+      window.profesorActual = profesor;
+      try { window.dispatchEvent(new CustomEvent('edugestion:session', { detail: { profesor } })); } catch (_) {}
       profesorName.textContent = profesorActual.nombre || 'Docente';
       profesorMateria.textContent = profesorActual.materia || 'Sin materia asignada';
       document.title = `EduGestión | ${profesorActual.nombre || 'Portal docente'}`;
@@ -280,6 +285,8 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     function cerrarSesionLocal(mostrarMensaje = true) {
       profesorActual = null;
+      window.profesorActual = null;
+      try { window.dispatchEvent(new CustomEvent('edugestion:session', { detail: { profesor: null } })); } catch (_) {}
       sessionToken = '';
       alumnosSeccion = [];
       alumnosFiltradosActas = [];
@@ -8896,3 +8903,184 @@ Archivo enviado directamente desde EduGestión.`);
   else setTimeout(actualizarSello,100);
 })();
 /* EDUGESTION_USER_DATA_ISOLATION_V1_END */
+
+
+/* =========================================================
+   EduGestión · FASE 12
+   Panel de profesores para Dirección
+   - Consulta de docentes registrados.
+   - Materia, sección, turno y estado de acceso.
+   - Filtros, búsqueda, métricas y acceso al detalle institucional.
+   - Sin modificar datos académicos.
+   ========================================================= */
+(() => {
+  const MARK='EDUGESTION_ADMIN_TEACHERS_V1';
+  if(window[MARK]) return;
+  window[MARK]=true;
+  const TAB_ID='tab-gestion-profesores';
+  const SECTION_ID='section-gestion-profesores';
+  let docentes=[];
+  let cargando=false;
+
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const rol=()=>String(window.profesorActual?.rol||'').toLowerCase();
+  const esDirector=()=>rol()==='director';
+
+  function estilos(){
+    if(document.getElementById('edu-admin-teachers-styles')) return;
+    const st=document.createElement('style');
+    st.id='edu-admin-teachers-styles';
+    st.textContent=`
+      .at-hero{padding:22px;border-radius:22px;background:linear-gradient(135deg,#233876,#316cb0);color:#fff;margin-bottom:18px;box-shadow:0 12px 30px rgba(35,56,118,.18)}
+      .at-hero small{font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.9}.at-hero h2{margin:6px 0 8px;font-size:1.55rem}.at-hero p{margin:0;max-width:900px;opacity:.94}
+      .at-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) 200px 180px auto;gap:10px;margin-bottom:14px}.at-toolbar input,.at-toolbar select{width:100%;padding:11px 12px;border:1px solid var(--border-color,#d8e0ea);border-radius:11px;background:var(--input-bg,#fff);color:inherit}.at-refresh{border:0;border-radius:11px;background:#234f91;color:white;padding:0 15px;font-weight:900;cursor:pointer}
+      .at-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}.at-metric{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dfe7ee);border-radius:16px;padding:15px}.at-metric strong{font-size:1.55rem;display:block}.at-metric span{font-size:.82rem;opacity:.75;font-weight:800}
+      .at-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.at-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dfe7ee);border-radius:17px;padding:16px}.at-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.at-person{display:flex;gap:11px;align-items:center}.at-avatar{width:42px;height:42px;border-radius:13px;background:#e8f0fb;color:#234f91;display:grid;place-items:center;font-weight:1000;font-size:1.05rem}.at-person strong{display:block}.at-person small{display:block;opacity:.68;margin-top:2px}.at-badge{padding:6px 9px;border-radius:999px;font-size:.75rem;font-weight:900;white-space:nowrap}.at-badge.on{background:#e8f8ef;color:#187148}.at-badge.off{background:#fff0f0;color:#a53535}
+      .at-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:13px 0}.at-meta div{padding:9px 10px;border-radius:10px;background:rgba(120,140,170,.08)}.at-meta span{display:block;font-size:.72rem;opacity:.65;font-weight:800}.at-meta strong{font-size:.87rem}.at-actions{display:flex;gap:8px;flex-wrap:wrap}.at-btn{border:0;border-radius:10px;padding:9px 11px;font-weight:900;cursor:pointer}.at-btn.primary{background:#234f91;color:#fff}.at-btn.soft{background:#edf3fb;color:#234f91}.at-empty{padding:26px;text-align:center;border:1px dashed var(--border-color,#ccd8e5);border-radius:15px;opacity:.75;grid-column:1/-1}
+      @media(max-width:900px){.at-toolbar{grid-template-columns:1fr 1fr}.at-metrics{grid-template-columns:repeat(2,1fr)}}
+      @media(max-width:680px){.at-grid{grid-template-columns:1fr}.at-toolbar{grid-template-columns:1fr}.at-metrics{grid-template-columns:1fr 1fr}.at-head{align-items:center}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function asegurarUI(){
+    estilos();
+    const nav=document.getElementById('app-nav');
+    const main=document.getElementById('app-main');
+    if(!nav||!main) return;
+    let tab=document.getElementById(TAB_ID);
+    if(!tab){
+      tab=document.createElement('button');
+      tab.id=TAB_ID;tab.type='button';tab.className='nav-item director-only-nav';tab.setAttribute('aria-selected','false');
+      tab.dataset.title='Gestión de profesores';tab.dataset.description='Consulta de cuentas docentes, materias y estado de acceso.';
+      tab.innerHTML='<i class="fa-solid fa-users-gear"></i><span>Gestión de profesores</span>';
+      const ref=document.getElementById('tab-historial-administrativo');
+      nav.insertBefore(tab,ref||null);
+      tab.addEventListener('click',()=>abrir(tab));
+    }
+    let sec=document.getElementById(SECTION_ID);
+    if(!sec){
+      sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden director-dashboard';
+      sec.innerHTML=`
+        <header class="at-hero"><small><i class="fa-solid fa-users-gear"></i> Fase 12 · Administración docente</small><h2>Gestión de profesores</h2><p>Consulta las cuentas registradas, su materia, asignación y estado de acceso. Desde aquí puedes localizar rápidamente a cada docente y abrir su detalle institucional.</p></header>
+        <div class="at-toolbar">
+          <input id="at-search" type="search" placeholder="Buscar nombre, usuario o materia">
+          <select id="at-status"><option value="">Todos los estados</option><option value="activo">Activos</option><option value="inactivo">Inactivos</option></select>
+          <select id="at-subject"><option value="">Todas las materias</option></select>
+          <button class="at-refresh" id="at-refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+        </div>
+        <div id="at-metrics" class="at-metrics"></div>
+        <div id="at-grid" class="at-grid"><div class="at-empty">Abre esta sección para cargar los profesores.</div></div>`;
+      main.appendChild(sec);
+      sec.querySelector('#at-search')?.addEventListener('input',render);
+      sec.querySelector('#at-status')?.addEventListener('change',render);
+      sec.querySelector('#at-subject')?.addEventListener('change',render);
+      sec.querySelector('#at-refresh')?.addEventListener('click',()=>cargar(true));
+      sec.addEventListener('click',e=>{
+        const btn=e.target.closest('[data-at-detail]');
+        if(btn) abrirDetalle(btn.dataset.atDetail);
+      });
+    }
+    actualizarVisibilidad();
+  }
+
+  function actualizarVisibilidad(){
+    const tab=document.getElementById(TAB_ID);
+    const sec=document.getElementById(SECTION_ID);
+    const director=esDirector();
+    if(tab) tab.classList.toggle('role-hidden',!director);
+    if(!director&&sec) sec.classList.add('hidden');
+  }
+
+  function abrir(tab){
+    if(!esDirector()) return;
+    const sec=document.getElementById(SECTION_ID); if(!sec) return;
+    if(typeof window.cambiarPestana==='function') window.cambiarPestana(tab,sec);
+    else{
+      document.querySelectorAll('#app-nav .nav-item').forEach(x=>x.classList.toggle('is-active',x===tab));
+      document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==sec));
+    }
+    cargar(false);
+  }
+
+  async function cargar(forzar){
+    if(cargando) return;
+    if(docentes.length&&!forzar){render();return;}
+    const grid=document.getElementById('at-grid');
+    if(grid)grid.innerHTML='<div class="at-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando profesores…</div>';
+    cargando=true;
+    try{
+      const api=window.EDUGESTION_API_REQUEST;
+      if(typeof api!=='function') throw new Error('La conexión administrativa aún no está disponible.');
+      const r=await api('obtenerPanelDirector');
+      docentes=Array.isArray(r.docentes)?r.docentes:[];
+      cargarMaterias();render();
+    }catch(err){
+      if(grid)grid.innerHTML=`<div class="at-empty"><strong>No se pudo cargar el panel.</strong><br>${esc(err.message||'Error de conexión.')}</div>`;
+    }finally{cargando=false;}
+  }
+
+  function cargarMaterias(){
+    const sel=document.getElementById('at-subject');if(!sel)return;
+    const prev=sel.value;
+    const vals=[...new Set(docentes.map(d=>String(d.materia||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+    sel.innerHTML='<option value="">Todas las materias</option>'+vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    if(vals.includes(prev))sel.value=prev;
+  }
+
+  function filtrados(){
+    const q=String(document.getElementById('at-search')?.value||'').trim().toLowerCase();
+    const st=document.getElementById('at-status')?.value||'';
+    const mat=document.getElementById('at-subject')?.value||'';
+    return docentes.filter(d=>{
+      const texto=[d.nombre,d.usuario,d.email,d.materia,d.seccion,d.turno].join(' ').toLowerCase();
+      if(q&&!texto.includes(q))return false;
+      if(st==='activo'&&!d.activo)return false;
+      if(st==='inactivo'&&d.activo)return false;
+      if(mat&&String(d.materia||'')!==mat)return false;
+      return true;
+    });
+  }
+
+  function render(){
+    const list=filtrados();
+    const metrics=document.getElementById('at-metrics');
+    const grid=document.getElementById('at-grid');
+    if(metrics){
+      const activos=docentes.filter(d=>d.activo).length;
+      const inactivos=docentes.length-activos;
+      const materias=new Set(docentes.map(d=>d.materia).filter(Boolean)).size;
+      metrics.innerHTML=`<div class="at-metric"><strong>${docentes.length}</strong><span>Profesores registrados</span></div><div class="at-metric"><strong>${activos}</strong><span>Accesos activos</span></div><div class="at-metric"><strong>${inactivos}</strong><span>Accesos inactivos</span></div><div class="at-metric"><strong>${materias}</strong><span>Materias registradas</span></div>`;
+    }
+    if(!grid)return;
+    if(!list.length){grid.innerHTML='<div class="at-empty"><i class="fa-solid fa-user-slash"></i><br>No hay profesores que coincidan con los filtros.</div>';return;}
+    grid.innerHTML=list.map(d=>{
+      const inicial=esc((d.nombre||'D').charAt(0).toUpperCase());
+      return `<article class="at-card">
+        <div class="at-head"><div class="at-person"><div class="at-avatar">${inicial}</div><div><strong>${esc(d.nombre||'Docente')}</strong><small>@${esc(d.usuario||'sin-usuario')} ${d.email?'· '+esc(d.email):''}</small></div></div><span class="at-badge ${d.activo?'on':'off'}">${d.activo?'Activo':'Inactivo'}</span></div>
+        <div class="at-meta"><div><span>Materia</span><strong>${esc(d.materia||'Sin asignar')}</strong></div><div><span>Asignación</span><strong>${esc([d.seccion,d.turno].filter(Boolean).join(' · ')||'Sin asignar')}</strong></div><div><span>Estudiantes</span><strong>${esc(d.estudiantes??0)}</strong></div><div><span>Evaluaciones</span><strong>${esc(d.evaluaciones??0)}</strong></div></div>
+        <div class="at-actions"><button class="at-btn primary" data-at-detail="${esc(d.id)}"><i class="fa-solid fa-eye"></i> Ver detalle</button><span class="at-btn soft" style="cursor:default"><i class="fa-solid fa-shield-halved"></i> Estado: ${d.activo?'permitido':'bloqueado'}</span></div>
+      </article>`;
+    }).join('');
+  }
+
+  function abrirDetalle(id){
+    const tab=document.getElementById('tab-historial-administrativo');
+    if(!tab)return;
+    tab.click();
+    setTimeout(()=>{
+      const sel=document.getElementById('director-filter-teacher');
+      if(sel){sel.value=String(id);sel.dispatchEvent(new Event('change',{bubbles:true}));}
+      const docentesTab=document.querySelector('[data-director-view="docentes"]');
+      docentesTab?.click();
+    },120);
+  }
+
+  function init(){asegurarUI();actualizarVisibilidad();}
+  window.addEventListener('edugestion:session',()=>setTimeout(init,40));
+  document.addEventListener('click',e=>{
+    if(e.target?.closest?.('#login-btn,#btn-logout'))setTimeout(init,300);
+  });
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+/* EDUGESTION_ADMIN_TEACHERS_V1_END */
