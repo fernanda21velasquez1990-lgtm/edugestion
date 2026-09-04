@@ -5847,6 +5847,87 @@ Archivo enviado directamente desde EduGestión.`);
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 
+  function asegurarEstilosGeminiRich() {
+    if (document.getElementById('gemini-rich-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'gemini-rich-styles';
+    style.textContent = `
+      .gemini-rich{line-height:1.7;color:inherit;overflow-wrap:anywhere}
+      .gemini-rich p{margin:.5rem 0}
+      .gemini-rich h2,.gemini-rich h3,.gemini-rich h4{margin:1rem 0 .45rem;font-weight:800;line-height:1.3;color:inherit}
+      .gemini-rich h2{font-size:1.18rem}
+      .gemini-rich h3{font-size:1.08rem}
+      .gemini-rich h4{font-size:1rem}
+      .gemini-rich ul,.gemini-rich ol{margin:.55rem 0 .7rem 1.35rem;padding:0}
+      .gemini-rich li{margin:.28rem 0;padding-left:.12rem}
+      .gemini-rich ul{list-style:disc}
+      .gemini-rich ol{list-style:decimal}
+      .gemini-rich strong{font-weight:800}
+      .gemini-rich em{font-style:italic}
+      .gemini-rich code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;background:rgba(15,23,42,.07);padding:.08rem .3rem;border-radius:.35rem;font-size:.92em}
+      .gemini-rich hr{border:0;border-top:1px solid rgba(100,116,139,.22);margin:1rem 0}
+      body.edugestion-dark .gemini-rich code{background:rgba(255,255,255,.1)}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function formatoInlineGemini(texto) {
+    let html = esc(texto);
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    html = html.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+    return html;
+  }
+
+  function markdownGemini(texto) {
+    asegurarEstilosGeminiRich();
+    const lineas = String(texto ?? '').replace(/\r\n/g, '\n').split('\n');
+    const salida = [];
+    let lista = null;
+
+    const cerrarLista = () => {
+      if (!lista) return;
+      salida.push(lista === 'ol' ? '</ol>' : '</ul>');
+      lista = null;
+    };
+
+    for (const original of lineas) {
+      const linea = original.trim();
+      if (!linea) { cerrarLista(); continue; }
+
+      if (/^---+$/.test(linea)) { cerrarLista(); salida.push('<hr>'); continue; }
+
+      const h = linea.match(/^(#{1,4})\s+(.+)$/);
+      if (h) {
+        cerrarLista();
+        const nivel = Math.min(4, Math.max(2, h[1].length + 1));
+        salida.push(`<h${nivel}>${formatoInlineGemini(h[2])}</h${nivel}>`);
+        continue;
+      }
+
+      const ol = linea.match(/^\d+[.)]\s+(.+)$/);
+      if (ol) {
+        if (lista !== 'ol') { cerrarLista(); salida.push('<ol>'); lista = 'ol'; }
+        salida.push(`<li>${formatoInlineGemini(ol[1])}</li>`);
+        continue;
+      }
+
+      const ul = linea.match(/^[-•*]\s+(.+)$/);
+      if (ul) {
+        if (lista !== 'ul') { cerrarLista(); salida.push('<ul>'); lista = 'ul'; }
+        salida.push(`<li>${formatoInlineGemini(ul[1])}</li>`);
+        continue;
+      }
+
+      cerrarLista();
+      salida.push(`<p>${formatoInlineGemini(linea)}</p>`);
+    }
+
+    cerrarLista();
+    return salida.join('');
+  }
+
   function abrirGemini() {
     if (typeof cambiarPestana === 'function') {
       cambiarPestana(tab, section);
@@ -5866,7 +5947,10 @@ Archivo enviado directamente desde EduGestión.`);
     const sourceHtml = Array.isArray(fuentes) && fuentes.length
       ? `<div class="gemini-sources"><strong>Fuentes consultadas</strong>${fuentes.map((f,i)=>`<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${i+1}. ${esc(f.title || f.url)}</a>`).join('')}</div>`
       : '';
-    row.innerHTML = `<div class="gemini-avatar"><i class="fa-solid ${icon}"></i></div><div class="gemini-bubble"><strong>${label}</strong><p>${esc(texto)}</p>${sourceHtml}</div>`;
+    const contenido = tipo === 'assistant'
+      ? `<div class="gemini-rich">${markdownGemini(texto)}</div>`
+      : `<p>${esc(texto)}</p>`;
+    row.innerHTML = `<div class="gemini-avatar"><i class="fa-solid ${icon}"></i></div><div class="gemini-bubble"><strong>${label}</strong>${contenido}${sourceHtml}</div>`;
     conversation.appendChild(row);
     conversation.scrollTop = conversation.scrollHeight;
   }
