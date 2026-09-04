@@ -8472,7 +8472,9 @@ Archivo enviado directamente desde EduGestión.`);
     'edugestion_plan_evaluacion_ef_temas',
     'edugestion_cuadernillo_ef_seguimiento_v1',
     'edugestion_cuadernillo_ef_historial_v1',
-    'edugestion_cuadernillo_ef_lapsos_v1'
+    'edugestion_cuadernillo_ef_lapsos_v1',
+    'edugestion_ui_settings_v1',
+    'nombreInstitucion'
   ]);
   const MATERIAS = [
     'Educación Física','Matemática','Lengua y Literatura','Castellano','Inglés',
@@ -8504,25 +8506,30 @@ Archivo enviado directamente desde EduGestión.`);
   function scopedKey(key, identity=activeIdentity()) {
     return identity ? `${key}__docente_${identity}` : key;
   }
+  function isPersonalKey(key) {
+    const k=String(key||'');
+    return PERSONAL_KEYS.has(k) || k.startsWith('edugestion_ponderacion_') || k.startsWith('filtros_asistencia_');
+  }
 
-  // A partir de esta fase, las bibliotecas IA y el seguimiento curricular local se separan por docente.
+  // Los datos locales personales se aíslan por docente. Los datos principales del sistema
+  // continúan protegidos por la sesión/token del servidor.
   Storage.prototype.getItem = function(key) {
     const k = String(key);
-    if (this === window.localStorage && PERSONAL_KEYS.has(k) && activeIdentity()) {
+    if (this === window.localStorage && isPersonalKey(k) && activeIdentity()) {
       return rawGet.call(this, scopedKey(k));
     }
     return rawGet.call(this, k);
   };
   Storage.prototype.setItem = function(key, value) {
     const k = String(key);
-    if (this === window.localStorage && PERSONAL_KEYS.has(k) && activeIdentity()) {
+    if (this === window.localStorage && isPersonalKey(k) && activeIdentity()) {
       return rawSet.call(this, scopedKey(k), String(value));
     }
     return rawSet.call(this, k, String(value));
   };
   Storage.prototype.removeItem = function(key) {
     const k = String(key);
-    if (this === window.localStorage && PERSONAL_KEYS.has(k) && activeIdentity()) {
+    if (this === window.localStorage && isPersonalKey(k) && activeIdentity()) {
       return rawRemove.call(this, scopedKey(k));
     }
     return rawRemove.call(this, k);
@@ -8603,7 +8610,7 @@ Archivo enviado directamente desde EduGestión.`);
     const section = document.createElement('section');
     section.id = PROFILE_SECTION_ID; section.className='hidden';
     section.innerHTML = `
-      <header class="dp-hero"><small><i class="fa-solid fa-user-gear"></i> Fase 9 · Personalización docente</small><h2>Mi perfil docente</h2><p>EduGestión adapta la materia, los grados y las herramientas visibles para cada profesor. Tus bibliotecas IA y tu seguimiento curricular local quedan separados de los demás docentes.</p></header>
+      <header class="dp-hero"><small><i class="fa-solid fa-user-gear"></i> Fase 9 · Personalización docente</small><h2>Mi perfil docente</h2><p>EduGestión adapta la materia, los grados y las herramientas visibles para cada profesor. Tus bibliotecas IA, preferencias, ponderaciones y seguimiento curricular local quedan separados de los demás docentes. Los módulos principales continúan cargándose con la sesión segura de cada profesor.</p></header>
       <div class="dp-grid">
         <div class="dp-card"><h3>Datos del docente</h3>
           <label class="dp-field"><span>Nombre</span><input id="dp-name" type="text" placeholder="Nombre del docente"></label>
@@ -8611,6 +8618,7 @@ Archivo enviado directamente desde EduGestión.`);
           <label class="dp-field" id="dp-other-wrap" style="display:none"><span>Escribe tu materia</span><input id="dp-other" type="text" placeholder="Ej.: Educación Comercial"></label>
           <label class="dp-field"><span>Año escolar</span><input id="dp-school-year" type="text" placeholder="2026-2027"></label>
           <div id="dp-profile-status" class="dp-status"></div>
+          <div class="dp-status" style="margin-top:10px;background:#eef6ff;color:#235a8a"><i class="fa-solid fa-shield-halved"></i> <strong>Datos separados por usuario</strong><br><span style="font-size:.82rem">Planificaciones, estudiantes, asistencia y demás datos del servidor se consultan con la sesión del profesor. Las bibliotecas y herramientas locales también se guardan bajo su identidad.</span></div>
         </div>
         <div class="dp-card"><h3>Grados / años que atiendo</h3><div class="dp-grades">${GRADOS.map(g=>`<label class="dp-grade"><input type="checkbox" data-dp-grade="${esc(g)}"><span>${esc(g)}</span></label>`).join('')}</div>
           <div class="dp-actions"><button id="dp-save" class="dp-btn primary"><i class="fa-solid fa-floppy-disk"></i> Guardar perfil</button><button id="dp-select-all" class="dp-btn soft">Seleccionar todos</button></div>
@@ -8858,3 +8866,33 @@ Archivo enviado directamente desde EduGestión.`);
   window.EDUGESTION_PROFILE_AI_V1={apply:aplicar,context:perfilIA,enrich:enriquecerMensaje};
 })();
 /* EDUGESTION_PROFILE_AI_V1_END */
+
+
+/* =========================================================
+   EduGestión · FASE 11
+   Refuerzo de separación de datos por usuario
+   - Datos del servidor: protegidos por token/sesión del profesor.
+   - Datos locales: bibliotecas IA, configuración, institución,
+     ponderaciones, filtros y seguimiento curricular aislados por identidad.
+   ========================================================= */
+(() => {
+  const MARK='EDUGESTION_USER_DATA_ISOLATION_V1';
+  if(window[MARK])return;
+  window[MARK]=true;
+
+  function actualizarSello(){
+    const p=window.EDUGESTION_DOCENTE_PERFIL||{};
+    const name=String(p.nombre||window.profesorActual?.nombre||'Docente').trim();
+    const status=document.getElementById('dp-profile-status');
+    if(status && window.profesorActual){
+      status.innerHTML=`<i class="fa-solid fa-circle-check"></i> Perfil activo: <strong>${name.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</strong> · almacenamiento personal aislado.`;
+    }
+  }
+
+  document.addEventListener('click',e=>{
+    if(e.target?.closest?.('#tab-perfil-docente,#dp-save'))setTimeout(actualizarSello,80);
+  });
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(actualizarSello,250),{once:true});
+  else setTimeout(actualizarSello,100);
+})();
+/* EDUGESTION_USER_DATA_ISOLATION_V1_END */
