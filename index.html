@@ -17,7 +17,7 @@
   <link href="https://fonts.googleapis.com" rel="preconnect">
   <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="style.css?v=20260726-3" rel="stylesheet">
+  <link href="style.css?v=20260903-2" rel="stylesheet">
  </head>
  <body class="min-h-screen">
   <!-- PANTALLA 1: LOGIN -->
@@ -257,6 +257,25 @@
        Horario
       </span>
      </button>
+     <button aria-selected="false" class="nav-item" data-description="Consulta el calendario escolar oficial 2026-2027 por mes, con fechas y actividades destacadas." data-title="Calendario escolar" id="tab-calendario" type="button">
+      <i class="fa-solid fa-calendar-check">
+      </i>
+      <span>
+       Calendario
+      </span>
+     </button>
+
+     <button aria-selected="false" class="nav-item" data-description="Consulta Gemini y busca información educativa en Internet desde EduGestión." data-title="Asistente IA" id="tab-gemini" type="button">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      <span>Asistente IA</span>
+     </button>
+     <button aria-selected="false" class="nav-item" data-description="Personaliza la apariencia, el tamaño del texto y el comportamiento visual de EduGestión." data-title="Configuración" id="tab-configuracion" type="button">
+      <i class="fa-solid fa-gear">
+      </i>
+      <span>
+       Configuración
+      </span>
+     </button>
     </nav>
     <div class="sidebar-note">
      <i class="fa-solid fa-circle-check">
@@ -325,6 +344,14 @@
       </button>
      </div>
     </header>
+    <aside class="school-reminder" id="school-reminder" aria-live="polite">
+     <div class="school-reminder__icon"><i class="fa-solid fa-bell"></i></div>
+     <div class="school-reminder__content">
+      <span id="school-reminder-label">Recordatorio escolar de hoy</span>
+      <strong id="school-reminder-text">Consultando el calendario escolar...</strong>
+     </div>
+     <button id="school-reminder-open" type="button"><i class="fa-solid fa-calendar-check"></i><span>Ver calendario</span></button>
+    </aside>
     <main class="app-main" id="app-main">
      <section class="space-y-6 max-w-[1400px] mx-auto" id="section-asistencia">
       <section aria-labelledby="attendance-agenda-title" class="attendance-agenda">
@@ -1497,6 +1524,224 @@
        </div>
       </div>
      </section>
+     <section class="hidden max-w-[1400px] mx-auto space-y-6 school-calendar-module" id="section-calendario">
+      <header class="school-calendar-hero">
+       <div>
+        <span class="school-calendar-eyebrow"><i class="fa-solid fa-school"></i> Año escolar 2026-2027</span>
+        <h2>Calendario escolar</h2>
+        <p>Consulta mes a mes las fechas, actividades pedagógicas, asuetos y efemérides indicadas en el calendario escolar.</p>
+       </div>
+       <a class="school-calendar-pdf" href="assets/calendario/calendario_escolar_2026-2027.pdf" target="_blank" rel="noopener">
+        <i class="fa-solid fa-file-pdf"></i><span>Ver PDF original</span>
+       </a>
+      </header>
+
+      <div class="school-calendar-toolbar">
+       <button id="calendario-anterior" type="button" aria-label="Mes anterior"><i class="fa-solid fa-chevron-left"></i></button>
+       <label for="calendario-mes">
+        <span>Mes</span>
+        <select id="calendario-mes">
+         <option value="0">Septiembre 2026</option>
+         <option value="1">Octubre 2026</option>
+         <option value="2">Noviembre 2026</option>
+         <option value="3">Diciembre 2026</option>
+         <option value="4">Enero 2027</option>
+         <option value="5">Febrero 2027</option>
+         <option value="6">Marzo 2027</option>
+         <option value="7">Abril 2027</option>
+         <option value="8">Mayo 2027</option>
+         <option value="9">Junio 2027</option>
+         <option value="10">Julio 2027</option>
+         <option value="11">Agosto 2027</option>
+        </select>
+       </label>
+       <button id="calendario-siguiente" type="button" aria-label="Mes siguiente"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+
+      <div class="school-calendar-months" id="calendario-meses-rapidos" aria-label="Meses del calendario escolar"></div>
+
+      <article class="school-calendar-viewer">
+       <div class="school-calendar-viewer__header">
+        <div>
+         <span>Consulta informativa</span>
+         <h3 id="calendario-titulo-mes">Septiembre 2026</h3>
+        </div>
+        <span class="school-calendar-source"><i class="fa-solid fa-circle-info"></i> Vista fiel al calendario adjunto</span>
+       </div>
+       <div class="school-calendar-image-wrap">
+        <img id="calendario-imagen" src="assets/calendario/mes-02.jpg" alt="Calendario escolar de septiembre de 2026">
+       </div>
+       <p class="school-calendar-note"><i class="fa-solid fa-magnifying-glass-plus"></i> En el celular puedes ampliar la imagen con dos dedos para leer cada fecha con mayor detalle.</p>
+      </article>
+     </section>
+
+     <section class="hidden max-w-[1400px] mx-auto gemini-module" id="section-gemini">
+      <header class="gemini-hero">
+       <div>
+        <span class="gemini-eyebrow"><i class="fa-solid fa-sparkles"></i> Asistente educativo con Gemini</span>
+        <h2>Buscar, investigar y preparar clases</h2>
+        <p>Haz preguntas educativas y, cuando lo necesites, permite que Gemini consulte Google para encontrar información reciente con sus fuentes.</p>
+       </div>
+       <div class="gemini-hero__icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+      </header>
+
+      <div class="gemini-layout">
+       <article class="gemini-card gemini-card--chat">
+        <div class="gemini-card__head">
+         <div>
+          <span class="gemini-status"><i class="fa-solid fa-circle"></i> Gemini conectado desde Vercel</span>
+          <h3>¿Qué necesitas preparar hoy?</h3>
+          <p>Escribe una consulta o usa uno de los accesos rápidos.</p>
+         </div>
+         <label class="gemini-search-toggle" for="gemini-use-search">
+          <input id="gemini-use-search" type="checkbox" checked>
+          <span><i class="fa-brands fa-google"></i> Buscar en Internet</span>
+         </label>
+        </div>
+
+        <div class="gemini-quick-actions" aria-label="Consultas rápidas">
+         <button type="button" data-gemini-prompt="Dame una actividad didáctica breve y creativa para trabajar con mis alumnos hoy."><i class="fa-solid fa-puzzle-piece"></i> Crear actividad</button>
+         <button type="button" data-gemini-prompt="Ayúdame a investigar una efeméride escolar y preparar una explicación sencilla para estudiantes."><i class="fa-solid fa-landmark"></i> Investigar efeméride</button>
+         <button type="button" data-gemini-prompt="Busca recursos educativos actuales y confiables que pueda usar en clase."><i class="fa-solid fa-book-open-reader"></i> Buscar recursos</button>
+         <button type="button" data-gemini-prompt="Ayúdame a explicar un tema escolar de forma sencilla, con ejemplo y una actividad de cierre."><i class="fa-solid fa-chalkboard-user"></i> Explicar un tema</button>
+        </div>
+
+        <div class="gemini-conversation" id="gemini-conversation" aria-live="polite">
+         <div class="gemini-message gemini-message--assistant">
+          <div class="gemini-avatar"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+          <div class="gemini-bubble"><strong>Asistente IA</strong><p>Estoy listo. Puedes pedirme actividades, explicaciones, ideas para planificación o una búsqueda actual en Internet.</p></div>
+         </div>
+        </div>
+
+        <form class="gemini-composer" id="gemini-form">
+         <textarea id="gemini-input" rows="3" maxlength="8000" placeholder="Ej.: Busca actividades sencillas para enseñar el sistema solar a primer año..."></textarea>
+         <div class="gemini-composer__actions">
+          <span id="gemini-helper"><i class="fa-solid fa-shield-halved"></i> La clave de Gemini permanece protegida en Vercel.</span>
+          <button class="gemini-send" id="gemini-send" type="submit"><i class="fa-solid fa-paper-plane"></i> Consultar Gemini</button>
+         </div>
+        </form>
+       </article>
+
+       <aside class="gemini-card gemini-card--tips">
+        <div class="gemini-card__head-simple"><span class="gemini-card__icon"><i class="fa-solid fa-lightbulb"></i></span><div><h3>Ideas para usarlo</h3><p>Ejemplos pensados para tu trabajo docente.</p></div></div>
+        <div class="gemini-tip-list">
+         <button type="button" data-gemini-prompt="Prepara una actividad escolar relacionada con la fecha de hoy y su efeméride, con inicio, desarrollo y cierre."><i class="fa-solid fa-calendar-day"></i><span><strong>Actividad del día</strong><small>Relacionada con una efeméride.</small></span></button>
+         <button type="button" data-gemini-prompt="Dame cinco ideas de actividades para educación física que requieran pocos materiales y sean seguras para estudiantes."><i class="fa-solid fa-person-running"></i><span><strong>Educación física</strong><small>Ideas prácticas para la clase.</small></span></button>
+         <button type="button" data-gemini-prompt="Crea una explicación para estudiantes con lenguaje sencillo, ejemplos cotidianos y tres preguntas de comprobación."><i class="fa-solid fa-comments"></i><span><strong>Explicación sencilla</strong><small>Adaptada para alumnos.</small></span></button>
+         <button type="button" data-gemini-prompt="Busca información actual y confiable sobre un tema educativo y resume los puntos principales indicando las fuentes."><i class="fa-solid fa-magnifying-glass"></i><span><strong>Investigación en línea</strong><small>Con fuentes web.</small></span></button>
+        </div>
+        <div class="gemini-note"><i class="fa-solid fa-circle-info"></i><p><strong>Importante:</strong> la búsqueda en Internet funcionará cuando esta versión esté publicada en Vercel. Al abrir el archivo directamente desde tu PC, la interfaz puede verse, pero la API necesita Vercel.</p></div>
+       </aside>
+      </div>
+     </section>
+
+     <section class="hidden max-w-[1400px] mx-auto settings-module" id="section-configuracion">
+      <header class="settings-hero">
+       <div>
+        <span class="settings-eyebrow"><i class="fa-solid fa-sliders"></i> Preferencias del sistema</span>
+        <h2>Configuración</h2>
+        <p>Personaliza EduGestión para trabajar con mayor comodidad. Los cambios se guardan automáticamente en este dispositivo.</p>
+       </div>
+       <div class="settings-hero__icon"><i class="fa-solid fa-gear"></i></div>
+      </header>
+
+      <div class="settings-grid">
+       <article class="settings-card">
+        <div class="settings-card__head">
+         <span class="settings-card__icon"><i class="fa-solid fa-text-height"></i></span>
+         <div><h3>Tamaño del texto</h3><p>Aumenta o reduce las letras de la plataforma.</p></div>
+        </div>
+        <div class="settings-control">
+         <div class="settings-range-labels"><span>Pequeña</span><strong id="settings-font-size-value">Normal</strong><span>Muy grande</span></div>
+         <input id="settings-font-size" type="range" min="14" max="20" step="2" value="16" aria-label="Tamaño del texto">
+         <div class="settings-size-presets">
+          <button type="button" data-font-size="14">A</button>
+          <button type="button" data-font-size="16">A</button>
+          <button type="button" data-font-size="18">A</button>
+          <button type="button" data-font-size="20">A</button>
+         </div>
+        </div>
+       </article>
+
+       <article class="settings-card">
+        <div class="settings-card__head">
+         <span class="settings-card__icon"><i class="fa-solid fa-font"></i></span>
+         <div><h3>Tipo de letra</h3><p>Escoge la fuente que te resulte más fácil de leer.</p></div>
+        </div>
+        <label class="settings-field" for="settings-font-family">
+         <span>Fuente de la plataforma</span>
+         <select id="settings-font-family">
+          <option value="system">Predeterminada del sistema</option>
+          <option value="arial">Arial</option>
+          <option value="verdana">Verdana</option>
+          <option value="trebuchet">Trebuchet MS</option>
+          <option value="georgia">Georgia</option>
+         </select>
+        </label>
+       </article>
+
+       <article class="settings-card settings-card--wide">
+        <div class="settings-card__head">
+         <span class="settings-card__icon"><i class="fa-solid fa-circle-half-stroke"></i></span>
+         <div><h3>Apariencia</h3><p>Selecciona cómo quieres ver EduGestión durante el día o la noche.</p></div>
+        </div>
+        <div class="settings-theme-options" role="radiogroup" aria-label="Tema de apariencia">
+         <button type="button" class="settings-theme-option" data-theme="light">
+          <span class="settings-theme-preview settings-theme-preview--light"><i class="fa-solid fa-sun"></i></span>
+          <strong>Claro</strong><small>Fondo claro</small>
+         </button>
+         <button type="button" class="settings-theme-option" data-theme="dark">
+          <span class="settings-theme-preview settings-theme-preview--dark"><i class="fa-solid fa-moon"></i></span>
+          <strong>Oscuro</strong><small>Descansa la vista</small>
+         </button>
+         <button type="button" class="settings-theme-option" data-theme="system">
+          <span class="settings-theme-preview settings-theme-preview--system"><i class="fa-solid fa-desktop"></i></span>
+          <strong>Automático</strong><small>Usa el modo del dispositivo</small>
+         </button>
+        </div>
+       </article>
+
+       <article class="settings-card">
+        <div class="settings-card__head">
+         <span class="settings-card__icon"><i class="fa-solid fa-up-down-left-right"></i></span>
+         <div><h3>Espaciado</h3><p>Define cuánto espacio quieres entre los elementos.</p></div>
+        </div>
+        <div class="settings-segmented" id="settings-density" role="group" aria-label="Espaciado de la interfaz">
+         <button type="button" data-density="comfortable">Cómodo</button>
+         <button type="button" data-density="compact">Compacto</button>
+        </div>
+       </article>
+
+       <article class="settings-card">
+        <div class="settings-card__head">
+         <span class="settings-card__icon"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+         <div><h3>Movimiento</h3><p>Reduce animaciones si prefieres una interfaz más tranquila.</p></div>
+        </div>
+        <label class="settings-switch-row" for="settings-reduce-motion">
+         <div><strong>Reducir animaciones</strong><span>Minimiza transiciones y desplazamientos suaves.</span></div>
+         <span class="settings-switch"><input id="settings-reduce-motion" type="checkbox"><span></span></span>
+        </label>
+       </article>
+
+       <article class="settings-card settings-card--wide settings-preview-card">
+        <div class="settings-card__head">
+         <span class="settings-card__icon"><i class="fa-solid fa-eye"></i></span>
+         <div><h3>Vista previa</h3><p>Comprueba cómo se verá el texto antes de continuar trabajando.</p></div>
+        </div>
+        <div class="settings-preview">
+         <span>EduGestión · Portal docente</span>
+         <h4>Ejemplo de lectura</h4>
+         <p>Esta es una muestra de cómo se verán los textos, botones y contenidos con tus preferencias actuales.</p>
+         <button type="button"><i class="fa-solid fa-check"></i> Botón de ejemplo</button>
+        </div>
+       </article>
+      </div>
+
+      <footer class="settings-footer">
+       <div><i class="fa-solid fa-circle-info"></i><span>Estas preferencias se guardan únicamente en este navegador y no modifican los datos académicos.</span></div>
+       <button id="settings-reset" type="button"><i class="fa-solid fa-arrow-rotate-left"></i> Restaurar valores</button>
+      </footer>
+     </section>
     </main>
    </div>
   </div>
@@ -1543,7 +1788,7 @@
   </div>
   <script src="config.js">
   </script>
-  <script src="app.js?v=20260726-3">
+  <script src="app.js?v=20260903-2">
   </script>
  
   <div aria-hidden="true" class="user-guide-modal hidden" id="user-guide-modal">

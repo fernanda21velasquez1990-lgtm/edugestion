@@ -7815,3 +7815,228 @@ body.library-modal-open { overflow:hidden; }
   .mobile-nav-toggle span { display: none; }
   .mobile-nav-toggle { min-width: 50px; width: 50px; padding: 0; }
 }
+
+/* =========================================================
+   CALENDARIO ESCOLAR 2026-2027
+   ========================================================= */
+.school-calendar-module{padding-bottom:28px}
+.school-calendar-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:26px 28px;border-radius:28px;color:#fff;background:linear-gradient(135deg,#0d5ea5 0%,#144977 55%,#0b355b 100%);box-shadow:0 18px 42px rgba(20,73,119,.18)}
+.school-calendar-hero h2{margin:7px 0 8px;font-size:clamp(1.55rem,3vw,2.25rem);font-weight:900;letter-spacing:-.03em}
+.school-calendar-hero p{max-width:760px;margin:0;color:rgba(255,255,255,.82);font-size:.88rem;line-height:1.65}
+.school-calendar-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:.67rem;font-weight:900;letter-spacing:.13em;text-transform:uppercase;color:#d8efff}
+.school-calendar-pdf{display:inline-flex;flex:0 0 auto;align-items:center;gap:9px;min-height:46px;padding:0 16px;border:1px solid rgba(255,255,255,.24);border-radius:14px;color:#fff;background:rgba(255,255,255,.11);font-size:.72rem;font-weight:850;text-decoration:none;transition:.2s ease}
+.school-calendar-pdf:hover{background:rgba(255,255,255,.18);transform:translateY(-1px)}
+.school-calendar-pdf i{font-size:1rem;color:#ffd8d8}
+.school-calendar-toolbar{display:grid;grid-template-columns:48px minmax(220px,420px) 48px;justify-content:center;align-items:end;gap:10px;padding:18px;border:1px solid #e3eaf2;border-radius:22px;background:#fff;box-shadow:0 10px 30px rgba(30,67,99,.06)}
+.school-calendar-toolbar>button{display:grid;width:48px;height:48px;place-items:center;border:1px solid #d8e2ec;border-radius:14px;color:#1c5f93;background:#f7fbff;transition:.2s ease}
+.school-calendar-toolbar>button:hover:not(:disabled){color:#fff;background:#1d66a3;border-color:#1d66a3}
+.school-calendar-toolbar>button:disabled{opacity:.35;cursor:not-allowed}
+.school-calendar-toolbar label{display:grid;gap:6px}
+.school-calendar-toolbar label span{font-size:.61rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#6e8194}
+.school-calendar-toolbar select{width:100%;height:48px;border:1px solid #d7e1ea;border-radius:14px;padding:0 14px;color:#264e6d;background:#fff;font-size:.78rem;font-weight:850;outline:none}
+.school-calendar-toolbar select:focus{border-color:#3b82b6;box-shadow:0 0 0 3px rgba(59,130,182,.12)}
+.school-calendar-months{display:grid;grid-template-columns:repeat(12,minmax(64px,1fr));gap:7px;overflow-x:auto;padding:2px 1px 8px;scrollbar-width:thin}
+.school-calendar-months button{min-width:68px;border:1px solid #dfe7ef;border-radius:13px;padding:9px 6px;color:#577188;background:#fff;text-align:center;box-shadow:0 4px 12px rgba(33,67,94,.04)}
+.school-calendar-months button strong,.school-calendar-months button span{display:block}
+.school-calendar-months button strong{font-size:.66rem;text-transform:uppercase}
+.school-calendar-months button span{margin-top:2px;font-size:.5rem;color:#93a0ad}
+.school-calendar-months button.is-active{color:#fff;border-color:#1764a1;background:#1764a1;box-shadow:0 8px 18px rgba(23,100,161,.18)}
+.school-calendar-months button.is-active span{color:#dceeff}
+.school-calendar-viewer{overflow:hidden;border:1px solid #dfe7ef;border-radius:26px;background:#fff;box-shadow:0 16px 42px rgba(24,62,92,.08)}
+.school-calendar-viewer__header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid #e7edf3;background:linear-gradient(180deg,#fff,#f9fbfd)}
+.school-calendar-viewer__header span{display:block;color:#8191a0;font-size:.58rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase}
+.school-calendar-viewer__header h3{margin:4px 0 0;color:#1d4768;font-size:1.25rem;font-weight:900}
+.school-calendar-source{display:inline-flex!important;align-items:center;gap:7px;padding:8px 10px;border-radius:999px;color:#28705a!important;background:#eaf8f2;font-size:.55rem!important;letter-spacing:0!important;text-transform:none!important}
+.school-calendar-image-wrap{display:flex;justify-content:center;padding:20px;background:#edf3f8}
+.school-calendar-image-wrap img{display:block;width:min(100%,1000px);height:auto;border-radius:12px;background:#fff;box-shadow:0 8px 26px rgba(24,56,82,.13)}
+.school-calendar-note{display:flex;align-items:center;gap:8px;margin:0;padding:13px 20px;border-top:1px solid #e8eef3;color:#687d8e;background:#fbfdff;font-size:.65rem;font-weight:700}
+
+@media(max-width:900px){
+  .school-calendar-hero{align-items:flex-start;flex-direction:column;padding:22px 20px;border-radius:22px}
+  .school-calendar-pdf{width:100%;justify-content:center}
+  .school-calendar-months{grid-template-columns:repeat(12,72px);justify-content:start}
+}
+
+@media(max-width:600px){
+  .school-calendar-module{padding-bottom:72px}
+  .school-calendar-hero{padding:20px 17px}
+  .school-calendar-hero p{font-size:.76rem}
+  .school-calendar-toolbar{grid-template-columns:42px minmax(0,1fr) 42px;padding:12px 10px;border-radius:18px}
+  .school-calendar-toolbar>button{width:42px;height:44px;border-radius:12px}
+  .school-calendar-toolbar select{height:44px;font-size:.7rem;padding:0 9px}
+  .school-calendar-viewer{border-radius:20px}
+  .school-calendar-viewer__header{align-items:flex-start;flex-direction:column;padding:15px 14px}
+  .school-calendar-viewer__header h3{font-size:1.05rem}
+  .school-calendar-image-wrap{padding:8px;background:#dfe9f1;overflow:auto}
+  .school-calendar-image-wrap img{width:100%;min-width:0;border-radius:8px}
+  .school-calendar-note{padding:11px 13px;font-size:.59rem;line-height:1.45}
+}
+
+/* ===== RECORDATORIO DIARIO DEL CALENDARIO ESCOLAR ===== */
+.school-reminder{display:flex;align-items:center;gap:12px;margin:14px 22px 0;padding:12px 14px;border:1px solid #d8e9f5;border-radius:18px;background:linear-gradient(90deg,#f6fbff,#ffffff);box-shadow:0 8px 24px rgba(28,77,113,.07)}
+.school-reminder__icon{display:grid;flex:0 0 42px;width:42px;height:42px;place-items:center;border-radius:13px;color:#fff;background:linear-gradient(135deg,#1670b5,#0d4f82);box-shadow:0 8px 18px rgba(16,91,145,.18)}
+.school-reminder__content{min-width:0;flex:1}
+.school-reminder__content span{display:block;margin-bottom:3px;color:#648198;font-size:.58rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.school-reminder__content strong{display:block;color:#173c58;font-size:.76rem;font-weight:850;line-height:1.42}
+.school-reminder button{display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;min-height:38px;padding:0 12px;border:1px solid #cfe0ec;border-radius:12px;color:#155f94;background:#fff;font-size:.64rem;font-weight:850;transition:.2s ease}
+.school-reminder button:hover{color:#fff;border-color:#176aa5;background:#176aa5}
+
+/* Ajuste visual para ver el mes completo sin que quede exageradamente grande */
+.school-calendar-image-wrap{min-height:0;align-items:flex-start}
+.school-calendar-image-wrap img{width:auto!important;max-width:100%!important;max-height:calc(100vh - 245px);object-fit:contain}
+
+@media (max-width: 900px){
+ .school-reminder{margin:10px 12px 0;padding:10px 11px;border-radius:15px}
+ .school-reminder__icon{width:38px;height:38px;flex-basis:38px;border-radius:12px}
+ .school-reminder__content strong{font-size:.69rem}
+ .school-reminder button span{display:none}
+ .school-reminder button{width:38px;padding:0;justify-content:center}
+}
+@media (max-width: 640px){
+ .school-reminder{align-items:flex-start;gap:9px;margin:8px 8px 0;padding:9px 10px}
+ .school-reminder__icon{width:34px;height:34px;flex-basis:34px;font-size:.82rem}
+ .school-reminder__content span{font-size:.52rem}
+ .school-reminder__content strong{font-size:.64rem;line-height:1.38}
+ .school-reminder button{width:34px;min-height:34px;height:34px;border-radius:10px}
+ .school-calendar-image-wrap img{width:100%!important;max-height:none}
+}
+
+
+/* EDUGESTION_SETTINGS_V1_START */
+:root {
+  --edu-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body.edugestion-customized,
+body.edugestion-customized button,
+body.edugestion-customized input,
+body.edugestion-customized select,
+body.edugestion-customized textarea {
+  font-family: var(--edu-font-family) !important;
+}
+
+.settings-module { padding-bottom: 2rem; }
+.settings-hero {
+  display:flex; align-items:center; justify-content:space-between; gap:2rem;
+  padding:2rem; border-radius:28px; color:#fff;
+  background:linear-gradient(135deg,#153e75 0%,#1261a8 58%,#1784ba 100%);
+  box-shadow:0 18px 42px rgba(15,64,111,.18); margin-bottom:1.5rem;
+}
+.settings-eyebrow { display:inline-flex; align-items:center; gap:.55rem; font-size:.76rem; font-weight:900; letter-spacing:.12em; text-transform:uppercase; opacity:.9; }
+.settings-hero h2 { margin:.55rem 0 .35rem; font-size:2rem; font-weight:900; }
+.settings-hero p { margin:0; max-width:720px; line-height:1.65; opacity:.9; }
+.settings-hero__icon { width:82px; height:82px; flex:none; border-radius:24px; display:grid; place-items:center; background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.22); font-size:2rem; }
+.settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
+.settings-card { background:#fff; border:1px solid #e2e8f0; border-radius:24px; padding:1.35rem; box-shadow:0 10px 26px rgba(15,23,42,.06); }
+.settings-card--wide { grid-column:1/-1; }
+.settings-card__head { display:flex; align-items:flex-start; gap:.9rem; margin-bottom:1.2rem; }
+.settings-card__icon { width:46px; height:46px; flex:none; border-radius:15px; display:grid; place-items:center; background:#eaf5ff; color:#1261a8; font-size:1.05rem; }
+.settings-card__head h3 { margin:0; color:#0f2942; font-size:1.04rem; font-weight:900; }
+.settings-card__head p { margin:.28rem 0 0; color:#718096; font-size:.86rem; line-height:1.5; }
+.settings-range-labels { display:flex; align-items:center; justify-content:space-between; gap:.5rem; color:#8290a3; font-size:.74rem; margin-bottom:.65rem; }
+.settings-range-labels strong { color:#1261a8; font-size:.84rem; }
+#settings-font-size { width:100%; accent-color:#1261a8; }
+.settings-size-presets { display:grid; grid-template-columns:repeat(4,1fr); gap:.55rem; margin-top:.85rem; }
+.settings-size-presets button { min-height:42px; border:1px solid #dbe4ee; border-radius:12px; background:#f8fafc; color:#334155; font-weight:800; }
+.settings-size-presets button:nth-child(1){font-size:.78rem}.settings-size-presets button:nth-child(2){font-size:.9rem}.settings-size-presets button:nth-child(3){font-size:1rem}.settings-size-presets button:nth-child(4){font-size:1.12rem}
+.settings-size-presets button.is-active { border-color:#1261a8; background:#eaf5ff; color:#1261a8; box-shadow:0 0 0 2px rgba(18,97,168,.08); }
+.settings-field { display:grid; gap:.5rem; }
+.settings-field > span { font-size:.78rem; color:#5d6b7b; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
+.settings-field select { width:100%; min-height:48px; border:1px solid #d7e0ea; border-radius:13px; background:#fff; color:#1f3348; padding:0 .9rem; outline:none; }
+.settings-field select:focus { border-color:#1261a8; box-shadow:0 0 0 3px rgba(18,97,168,.1); }
+.settings-theme-options { display:grid; grid-template-columns:repeat(3,1fr); gap:.85rem; }
+.settings-theme-option { display:grid; grid-template-columns:56px 1fr; grid-template-rows:auto auto; column-gap:.8rem; align-items:center; text-align:left; padding:.85rem; border:1px solid #dbe4ee; border-radius:17px; background:#fff; color:#24364a; }
+.settings-theme-option:hover { border-color:#91b8d9; }
+.settings-theme-option.is-active { border-color:#1261a8; box-shadow:0 0 0 3px rgba(18,97,168,.1); background:#f4faff; }
+.settings-theme-preview { grid-row:1/3; width:56px; height:48px; border-radius:12px; display:grid; place-items:center; border:1px solid rgba(0,0,0,.08); }
+.settings-theme-preview--light{background:#fff;color:#f2a900}.settings-theme-preview--dark{background:#172235;color:#c8d8ff}.settings-theme-preview--system{background:linear-gradient(90deg,#fff 50%,#172235 50%);color:#58708c}
+.settings-theme-option strong { font-size:.9rem; }.settings-theme-option small { color:#8290a3; font-size:.74rem; }
+.settings-segmented { display:grid; grid-template-columns:1fr 1fr; padding:4px; border-radius:14px; background:#edf3f8; }
+.settings-segmented button { min-height:42px; border:0; border-radius:11px; background:transparent; color:#64748b; font-weight:800; }
+.settings-segmented button.is-active { background:#fff; color:#1261a8; box-shadow:0 3px 12px rgba(15,23,42,.08); }
+.settings-switch-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; cursor:pointer; }
+.settings-switch-row > div { display:grid; gap:.2rem; }.settings-switch-row strong{color:#24364a;font-size:.9rem}.settings-switch-row span{color:#7b8796;font-size:.76rem}
+.settings-switch { position:relative; flex:none; width:50px; height:28px; }.settings-switch input{position:absolute;opacity:0;pointer-events:none}.settings-switch > span{position:absolute;inset:0;border-radius:999px;background:#ccd6e0;transition:.2s}.settings-switch > span:after{content:"";position:absolute;width:22px;height:22px;border-radius:50%;background:#fff;left:3px;top:3px;box-shadow:0 2px 8px rgba(0,0,0,.18);transition:.2s}.settings-switch input:checked + span{background:#1261a8}.settings-switch input:checked + span:after{transform:translateX(22px)}
+.settings-preview { border:1px dashed #bfd0df; border-radius:18px; padding:1.2rem; background:#f8fbfe; }.settings-preview>span{font-size:.73rem;text-transform:uppercase;letter-spacing:.08em;color:#6c7f91;font-weight:900}.settings-preview h4{margin:.45rem 0 .35rem;color:#16324c;font-size:1.2rem}.settings-preview p{margin:0 0 .9rem;color:#617286;line-height:1.6}.settings-preview button{border:0;border-radius:12px;background:#1261a8;color:#fff;padding:.7rem 1rem;font-weight:800}
+.settings-footer { margin-top:1rem; padding:1rem 1.1rem; border:1px solid #dce6ef; border-radius:18px; background:#f8fafc; display:flex; align-items:center; justify-content:space-between; gap:1rem; }.settings-footer>div{display:flex;align-items:center;gap:.55rem;color:#64748b;font-size:.78rem}.settings-footer>div i{color:#168764}.settings-footer button{border:1px solid #d7e0ea;border-radius:11px;background:#fff;color:#40546a;padding:.65rem .9rem;font-weight:800}
+
+body[data-edugestion-density="compact"] .app-main { padding-top:1rem !important; }
+body[data-edugestion-density="compact"] .nav-item { min-height:44px !important; padding-top:.55rem !important; padding-bottom:.55rem !important; }
+body[data-edugestion-density="compact"] .settings-card { padding:1rem; }
+body[data-edugestion-density="compact"] .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top:1rem !important; }
+
+body.edugestion-reduce-motion *, body.edugestion-reduce-motion *::before, body.edugestion-reduce-motion *::after { scroll-behavior:auto !important; animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+
+/* Modo oscuro global */
+body[data-edugestion-theme="dark"] { background:#0b1220; color:#dce8f5; color-scheme:dark; }
+body[data-edugestion-theme="dark"] .app-workspace,
+body[data-edugestion-theme="dark"] .app-main { background:#0d1625 !important; }
+body[data-edugestion-theme="dark"] .app-topbar { background:#111c2d !important; border-color:#26364a !important; color:#edf5ff !important; }
+body[data-edugestion-theme="dark"] .topbar-title h1,
+body[data-edugestion-theme="dark"] .topbar-profile strong { color:#f4f8fc !important; }
+body[data-edugestion-theme="dark"] .topbar-title p,
+body[data-edugestion-theme="dark"] .topbar-profile span { color:#91a5ba !important; }
+body[data-edugestion-theme="dark"] .bg-white,
+body[data-edugestion-theme="dark"] .settings-card,
+body[data-edugestion-theme="dark"] .school-calendar-toolbar,
+body[data-edugestion-theme="dark"] .school-calendar-viewer,
+body[data-edugestion-theme="dark"] .planning-sidebar,
+body[data-edugestion-theme="dark"] .password-modal__card { background:#132033 !important; border-color:#2a3a4e !important; color:#dce8f5 !important; }
+body[data-edugestion-theme="dark"] .bg-gray-50,
+body[data-edugestion-theme="dark"] .bg-slate-50,
+body[data-edugestion-theme="dark"] .settings-preview,
+body[data-edugestion-theme="dark"] .settings-footer { background:#101b2b !important; border-color:#293a4d !important; }
+body[data-edugestion-theme="dark"] .text-gray-900,
+body[data-edugestion-theme="dark"] .text-gray-800,
+body[data-edugestion-theme="dark"] .text-gray-700,
+body[data-edugestion-theme="dark"] .settings-card__head h3,
+body[data-edugestion-theme="dark"] .settings-switch-row strong,
+body[data-edugestion-theme="dark"] .settings-preview h4 { color:#edf5ff !important; }
+body[data-edugestion-theme="dark"] .text-gray-600,
+body[data-edugestion-theme="dark"] .text-gray-500,
+body[data-edugestion-theme="dark"] .text-gray-400,
+body[data-edugestion-theme="dark"] .settings-card__head p,
+body[data-edugestion-theme="dark"] .settings-switch-row span,
+body[data-edugestion-theme="dark"] .settings-preview p,
+body[data-edugestion-theme="dark"] .settings-footer>div { color:#9db0c3 !important; }
+body[data-edugestion-theme="dark"] .border-gray-100,
+body[data-edugestion-theme="dark"] .border-gray-200,
+body[data-edugestion-theme="dark"] .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color:#293a4d !important; }
+body[data-edugestion-theme="dark"] input,
+body[data-edugestion-theme="dark"] select,
+body[data-edugestion-theme="dark"] textarea { background:#0d1828 !important; color:#ecf4fc !important; border-color:#34465a !important; }
+body[data-edugestion-theme="dark"] input::placeholder,
+body[data-edugestion-theme="dark"] textarea::placeholder { color:#70849a !important; }
+body[data-edugestion-theme="dark"] .settings-theme-option,
+body[data-edugestion-theme="dark"] .settings-size-presets button,
+body[data-edugestion-theme="dark"] .settings-segmented button.is-active,
+body[data-edugestion-theme="dark"] .settings-footer button { background:#17263a !important; border-color:#31455b !important; color:#dce8f5 !important; }
+body[data-edugestion-theme="dark"] .settings-theme-option.is-active,
+body[data-edugestion-theme="dark"] .settings-size-presets button.is-active { background:#173456 !important; border-color:#4b8bc4 !important; color:#bfe1ff !important; }
+body[data-edugestion-theme="dark"] .settings-segmented { background:#0c1726; }
+body[data-edugestion-theme="dark"] .school-calendar-viewer__header,
+body[data-edugestion-theme="dark"] .planning-calendar-card,
+body[data-edugestion-theme="dark"] table { color:#dce8f5 !important; }
+body[data-edugestion-theme="dark"] .school-calendar-image-wrap { background:#0b1320 !important; }
+body[data-edugestion-theme="dark"] a { color:inherit; }
+
+@media (max-width:900px) {
+  .settings-hero { padding:1.3rem; border-radius:22px; }
+  .settings-hero h2 { font-size:1.65rem; }
+  .settings-hero__icon { width:58px; height:58px; border-radius:17px; font-size:1.4rem; }
+  .settings-grid { grid-template-columns:1fr; }
+  .settings-card--wide { grid-column:auto; }
+  .settings-theme-options { grid-template-columns:1fr; }
+  .settings-footer { align-items:flex-start; flex-direction:column; }
+  .settings-footer button { width:100%; }
+}
+/* EDUGESTION_SETTINGS_V1_END */
+
+
+/* =========================================================
+   EduGestion · Asistente IA Gemini
+   ========================================================= */
+.gemini-module{display:flex;flex-direction:column;gap:24px}.gemini-module.hidden{display:none!important}.gemini-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:30px 34px;border-radius:28px;background:linear-gradient(135deg,#143e70,#1666ae 58%,#20a3cf);color:#fff;box-shadow:0 18px 38px rgba(29,78,121,.18)}.gemini-eyebrow{display:inline-flex;align-items:center;gap:9px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;font-size:.78rem}.gemini-hero h2{margin:10px 0 8px;font-size:2rem;line-height:1.15}.gemini-hero p{margin:0;max-width:780px;opacity:.93;line-height:1.65}.gemini-hero__icon{width:82px;height:82px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.12);border-radius:24px;display:grid;place-items:center;font-size:2rem;flex:0 0 auto}.gemini-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,.7fr);gap:20px}.gemini-card{background:var(--surface,#fff);border:1px solid rgba(148,163,184,.22);border-radius:26px;box-shadow:0 12px 30px rgba(15,50,82,.08)}.gemini-card--chat{padding:24px}.gemini-card__head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}.gemini-card__head h3{font-size:1.3rem;margin:5px 0 4px}.gemini-card__head p{margin:0;color:#64748b}.gemini-status{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#0f766e}.gemini-status i{font-size:.55rem;color:#10b981}.gemini-search-toggle{cursor:pointer;display:flex;align-items:center;gap:10px;border:1px solid #cfe2f5;background:#f7fbff;padding:10px 12px;border-radius:14px;font-weight:800;color:#14538a;white-space:nowrap}.gemini-search-toggle input{accent-color:#1669ad}.gemini-quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.gemini-quick-actions button{border:1px solid #dbe7f2;background:#fff;color:#174a76;padding:10px 13px;border-radius:999px;font-weight:750;display:flex;align-items:center;gap:8px}.gemini-quick-actions button:hover,.gemini-tip-list button:hover{border-color:#2992d1;background:#f1f9ff}.gemini-conversation{min-height:310px;max-height:52vh;overflow:auto;padding:18px;background:linear-gradient(180deg,#f7fbff,#f9fbfd);border:1px solid #e3edf6;border-radius:20px;display:flex;flex-direction:column;gap:16px}.gemini-message{display:flex;gap:10px;align-items:flex-start}.gemini-message--user{justify-content:flex-end}.gemini-avatar{width:36px;height:36px;border-radius:12px;background:#1668aa;color:white;display:grid;place-items:center;flex:0 0 auto}.gemini-message--user .gemini-avatar{order:2;background:#0f766e}.gemini-bubble{max-width:min(82%,760px);background:white;border:1px solid #e2e8f0;border-radius:18px;padding:13px 15px;box-shadow:0 4px 12px rgba(15,23,42,.04)}.gemini-message--user .gemini-bubble{background:#1768aa;color:#fff;border-color:#1768aa}.gemini-bubble strong{display:block;margin-bottom:5px}.gemini-bubble p{margin:0;white-space:pre-wrap;line-height:1.6}.gemini-sources{margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0}.gemini-sources strong{font-size:.78rem}.gemini-sources a{display:block;margin-top:6px;color:#1269ad;font-size:.82rem;text-decoration:none;overflow-wrap:anywhere}.gemini-sources a:hover{text-decoration:underline}.gemini-composer{margin-top:16px}.gemini-composer textarea{width:100%;resize:vertical;min-height:94px;border:1px solid #cbd5e1;border-radius:18px;padding:14px 16px;background:#fff;color:#162033;outline:none}.gemini-composer textarea:focus{border-color:#2185c5;box-shadow:0 0 0 3px rgba(33,133,197,.12)}.gemini-composer__actions{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:10px}.gemini-composer__actions>span{font-size:.78rem;color:#64748b}.gemini-send{border:0;border-radius:14px;padding:12px 16px;background:#1768aa;color:#fff;font-weight:850;display:flex;gap:8px;align-items:center}.gemini-send:disabled{opacity:.55;cursor:wait}.gemini-card--tips{padding:22px}.gemini-card__head-simple{display:flex;gap:12px;align-items:flex-start}.gemini-card__icon{width:44px;height:44px;border-radius:14px;background:#eaf5ff;color:#1668aa;display:grid;place-items:center}.gemini-card__head-simple h3{margin:0 0 3px}.gemini-card__head-simple p{margin:0;color:#64748b;font-size:.88rem}.gemini-tip-list{display:flex;flex-direction:column;gap:9px;margin-top:18px}.gemini-tip-list button{border:1px solid #e0e8f0;background:#fff;padding:12px;border-radius:16px;text-align:left;display:flex;gap:12px;align-items:center;color:#1e3a56}.gemini-tip-list button>i{width:34px;height:34px;border-radius:10px;background:#eef7ff;color:#1668aa;display:grid;place-items:center}.gemini-tip-list span{display:flex;flex-direction:column;gap:2px}.gemini-tip-list small{color:#64748b}.gemini-note{display:flex;gap:10px;margin-top:18px;padding:13px;background:#fff8e7;border:1px solid #f5dfa6;border-radius:15px;color:#765714;font-size:.8rem;line-height:1.5}.gemini-note p{margin:0}
+body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark"] .gemini-bubble,body[data-edugestion-theme="dark"] .gemini-tip-list button,body[data-edugestion-theme="dark"] .gemini-search-toggle,body[data-edugestion-theme="dark"] .gemini-composer textarea{background:#142438;color:#eaf3fb;border-color:#29415b}body[data-edugestion-theme="dark"] .gemini-conversation{background:#0f1d2d;border-color:#29415b}body[data-edugestion-theme="dark"] .gemini-card__head p,body[data-edugestion-theme="dark"] .gemini-card__head-simple p,body[data-edugestion-theme="dark"] .gemini-tip-list small,body[data-edugestion-theme="dark"] .gemini-composer__actions>span{color:#a9bfd2}body[data-edugestion-theme="dark"] .gemini-note{background:#2a2414;border-color:#534728;color:#f2dda3}body[data-edugestion-theme="dark"] .gemini-sources{border-top-color:#29415b}body[data-edugestion-theme="dark"] .gemini-sources a{color:#79c6ff}
+@media(max-width:900px){.gemini-layout{grid-template-columns:1fr}.gemini-card__head{flex-direction:column}.gemini-search-toggle{width:100%;justify-content:center}.gemini-hero{padding:24px}.gemini-hero__icon{display:none}.gemini-composer__actions{align-items:stretch;flex-direction:column}.gemini-send{justify-content:center}.gemini-bubble{max-width:88%}}
+@media(max-width:600px){.gemini-module{gap:14px}.gemini-hero{border-radius:22px;padding:20px}.gemini-hero h2{font-size:1.55rem}.gemini-card--chat,.gemini-card--tips{padding:15px;border-radius:20px}.gemini-quick-actions{display:grid;grid-template-columns:1fr 1fr}.gemini-quick-actions button{border-radius:14px;justify-content:center;font-size:.78rem}.gemini-conversation{min-height:280px;padding:12px}.gemini-bubble{max-width:92%;font-size:.9rem}}

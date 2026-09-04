@@ -49,12 +49,14 @@ const SESSION_KEY = 'edugestion_session_v2';
     const tabActas = document.getElementById('tab-actas');
     const tabRegistro = document.getElementById('tab-registro');
     const tabHorario = document.getElementById('tab-horario');
+    const tabCalendario = document.getElementById('tab-calendario');
 
     const sectionAsistencia = document.getElementById('section-asistencia');
     const sectionPlanificacion = document.getElementById('section-planificacion');
     const sectionActas = document.getElementById('section-actas');
     const sectionRegistro = document.getElementById('section-registro');
     const sectionHorario = document.getElementById('section-horario');
+    const sectionCalendario = document.getElementById('section-calendario');
 
     // Asistencia
     const selectFiltroAno = document.getElementById('select-filtro-ano');
@@ -404,11 +406,11 @@ const SESSION_KEY = 'edugestion_session_v2';
     });
 
     function cambiarPestana(activaTab, activaSection) {
-      [tabAsistencia, tabPlanificacion, tabActas, tabRegistro, tabHorario].forEach(tab => {
+      document.querySelectorAll('#app-nav .nav-item').forEach(tab => {
         tab.classList.remove('is-active');
         tab.setAttribute('aria-selected', 'false');
       });
-      [sectionAsistencia, sectionPlanificacion, sectionActas, sectionRegistro, sectionHorario].forEach(sec => sec.classList.add('hidden'));
+      document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.add('hidden'));
 
       activaTab.classList.add('is-active');
       activaTab.setAttribute('aria-selected', 'true');
@@ -426,6 +428,334 @@ const SESSION_KEY = 'edugestion_session_v2';
     tabActas.addEventListener('click', async () => { cambiarPestana(tabActas, sectionActas); setFechaHoraActas(); await filtrarAlumnosParaActas(); });
     tabRegistro.addEventListener('click', () => { cambiarPestana(tabRegistro, sectionRegistro); });
     tabHorario.addEventListener('click', () => { cambiarPestana(tabHorario, sectionHorario); actualizarUIHorario(); });
+
+    // ====== CALENDARIO ESCOLAR 2026-2027 ======
+    const calendarioMes = document.getElementById('calendario-mes');
+    const calendarioImagen = document.getElementById('calendario-imagen');
+    const calendarioTituloMes = document.getElementById('calendario-titulo-mes');
+    const calendarioAnterior = document.getElementById('calendario-anterior');
+    const calendarioSiguiente = document.getElementById('calendario-siguiente');
+    const calendarioMesesRapidos = document.getElementById('calendario-meses-rapidos');
+    const schoolReminder = document.getElementById('school-reminder');
+    const schoolReminderLabel = document.getElementById('school-reminder-label');
+    const schoolReminderText = document.getElementById('school-reminder-text');
+    const schoolReminderOpen = document.getElementById('school-reminder-open');
+
+    const mesesCalendarioEscolar = [
+      { nombre: 'Septiembre', ano: 2026, archivo: 'mes-02.jpg' },
+      { nombre: 'Octubre', ano: 2026, archivo: 'mes-03.jpg' },
+      { nombre: 'Noviembre', ano: 2026, archivo: 'mes-04.jpg' },
+      { nombre: 'Diciembre', ano: 2026, archivo: 'mes-05.jpg' },
+      { nombre: 'Enero', ano: 2027, archivo: 'mes-06.jpg' },
+      { nombre: 'Febrero', ano: 2027, archivo: 'mes-07.jpg' },
+      { nombre: 'Marzo', ano: 2027, archivo: 'mes-08.jpg' },
+      { nombre: 'Abril', ano: 2027, archivo: 'mes-09.jpg' },
+      { nombre: 'Mayo', ano: 2027, archivo: 'mes-10.jpg' },
+      { nombre: 'Junio', ano: 2027, archivo: 'mes-11.jpg' },
+      { nombre: 'Julio', ano: 2027, archivo: 'mes-12.jpg' },
+
+      { nombre: 'Agosto', ano: 2027, archivo: 'mes-13.jpg' }
+    ];
+
+    // Efemérides tomadas del calendario escolar 2026-2027 adjunto.
+    const recordatoriosEscolares = {
+      '2026-09-03':'Natalicio de Alberto Arvelo Torrealba (1905)',
+      '2026-09-05':'Día Internacional de la Mujer Indígena (1983)',
+      '2026-09-06':'Simón Bolívar escribe la Carta de Jamaica (1815)',
+      '2026-09-08':'Día Internacional de la Alfabetización (1967)',
+      '2026-09-09':'Día Mundial de la Agricultura',
+      '2026-09-10':'Natalicio de Luis Razetti (1862)',
+      '2026-09-11':'Natalicio de Jacinto Convit (1913)',
+      '2026-09-14':'Fundación de la OPEP (1960)',
+      '2026-09-15':'Natalicio de Mario Briceño Iragorry (1897)',
+      '2026-09-16':'Día Internacional de la Preservación de la Capa de Ozono',
+      '2026-09-19':'Natalicio de José Félix Ribas (1775) / Natalicio de Paulo Freire (1921)',
+      '2026-09-20':'Día de la Educación Intercultural Bilingüe (1979)',
+      '2026-09-21':'Natalicio de Matea Bolívar (1773) / Día Internacional de la Paz (1981)',
+      '2026-09-23':'Día Internacional de las Lenguas de Señas (2017)',
+      '2026-09-25':'Natalicio de Luisa Cáceres de Arismendi (1799)',
+      '2026-09-29':'Natalicio de Miguel de Cervantes Saavedra (1547)',
+      '2026-10-01':'Día Nacional del Cacao (2015)',
+      '2026-10-02':'Día Internacional de la No Violencia (2007)',
+      '2026-10-04':'Día Mundial de los Animales (1929)',
+      '2026-10-05':'Natalicio de Teresa de la Parra (1889) / Día Internacional de la Educación Vial / Día Mundial de los Docentes (1994)',
+      '2026-10-06':'Día Internacional de la Geodiversidad (2022) / Día Mundial del Hábitat (1985)',
+      '2026-10-11':'Día Internacional de la Niña (2011)',
+      '2026-10-12':'Día de la Resistencia Indígena (1492) / Natalicio de Cipriano Castro (1858)',
+      '2026-10-13':'El Libertador escribe «Mi delirio sobre el Chimborazo» (1822) / Día Internacional para la Reducción de Riesgos de Desastres (1989)',
+      '2026-10-14':'Simón Bolívar recibe en Caracas el título de Libertador (1813)',
+      '2026-10-16':'Día Mundial de la Alimentación (1980)',
+      '2026-10-17':'Día Internacional de la Erradicación de la Pobreza (1992)',
+      '2026-10-18':'Natalicio de Josefa Joaquina Sánchez (1765)',
+      '2026-10-21':'Día Mundial del Ahorro Energético',
+      '2026-10-23':'Juana Ramírez es ingresada al Panteón Nacional (2015)',
+      '2026-10-24':'Natalicio de Rafael Urdaneta (1788)',
+      '2026-10-26':'Natalicio de José Gregorio Hernández (1864)',
+      '2026-10-27':'La mujer venezolana vota por primera vez (1946)',
+      '2026-10-28':'Natalicio de Simón Rodríguez (1769) / Inauguración del Panteón Nacional (1875) / Día Nacional de la Alfabetización (2005)',
+      '2026-10-29':'Día Nacional de la Semilla Campesina (2005) / Día Nacional de la Prevención del Embarazo en Adolescentes',
+      '2026-10-30':'El Libertador Simón Bolívar recibe la Espada del Perú (1825)',
+      '2026-10-31':'Natalicio del cantautor Alí Primera (1941)',
+      '2026-11-01':'Día Mundial de la Ecología',
+      '2026-11-06':'Día Internacional contra la Violencia y el Acoso Escolar',
+      '2026-11-07':'Día del Obrero Educacional / Natalicio de Luis Bigott (1938)',
+      '2026-11-10':'Día Mundial de la Ciencia para la Paz y el Desarrollo (2002)',
+      '2026-11-13':'Día Nacional del Teatro',
+      '2026-11-14':'Natalicio de José Antonio Anzoátegui (1789)',
+      '2026-11-16':'Día Mundial de la Tolerancia / Día Internacional del Patrimonio Mundial',
+      '2026-11-17':'Día Internacional de las y los Estudiantes',
+      '2026-11-18':'Día Nacional de la Alimentación',
+      '2026-11-19':'Día Internacional para la Prevención del Abuso Contra los Niños, Niñas y Adolescentes',
+      '2026-11-20':'Decreto del Libertador que incorpora la octava estrella a la bandera nacional por la provincia de Guayana (1817) / Convención Internacional sobre los Derechos del Niño y la Niña (1989)',
+      '2026-11-21':'Día del Estudiante Venezolano',
+      '2026-11-25':'Día Internacional para la Eliminación de la Violencia Contra la Mujer',
+      '2026-11-29':'Natalicio de Andrés Bello (1781)',
+      '2026-12-01':'Declaratoria de los carnavales del Callao como Patrimonio Inmaterial de la Humanidad / Día Mundial de la Lucha contra el SIDA',
+      '2026-12-02':'Día Internacional de la Abolición de la Esclavitud',
+      '2026-12-03':'Día Internacional de las Personas con Discapacidad',
+      '2026-12-05':'Batalla de Araure (1813) / Declaratoria de la Parranda de San Pedro como Patrimonio Inmaterial de la Humanidad',
+      '2026-12-06':'Declaratoria de los Diablos Danzantes de Corpus Christi como Patrimonio Inmaterial de la Humanidad',
+      '2026-12-08':'Día Nacional de Guaicaipuro, Cacicas y Caciques Heroicos',
+      '2026-12-09':'Batalla de Ayacucho (1824)',
+      '2026-12-10':'Batalla de Santa Inés (1859) / Día de la Declaración Universal de los Derechos Humanos / Promulgación de la LOPNNA',
+      '2026-12-12':'Natalicio de Luis Caballero Mejías (1903)',
+      '2026-12-13':'Firma de la Convención de los Derechos de las Personas con Discapacidad (2006)',
+      '2026-12-14':'La mujer venezolana vota por primera vez en elecciones presidenciales (1947)',
+      '2026-12-15':'Manifiesto de Cartagena (1812) / Natalicio de Cristóbal Rojas (1857)',
+      '2026-12-17':'Siembra del Libertador Simón Bolívar (1830)',
+      '2026-12-18':'Inicio de la Segunda Expedición de Los Cayos (1816)',
+      '2026-12-19':'Decreto conservacionista de Chuquisaca del Libertador Simón Bolívar (1825)',
+      '2026-12-22':'Natalicio de Teresa Carreño (1853)',
+      '2026-12-24':'Noche Buena',
+      '2026-12-25':'Día de Navidad',
+      '2026-12-27':'Natalicio de Manuela Sáenz (1797) / Antonio José de Sucre recibe el grado de Mariscal de Ayacucho (1824)',
+      '2026-12-31':'Fin de Año',
+      '2027-01-01':'Año Nuevo',
+      '2027-01-04':'Día Mundial del Braille (2018)',
+      '2027-01-06':'Día Nacional del Deporte',
+      '2027-01-12':'Natalicio de Juana Ramírez «La Avanzadora» (1790)',
+      '2027-01-15':'Día del Maestro y la Maestra',
+      '2027-01-21':'Llegada de José Martí a Caracas (1881)',
+      '2027-01-23':'Natalicio de José Francisco Bermúdez (1782)',
+      '2027-01-24':'Día Mundial de la Cultura Africana y Afrodescendiente / Día Internacional de la Educación',
+      '2027-01-26':'Día Mundial de la Educación Ambiental',
+      '2027-01-30':'Día Escolar de la No Violencia y la Paz / Natalicio de Juan Antonio Pérez Bonalde (1846)',
+      '2027-02-01':'Natalicio de Ezequiel Zamora (1817) / Natalicio de Cecilio Acosta (1818)',
+      '2027-02-02':'Paradura del Niño Jesús / Día de la Candelaria / Día Nacional de las Muñecas y Muñecos de Trapo de Venezuela',
+      '2027-02-03':'Natalicio de Antonio José de Sucre (1795)',
+      '2027-02-04':'Día de la Dignidad Nacional / Día Mundial de la Lucha contra el Cáncer',
+      '2027-02-06':'Natalicio de Fabricio Ojeda (1929)',
+      '2027-02-08':'Asueto de Carnaval',
+      '2027-02-09':'Asueto de Carnaval',
+      '2027-02-11':'Día Internacional de la Mujer y la Niña en las Ciencias',
+      '2027-02-12':'Batalla de la Victoria (1814) / Día Nacional de la Juventud / Batalla de Calabozo (1818)',
+      '2027-02-13':'Día Mundial de la Radio',
+      '2027-02-14':'Día Mundial de la Energía / Día del amor y la amistad',
+      '2027-02-15':'Instalación del Congreso de Angostura (1819)',
+      '2027-02-17':'Acuerdo de Ginebra entre Venezuela y el Reino Unido por la Guayana Esequiba (1966)',
+      '2027-02-18':'Natalicio de Humberto Fernández-Morán (1924)',
+      '2027-02-20':'Grito de la Federación en Coro (1859) / Natalicio de Juan Vicente Torrealba (1917)',
+      '2027-02-27':'Rebelión popular “El Caracazo” (1989) / Día Nacional de los Derechos Humanos en Venezuela',
+      '2027-02-28':'Natalicio de José María España (1761) / Primera Batalla de San Mateo (1814)',
+      '2027-03-01':'Natalicio de Belén San Juan (1917)',
+      '2027-03-02':'Instalación del Primer Congreso de Venezuela (1811)',
+      '2027-03-04':'Natalicio de Pío Tamayo (1898)',
+      '2027-03-05':'Día Mundial de la Eficiencia Energética',
+      '2027-03-07':'Ley de Banderas, Himno y Escudo Nacional de la República Bolivariana de Venezuela (2006)',
+      '2027-03-08':'Día Internacional de la Mujer',
+      '2027-03-09':'Incorporación de la octava estrella en la Bandera Nacional (2006)',
+      '2027-03-10':'Natalicio de José María Vargas (1786)',
+      '2027-03-12':'Día del Profesor de Educación Física',
+      '2027-03-14':'Natalicio de Luis Beltrán Prieto Figueroa (1902) / Día Internacional de la Matemática',
+      '2027-03-15':'Declaratoria del Joropo como patrimonio nacional (2014)',
+      '2027-03-18':'Día de las Niñas, Niños y Jóvenes Indígenas',
+      '2027-03-19':'Día Nacional del Artesano y la Artesana / Día Nacional de la Llaneridad',
+      '2027-03-21':'Día Internacional por la Eliminación de la Discriminación Racial / Día Mundial de la Poesía',
+      '2027-03-22':'Día Mundial del Agua',
+      '2027-03-24':'Decreto de la Abolición de la Esclavitud en el territorio venezolano (1854)',
+      '2027-03-25':'Asueto de Semana Santa / Segunda Batalla de San Mateo (1814) / Natalicio de Leonardo Infante (1798)',
+      '2027-03-26':'Asueto de Semana Santa / Día Mundial del Clima',
+      '2027-03-27':'Día Internacional de Teatro',
+      '2027-03-28':'Natalicio de Francisco de Miranda (1750) / Día Nacional del Patrimonio',
+      '2027-03-30':'Natalicio de Pedro Camejo (1790)',
+      '2027-03-31':'Batalla de Bocachica (1814) / Primera expedición de Los Cayos (1816)',
+      '2027-04-01':'Promulgación de la LOPNNA (2000)',
+      '2027-04-02':'Día Mundial de Concienciación sobre el Autismo / Natalicio de Ana María Campos (1796)',
+      '2027-04-03':'Creación de la Guayana Esequiba (2024)',
+      '2027-04-04':'Día Nacional del Cuatro (2024)',
+      '2027-04-06':'Día Internacional del Deporte para el Desarrollo de la Paz',
+      '2027-04-07':'Día Mundial de la Salud / Conmemoración de la Batalla de Bomboná (1822)',
+      '2027-04-15':'Descubrimiento del primer campo petrolero Mene Grande (1914)',
+      '2027-04-16':'Repatriación de la Abuela Kueka (2020)',
+      '2027-04-17':'Día de la Unión de Naciones Suramericanas (UNASUR)',
+      '2027-04-19':'Creación de la Junta de Gobierno autónoma de Caracas (1810)',
+      '2027-04-21':'Día Mundial de la Creatividad e Innovación',
+      '2027-04-22':'Día Internacional de la Tierra',
+      '2027-04-23':'Día Mundial del Libro, del Derecho de Autor e Idioma Español',
+      '2027-04-25':'Natalicio de Rafael Rangel (1877) / Día Internacional de la Lucha Contra el Maltrato Infantil / Día Nacional del Ajedrez Escolar / Natalicio de José Leonardo Chirino (1754)',
+      '2027-04-28':'Natalicio de Manuel Piar (1774)',
+      '2027-04-29':'Día Internacional de la Danza',
+      '2027-05-01':'Día Internacional del Trabajador y la Trabajadora',
+      '2027-05-02':'Día Mundial Contra el Acoso Escolar',
+      '2027-05-03':'Celebración de la Cruz de Mayo',
+      '2027-05-10':'Alzamiento de José Leonardo Chirino y José Caridad González / Día Nacional de la Afrovenezolanidad / Natalicio de Armando Reverón',
+      '2027-05-14':'Simón Bolívar emprende la Campaña Admirable desde Cúcuta (1813) / Natalicio de César Rengifo (1915)',
+      '2027-05-15':'Día Internacional de la Familia',
+      '2027-05-17':'Natalicio de Aquiles Nazoa (1920)',
+      '2027-05-18':'Natalicio de Josefa Camejo (1791) / Día Internacional de los Museos',
+      '2027-05-22':'Día Internacional de la Diversidad Biológica',
+      '2027-05-23':'Simón Bolívar es proclamado Libertador en Mérida / Día Nacional Escolar para la Prevención del VIH-SIDA / Símbolos naturales de Venezuela',
+      '2027-05-24':'Conmemoración de la Batalla de Pichincha (1822)',
+      '2027-05-25':'Levantamiento de Andresote / Gloria al bravo pueblo como Himno Nacional / Día Mundial de África / Día Nacional del Cimarronaje',
+      '2027-05-27':'Uso oficial de los idiomas indígenas en Venezuela (2002)',
+      '2027-05-28':'Día Internacional del Juego',
+      '2027-05-29':'Decreto del araguaney como árbol nacional de Venezuela (1948)',
+      '2027-05-31':'Día Internacional de No Fumar / Día Nacional del Árbol',
+      '2027-06-02':'El Libertador decreta en Carúpano la abolición de la esclavitud (1816)',
+      '2027-06-05':'Día Mundial de la Conservación y el Ambiente / Natalicio de Jesús Soto (1923)',
+      '2027-06-10':'Natalicio de Antonio Ricaurte (1786)',
+      '2027-06-12':'Día Internacional Contra el Trabajo Infantil',
+      '2027-06-13':'Natalicio de José Antonio Páez (1790) / Día del Tamunangue',
+      '2027-06-15':'Decreto de Guerra a Muerte (1813)',
+      '2027-06-16':'Natalicio de Arturo Michelena (1863)',
+      '2027-06-17':'Día Mundial Contra la Lucha de la Desertificación y la Sequía',
+      '2027-06-18':'Batalla de Agua de Obispo (1813)',
+      '2027-06-21':'Fundación de Curiepe, primer pueblo de negros libres en Venezuela',
+      '2027-06-22':'Instalación del Congreso Anfictiónico de Panamá / Día de la Unidad Latinoamericana',
+      '2027-06-24':'Batalla de Carabobo (1821) / Parranda de San Juan Bautista',
+      '2027-06-26':'Día Internacional de la Preservación de los Bosques Tropicales / Lucha Contra el Uso Indebido y el Tráfico Ilícito de Drogas',
+      '2027-06-27':'Fundación del Correo del Orinoco (1818)',
+      '2027-06-28':'Natalicio de Leonardo Infante (1798)',
+      '2027-06-29':'Entrada triunfal del Libertador a Caracas después de la Batalla de Carabobo / Parranda de San Pedro',
+      '2027-06-30':'Soberanía absoluta de Venezuela sobre la Isla de Aves (1865)',
+      '2027-07-02':'Batalla de Niquitao (1813)',
+      '2027-07-03':'Natalicio de José María Baralt (1810)',
+      '2027-07-05':'Declaración de la Independencia de Venezuela (1811)',
+      '2027-07-06':'Natalicio del Almirante Luis Brión (1782)',
+      '2027-07-07':'Inicio de la Emigración de Oriente (1814) / Día Mundial del Cacao',
+      '2027-07-10':'Natalicio de Argelia Laya (1926)',
+      '2027-07-11':'Natalicio del pintor Juan Lovera (1776)',
+      '2027-07-15':'Natalicio de Argimiro Gabaldón (1919)',
+      '2027-07-19':'Día del Niño y la Niña',
+      '2027-07-22':'Batalla de los Horcones (1813)',
+      '2027-07-24':'Natalicio del Libertador Simón Bolívar (1783) / Batalla Naval del Lago de Maracaibo (1823)',
+      '2027-07-25':'Natalicio de Santiago Mariño (1788) / Fundación de Caracas (1567) / Día Internacional de la Mujer Afrodescendiente',
+      '2027-07-26':'Día Mundial de la Conservación de Manglares',
+      '2027-07-28':'Natalicio del presidente Hugo Chávez Frías (1954)',
+      '2027-07-30':'Día Mundial Contra la Trata de Personas',
+      '2027-07-31':'Batalla de Taguanes (1813) / Batalla de Matasiete (1817) / Día Mundial de las y los Guardaparques y Guardabosques',
+      '2027-08-02':'Natalicio de Rómulo Gallegos (1884) / Día del Trabajador y la Trabajadora Cultural',
+      '2027-08-03':'Día de la Bandera Nacional / Expedición libertadora de Francisco de Miranda en la Vela de Coro (1806)',
+      '2027-08-06':'Natalicio de Andrés Eloy Blanco (1896) / Batalla de Junín (1824)',
+      '2027-08-07':'Batalla de Boyacá (1819)',
+      '2027-08-09':'Día Internacional de los Pueblos Indígenas',
+      '2027-08-12':'Día Internacional de la Juventud',
+      '2027-08-13':'Natalicio de Henri Pittier (1857)',
+      '2027-08-15':'Juramento del Libertador Simón Bolívar en el Monte Sacro (1805) / Promulgación de la Ley Orgánica de Educación (2009)',
+      '2027-08-17':'Día Mundial del Peatón',
+      '2027-08-19':'Natalicio de Luis Mariano Rivera (1906)',
+      '2027-08-22':'Creación del INCE (hoy Inces) por iniciativa de Luis Beltrán Prieto Figueroa (1959)',
+      '2027-08-24':'Día Internacional de los Parques Nacionales'
+    };
+
+    function claveFechaLocal(fecha = new Date()) {
+      const y = fecha.getFullYear();
+      const m = String(fecha.getMonth() + 1).padStart(2, '0');
+      const d = String(fecha.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function indiceEscolarDesdeFecha(fecha = new Date()) {
+      const y = fecha.getFullYear();
+      const m = fecha.getMonth();
+      if (y === 2026 && m >= 8) return m - 8;
+      if (y === 2027 && m <= 7) return m + 4;
+      return 0;
+    }
+
+    function renderRecordatorioEscolar() {
+      if (!schoolReminderText || !schoolReminderLabel) return;
+      const hoy = new Date();
+      const clave = claveFechaLocal(hoy);
+      const dentroPeriodo = (hoy.getFullYear() === 2026 && hoy.getMonth() >= 8) || (hoy.getFullYear() === 2027 && hoy.getMonth() <= 7);
+      const texto = recordatoriosEscolares[clave];
+      const fechaBonita = new Intl.DateTimeFormat('es-VE', { weekday:'long', day:'numeric', month:'long' }).format(hoy);
+      schoolReminderLabel.textContent = `Recordatorio escolar · ${fechaBonita}`;
+      if (texto) {
+        schoolReminderText.textContent = texto;
+        schoolReminder?.classList.add('has-event');
+      } else if (dentroPeriodo) {
+        schoolReminderText.textContent = 'Hoy no hay una efeméride específica destacada en el calendario escolar oficial.';
+        schoolReminder?.classList.remove('has-event');
+      } else {
+        schoolReminderText.textContent = 'Consulta las fechas y efemérides del calendario escolar 2026-2027.';
+        schoolReminder?.classList.remove('has-event');
+      }
+    }
+
+    function indiceMesEscolarActual() {
+      const hoy = new Date();
+      const mes = hoy.getMonth();
+      const ano = hoy.getFullYear();
+      if (ano === 2026 && mes >= 8) return mes - 8;
+      if (ano === 2027 && mes <= 7) return mes + 4;
+      return 0;
+    }
+
+    function renderCalendarioEscolar(indice = 0) {
+      const max = mesesCalendarioEscolar.length - 1;
+      const seguro = Math.max(0, Math.min(max, Number(indice) || 0));
+      const mes = mesesCalendarioEscolar[seguro];
+      if (calendarioMes) calendarioMes.value = String(seguro);
+      if (calendarioTituloMes) calendarioTituloMes.textContent = `${mes.nombre} ${mes.ano}`;
+      if (calendarioImagen) {
+        calendarioImagen.src = `assets/calendario/${mes.archivo}`;
+        calendarioImagen.alt = `Calendario escolar de ${mes.nombre.toLowerCase()} de ${mes.ano}`;
+      }
+      calendarioAnterior?.toggleAttribute('disabled', seguro === 0);
+      calendarioSiguiente?.toggleAttribute('disabled', seguro === max);
+      calendarioMesesRapidos?.querySelectorAll('button').forEach((boton, i) => {
+        boton.classList.toggle('is-active', i === seguro);
+        boton.setAttribute('aria-pressed', i === seguro ? 'true' : 'false');
+      });
+    }
+
+    function crearAccesosMesesCalendario() {
+      if (!calendarioMesesRapidos || calendarioMesesRapidos.children.length) return;
+      mesesCalendarioEscolar.forEach((mes, indice) => {
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.innerHTML = `<strong>${mes.nombre.slice(0, 3)}</strong><span>${mes.ano}</span>`;
+        boton.title = `${mes.nombre} ${mes.ano}`;
+        boton.addEventListener('click', () => renderCalendarioEscolar(indice));
+        calendarioMesesRapidos.appendChild(boton);
+      });
+    }
+
+    function abrirCalendarioEscolar() {
+      crearAccesosMesesCalendario();
+      if (!calendarioMes?.dataset.inicializado) {
+        renderCalendarioEscolar(indiceMesEscolarActual());
+        if (calendarioMes) calendarioMes.dataset.inicializado = '1';
+      } else {
+        renderCalendarioEscolar(Number(calendarioMes.value || 0));
+      }
+    }
+
+    calendarioMes?.addEventListener('change', () => renderCalendarioEscolar(Number(calendarioMes.value)));
+    calendarioAnterior?.addEventListener('click', () => renderCalendarioEscolar(Number(calendarioMes?.value || 0) - 1));
+    calendarioSiguiente?.addEventListener('click', () => renderCalendarioEscolar(Number(calendarioMes?.value || 0) + 1));
+    tabCalendario?.addEventListener('click', () => {
+      cambiarPestana(tabCalendario, sectionCalendario);
+      abrirCalendarioEscolar();
+    });
+    schoolReminderOpen?.addEventListener('click', () => {
+      cambiarPestana(tabCalendario, sectionCalendario);
+      crearAccesosMesesCalendario();
+      renderCalendarioEscolar(indiceEscolarDesdeFecha(new Date()));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    renderRecordatorioEscolar();
     function abrirModalClave() {
       if (!passwordModal) return;
       passwordModal.classList.remove('hidden');
@@ -3904,7 +4234,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     principal.appendChild(section);
 
     tab.addEventListener('click', abrirAuditoria);
-    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario'].forEach(id => {
+    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario', 'tab-calendario'].forEach(id => {
       document.getElementById(id)?.addEventListener('click', cerrarAuditoria, { capture: true });
     });
     document.getElementById('auditoria-actualizar')?.addEventListener('click', () => cargarAuditoria(true));
@@ -4427,7 +4757,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById(IDS.to).value = hoyIso();
 
     tab.addEventListener('click', abrirEstadisticas);
-    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario', 'tab-auditoria'].forEach(id => {
+    ['tab-asistencia', 'tab-planificacion', 'tab-actas', 'tab-registro', 'tab-horario', 'tab-calendario', 'tab-auditoria'].forEach(id => {
       document.getElementById(id)?.addEventListener('click', cerrarEstadisticas, { capture: true });
     });
     document.getElementById(IDS.apply)?.addEventListener('click', () => cargarEstadisticas(true));
@@ -5348,4 +5678,236 @@ Archivo enviado directamente desde EduGestión.`);
   } else {
     initMobileNavigation();
   }
+})();
+
+
+/* EDUGESTION_SETTINGS_V1_START */
+(() => {
+  const STORAGE_KEY = 'edugestion_ui_settings_v1';
+  const DEFAULTS = {
+    fontSize: 16,
+    fontFamily: 'system',
+    theme: 'light',
+    density: 'comfortable',
+    reduceMotion: false
+  };
+
+  const FONT_FAMILIES = {
+    system: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    arial: 'Arial, Helvetica, sans-serif',
+    verdana: 'Verdana, Geneva, sans-serif',
+    trebuchet: '"Trebuchet MS", Arial, sans-serif',
+    georgia: 'Georgia, "Times New Roman", serif'
+  };
+
+  function cargarPreferencias() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      return { ...DEFAULTS, ...saved };
+    } catch (_) {
+      return { ...DEFAULTS };
+    }
+  }
+
+  let prefs = cargarPreferencias();
+  const mediaDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function temaReal(theme) {
+    if (theme === 'system') return mediaDark?.matches ? 'dark' : 'light';
+    return theme === 'dark' ? 'dark' : 'light';
+  }
+
+  function aplicarPreferencias() {
+    const root = document.documentElement;
+    const body = document.body;
+    const fontSize = Math.min(20, Math.max(14, Number(prefs.fontSize) || 16));
+    root.style.fontSize = `${fontSize}px`;
+    root.style.setProperty('--edu-font-family', FONT_FAMILIES[prefs.fontFamily] || FONT_FAMILIES.system);
+    body.dataset.edugestionTheme = temaReal(prefs.theme);
+    body.dataset.edugestionThemePreference = prefs.theme;
+    body.dataset.edugestionDensity = prefs.density === 'compact' ? 'compact' : 'comfortable';
+    body.classList.toggle('edugestion-reduce-motion', !!prefs.reduceMotion);
+    body.classList.add('edugestion-customized');
+    actualizarControles();
+  }
+
+  function guardarPreferencias() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    aplicarPreferencias();
+  }
+
+  function textoTamano(size) {
+    return ({14:'Pequeña',16:'Normal',18:'Grande',20:'Muy grande'})[String(size)] || `${size}px`;
+  }
+
+  function actualizarControles() {
+    const range = document.getElementById('settings-font-size');
+    const value = document.getElementById('settings-font-size-value');
+    const family = document.getElementById('settings-font-family');
+    const motion = document.getElementById('settings-reduce-motion');
+    if (range) range.value = String(prefs.fontSize);
+    if (value) value.textContent = textoTamano(prefs.fontSize);
+    if (family) family.value = prefs.fontFamily;
+    if (motion) motion.checked = !!prefs.reduceMotion;
+
+    document.querySelectorAll('[data-font-size]').forEach(btn => {
+      btn.classList.toggle('is-active', Number(btn.dataset.fontSize) === Number(prefs.fontSize));
+    });
+    document.querySelectorAll('.settings-theme-option').forEach(btn => {
+      const active = btn.dataset.theme === prefs.theme;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-checked', String(active));
+    });
+    document.querySelectorAll('#settings-density [data-density]').forEach(btn => {
+      btn.classList.toggle('is-active', btn.dataset.density === prefs.density);
+    });
+  }
+
+  function abrirConfiguracion() {
+    const tab = document.getElementById('tab-configuracion');
+    const section = document.getElementById('section-configuracion');
+    if (!tab || !section) return;
+    if (typeof cambiarPestana === 'function') {
+      cambiarPestana(tab, section);
+    } else {
+      document.querySelectorAll('#app-nav .nav-item').forEach(item => item.classList.toggle('is-active', item === tab));
+      document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.toggle('hidden', sec !== section));
+    }
+    actualizarControles();
+  }
+
+  function initSettings() {
+    aplicarPreferencias();
+
+    document.getElementById('tab-configuracion')?.addEventListener('click', abrirConfiguracion);
+
+    document.getElementById('settings-font-size')?.addEventListener('input', event => {
+      prefs.fontSize = Number(event.target.value);
+      guardarPreferencias();
+    });
+
+    document.querySelectorAll('[data-font-size]').forEach(btn => btn.addEventListener('click', () => {
+      prefs.fontSize = Number(btn.dataset.fontSize);
+      guardarPreferencias();
+    }));
+
+    document.getElementById('settings-font-family')?.addEventListener('change', event => {
+      prefs.fontFamily = event.target.value;
+      guardarPreferencias();
+    });
+
+    document.querySelectorAll('.settings-theme-option').forEach(btn => btn.addEventListener('click', () => {
+      prefs.theme = btn.dataset.theme;
+      guardarPreferencias();
+    }));
+
+    document.querySelectorAll('#settings-density [data-density]').forEach(btn => btn.addEventListener('click', () => {
+      prefs.density = btn.dataset.density;
+      guardarPreferencias();
+    }));
+
+    document.getElementById('settings-reduce-motion')?.addEventListener('change', event => {
+      prefs.reduceMotion = event.target.checked;
+      guardarPreferencias();
+    });
+
+    document.getElementById('settings-reset')?.addEventListener('click', () => {
+      prefs = { ...DEFAULTS };
+      guardarPreferencias();
+      if (typeof showToast === 'function') showToast('Configuración restaurada', 'Se aplicaron los valores predeterminados.', 'success');
+    });
+
+    mediaDark?.addEventListener?.('change', () => {
+      if (prefs.theme === 'system') aplicarPreferencias();
+    });
+  }
+
+  // Aplicar lo antes posible para evitar destellos de tema al cargar.
+  aplicarPreferencias();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSettings, { once: true });
+  } else {
+    initSettings();
+  }
+})();
+/* EDUGESTION_SETTINGS_V1_END */
+
+
+/* =========================================================
+   EduGestion · Asistente IA Gemini
+   ========================================================= */
+(() => {
+  const tab = document.getElementById('tab-gemini');
+  const section = document.getElementById('section-gemini');
+  const form = document.getElementById('gemini-form');
+  const input = document.getElementById('gemini-input');
+  const conversation = document.getElementById('gemini-conversation');
+  const send = document.getElementById('gemini-send');
+  const useSearch = document.getElementById('gemini-use-search');
+  if (!tab || !section) return;
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+
+  function abrirGemini() {
+    if (typeof cambiarPestana === 'function') {
+      cambiarPestana(tab, section);
+    } else {
+      document.querySelectorAll('#app-nav .nav-item').forEach(item => item.classList.toggle('is-active', item === tab));
+      document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.toggle('hidden', sec !== section));
+    }
+    setTimeout(() => input?.focus(), 120);
+  }
+
+  function agregarMensaje(tipo, texto, fuentes = []) {
+    if (!conversation) return;
+    const row = document.createElement('div');
+    row.className = `gemini-message gemini-message--${tipo}`;
+    const icon = tipo === 'user' ? 'fa-user' : 'fa-wand-magic-sparkles';
+    const label = tipo === 'user' ? 'Tú' : 'Asistente IA';
+    const sourceHtml = Array.isArray(fuentes) && fuentes.length
+      ? `<div class="gemini-sources"><strong>Fuentes consultadas</strong>${fuentes.map((f,i)=>`<a href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${i+1}. ${esc(f.title || f.url)}</a>`).join('')}</div>`
+      : '';
+    row.innerHTML = `<div class="gemini-avatar"><i class="fa-solid ${icon}"></i></div><div class="gemini-bubble"><strong>${label}</strong><p>${esc(texto)}</p>${sourceHtml}</div>`;
+    conversation.appendChild(row);
+    conversation.scrollTop = conversation.scrollHeight;
+  }
+
+  async function consultarGemini(message) {
+    const texto = String(message || '').trim();
+    if (!texto) return;
+    agregarMensaje('user', texto);
+    if (input) input.value = '';
+    if (send) { send.disabled = true; send.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Consultando…'; }
+
+    try {
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ message: texto, useSearch: useSearch?.checked !== false })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.ok) throw new Error(data?.message || 'No se pudo consultar Gemini.');
+      agregarMensaje('assistant', data.answer || 'Gemini no devolvió una respuesta.', data.sources || []);
+    } catch (error) {
+      const local = location.protocol === 'file:';
+      const msg = local
+        ? 'La interfaz está lista, pero la consulta con Gemini necesita ejecutarse desde la versión publicada en Vercel. Terminaremos de probarla después de subir los cambios.'
+        : (error?.message || 'No se pudo conectar con Gemini en este momento.');
+      agregarMensaje('assistant', msg);
+      if (typeof mostrarToast === 'function') mostrarToast(msg, 'warning', 'Asistente IA');
+    } finally {
+      if (send) { send.disabled = false; send.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Consultar Gemini'; }
+    }
+  }
+
+  tab.addEventListener('click', abrirGemini);
+  form?.addEventListener('submit', event => { event.preventDefault(); consultarGemini(input?.value); });
+  input?.addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); consultarGemini(input.value); }
+  });
+  document.querySelectorAll('[data-gemini-prompt]').forEach(btn => btn.addEventListener('click', () => {
+    abrirGemini();
+    if (input) input.value = btn.dataset.geminiPrompt || '';
+    input?.focus();
+  }));
 })();
