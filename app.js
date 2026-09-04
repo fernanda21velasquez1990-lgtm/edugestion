@@ -7966,11 +7966,22 @@ Archivo enviado directamente desde EduGestión.`);
       let row=card.querySelector('.cef-status-row');
       if(!row){
         row=document.createElement('div');row.className='cef-status-row';
+        row.innerHTML=`<span class="cef-status-label"><span class="cef-status-dot"></span> Estado curricular</span><select class="cef-status-select" aria-label="Estado de ${esc(tema)}">${STATUSES.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>`;
         const actions=card.querySelector('.cef-actions');
         card.insertBefore(row,actions||null);
+        const sel=row.querySelector('select');
+        if(sel){
+          sel.value=estado;
+          sel.addEventListener('change',e=>{
+            const nuevo=e.target.value;
+            card.dataset.status=nuevo;
+            setEstado(card.dataset.trackGrado||grado,card.dataset.trackTema||tema,nuevo);
+          });
+        }
+      }else{
+        const sel=row.querySelector('.cef-status-select');
+        if(sel && document.activeElement!==sel && sel.value!==estado) sel.value=estado;
       }
-      row.innerHTML=`<span class="cef-status-label"><span class="cef-status-dot"></span> Estado curricular</span><select class="cef-status-select" aria-label="Estado de ${esc(tema)}">${STATUSES.map(s=>`<option value="${s}" ${s===estado?'selected':''}>${s}</option>`).join('')}</select>`;
-      row.querySelector('select')?.addEventListener('change',e=>setEstado(grado,tema,e.target.value));
       const plan=card.querySelector('[data-plan]');
       if(plan&&!plan.dataset.trackHook){plan.dataset.trackHook='1';plan.addEventListener('click',()=>{if(estadoDe(grado,tema)==='Pendiente')setEstado(grado,tema,'Planificado')},{capture:true});}
     });
@@ -8006,7 +8017,14 @@ Archivo enviado directamente desde EduGestión.`);
     actualizarTodo();
     if(!section.dataset.trackObserver){
       section.dataset.trackObserver='1';
-      const obs=new MutationObserver(()=>setTimeout(actualizarTodo,0));
+      const obs=new MutationObserver(muts=>{
+        const relevante=muts.some(m=>{
+          const t=m.target?.nodeType===1?m.target:m.target?.parentElement;
+          if(!t)return true;
+          return !t.closest?.('.cef-status-row,#cef-progress-panel,.cef-history-modal');
+        });
+        if(relevante)setTimeout(actualizarTodo,0);
+      });
       obs.observe(section,{childList:true,subtree:true});
     }
     document.getElementById('tab-cuadernillo-ef')?.addEventListener('click',()=>setTimeout(actualizarTodo,40));
@@ -8016,3 +8034,108 @@ Archivo enviado directamente desde EduGestión.`);
   if(!iniciar()){let n=0;const tm=setInterval(()=>{n++;if(iniciar()||n>40)clearInterval(tm)},250);}
 })();
 /* EDUGESTION_CUADERNILLO_EF_FASE4_SEGUIMIENTO_END */
+
+/* ================================================================
+   EduGestión · Cuadernillo Educación Física · FASE 5
+   Historial curricular + sincronización con Plan de evaluación
+   ================================================================ */
+(() => {
+  const TRACK_KEY='edugestion_cuadernillo_ef_seguimiento_v1';
+  const HISTORY_KEY='edugestion_cuadernillo_ef_historial_v1';
+  const PLAN_KEY='edugestion_plan_evaluacion_ef_temas';
+  const STYLE_ID='style-cuadernillo-historial-v1';
+  const STATUSES=['Pendiente','Planificado','Trabajado','Evaluado'];
+  const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
+  const key=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const readJSON=(k,fallback)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(fallback))}catch(_){return fallback}};
+  const saveJSON=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const toast=(msg,type='success')=>{if(typeof mostrarToast==='function')mostrarToast(msg,type,'Seguimiento curricular');};
+
+  function addHistory(grado,tema,estado,accion,detalle=''){
+    grado=norm(grado);tema=norm(tema);if(!grado||!tema)return;
+    const all=readJSON(HISTORY_KEY,{}),k=key(grado,tema),list=Array.isArray(all[k])?all[k]:[];
+    list.unshift({fecha:new Date().toISOString(),grado,tema,estado:estado||'',accion:accion||'Actualización',detalle:detalle||''});
+    all[k]=list.slice(0,80);saveJSON(HISTORY_KEY,all);
+  }
+
+  function setTrack(grado,tema,estado,accion,detalle=''){
+    if(!STATUSES.includes(estado))return;
+    const data=readJSON(TRACK_KEY,{}),k=key(grado,tema),prev=data[k]?.estado||'Pendiente';
+    data[k]={grado:norm(grado),tema:norm(tema),estado,actualizadoEn:new Date().toISOString()};
+    saveJSON(TRACK_KEY,data);
+    if(prev!==estado || accion)addHistory(grado,tema,estado,accion||`Estado cambiado de ${prev} a ${estado}`,detalle);
+  }
+
+  function styles(){
+    if(document.getElementById(STYLE_ID))return;
+    const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      .cef-history-btn{background:#f3efff!important;color:#6546a8!important}.cef-history-btn:hover{filter:brightness(.98)}
+      .cef-history-modal{position:fixed;inset:0;background:rgba(10,24,38,.58);display:none;align-items:center;justify-content:center;padding:18px;z-index:99999}.cef-history-modal.open{display:flex}.cef-history-dialog{width:min(760px,96vw);max-height:88vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.25);padding:0}.cef-history-head{position:sticky;top:0;background:#fff;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px;border-bottom:1px solid #dce6ef}.cef-history-head h3{margin:0;color:#1f3b53}.cef-history-head small{display:block;color:#6d8195;margin-top:4px}.cef-history-close{border:0;background:#edf3f8;color:#315169;width:38px;height:38px;border-radius:11px;cursor:pointer}.cef-history-body{padding:18px}.cef-history-empty{padding:26px;text-align:center;border:1px dashed #c7d5e2;border-radius:14px;color:#718498}.cef-history-list{display:flex;flex-direction:column;gap:10px}.cef-history-item{display:grid;grid-template-columns:132px 1fr;gap:12px;border:1px solid #dce6ef;border-radius:14px;padding:12px;background:#fbfdff}.cef-history-date{font-size:.78rem;font-weight:850;color:#6c8195}.cef-history-action strong{display:block;color:#213f58}.cef-history-action span{font-size:.84rem;color:#61778c;line-height:1.4}.cef-history-status{display:inline-flex;margin-top:6px;border-radius:999px;padding:4px 8px;background:#eef5fb;color:#245e88;font-size:.73rem;font-weight:900}
+      .pev-track-choice{margin-top:12px;border:1px solid #cdddeb;background:#f7fbff;border-radius:13px;padding:11px 12px}.pev-track-choice label{display:block;font-weight:850;color:#34536d;font-size:.83rem;margin-bottom:7px}.pev-track-choice select{width:100%;border:1px solid #cbd9e6;background:#fff;color:#223a50;border-radius:10px;padding:9px 10px;font:inherit;font-weight:800}.pev-track-note{font-size:.78rem;color:#6d8195;margin-top:6px;line-height:1.4}
+      .dark-mode .cef-history-dialog,.edugestion-dark .cef-history-dialog,.dark-mode .cef-history-head,.edugestion-dark .cef-history-head{background:#17283a}.dark-mode .cef-history-head,.edugestion-dark .cef-history-head,.dark-mode .cef-history-item,.edugestion-dark .cef-history-item{border-color:#3a5167}.dark-mode .cef-history-head h3,.edugestion-dark .cef-history-head h3,.dark-mode .cef-history-action strong,.edugestion-dark .cef-history-action strong{color:#edf5fb}.dark-mode .cef-history-item,.edugestion-dark .cef-history-item{background:#142536}.dark-mode .cef-history-action span,.edugestion-dark .cef-history-action span,.dark-mode .cef-history-date,.edugestion-dark .cef-history-date{color:#a8bac9}.dark-mode .pev-track-choice,.edugestion-dark .pev-track-choice{background:#17283a;border-color:#3d556c}.dark-mode .pev-track-choice label,.edugestion-dark .pev-track-choice label{color:#d9e6f1}.dark-mode .pev-track-choice select,.edugestion-dark .pev-track-choice select{background:#142536;border-color:#425b72;color:#edf5fb}
+      @media(max-width:620px){.cef-history-item{grid-template-columns:1fr}.cef-history-dialog{max-height:92vh}}
+    `;document.head.appendChild(st);
+  }
+
+  function ensureModal(){
+    if(document.getElementById('cef-history-modal'))return;
+    const m=document.createElement('div');m.id='cef-history-modal';m.className='cef-history-modal';m.innerHTML=`<div class="cef-history-dialog" role="dialog" aria-modal="true"><div class="cef-history-head"><div><h3 id="cef-history-title">Historial del tema</h3><small id="cef-history-sub"></small></div><button class="cef-history-close" id="cef-history-close" type="button"><i class="fa-solid fa-xmark"></i></button></div><div class="cef-history-body" id="cef-history-body"></div></div>`;
+    document.body.appendChild(m);m.querySelector('#cef-history-close').addEventListener('click',()=>m.classList.remove('open'));m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')});
+  }
+
+  function showHistory(grado,tema){
+    ensureModal();const m=document.getElementById('cef-history-modal'),body=document.getElementById('cef-history-body');
+    document.getElementById('cef-history-title').textContent=tema;document.getElementById('cef-history-sub').textContent=`${grado} · Historial curricular`;
+    const list=readJSON(HISTORY_KEY,{})[key(grado,tema)]||[];
+    if(!list.length)body.innerHTML='<div class="cef-history-empty"><i class="fa-solid fa-clock-rotate-left"></i><h4>Sin movimientos todavía</h4><p>Los cambios de estado, planificaciones y planes de evaluación aparecerán aquí.</p></div>';
+    else body.innerHTML=`<div class="cef-history-list">${list.map(x=>{const d=new Date(x.fecha);const fecha=Number.isNaN(d.getTime())?x.fecha:new Intl.DateTimeFormat('es-VE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);return `<div class="cef-history-item"><div class="cef-history-date">${esc(fecha)}</div><div class="cef-history-action"><strong>${esc(x.accion)}</strong>${x.detalle?`<span>${esc(x.detalle)}</span>`:''}${x.estado?`<div class="cef-history-status">${esc(x.estado)}</div>`:''}</div></div>`}).join('')}</div>`;
+    m.classList.add('open');
+  }
+
+  function currentGrade(){return document.querySelector('#cef-levels .cef-level.active')?.dataset.nivel||document.getElementById('cef-level-title')?.textContent?.trim()||'';}
+
+  function decorateCards(){
+    const grade=currentGrade();document.querySelectorAll('#cef-grid .cef-card').forEach(card=>{
+      const tema=norm(card.querySelector('h4')?.textContent);if(!tema)return;
+      const actions=card.querySelector('.cef-actions');if(actions&&!actions.querySelector('.cef-history-btn')){
+        const b=document.createElement('button');b.type='button';b.className='cef-btn soft cef-history-btn';b.innerHTML='<i class="fa-solid fa-clock-rotate-left"></i> Historial';b.addEventListener('click',()=>showHistory(currentGrade(),tema));actions.appendChild(b);
+      }
+    });
+  }
+
+  function bindTrackingHistory(){
+    const sec=document.getElementById('section-cuadernillo-ef');if(!sec||sec.dataset.historyTrackBound)return;
+    sec.dataset.historyTrackBound='1';
+    sec.addEventListener('change',e=>{
+      const sel=e.target.closest?.('.cef-status-select');if(!sel)return;const card=sel.closest('.cef-card'),grado=card?.dataset.trackGrado||currentGrade(),tema=card?.dataset.trackTema||norm(card?.querySelector('h4')?.textContent);if(!tema)return;
+      addHistory(grado,tema,sel.value,'Estado curricular actualizado','Cambio realizado manualmente desde el Cuadernillo Educación Física.');
+    },true);
+    sec.addEventListener('click',e=>{
+      const card=e.target.closest?.('.cef-card');if(!card)return;const tema=norm(card.querySelector('h4')?.textContent),grado=currentGrade();if(!tema)return;
+      if(e.target.closest('[data-plan]')) addHistory(grado,tema,'Planificado','Enviado a Planificación IA','El tema fue seleccionado como base curricular para preparar una planificación.');
+      if(e.target.closest('[data-eval]')) addHistory(grado,tema,card.dataset.status||'Pendiente','Añadido al Plan de evaluación','El tema fue incorporado a la selección del plan de evaluación.');
+    },true);
+  }
+
+  function ensurePlanChoice(){
+    const sec=document.getElementById('section-plan-evaluacion-ef');if(!sec)return;
+    const gen=sec.querySelector('#pev-generate');if(!gen)return;
+    if(!sec.querySelector('#pev-track-after-generate')){
+      const box=document.createElement('div');box.className='pev-track-choice';box.innerHTML=`<label for="pev-track-after-generate"><i class="fa-solid fa-rotate"></i> Al generar este plan, marcar los temas como</label><select id="pev-track-after-generate"><option value="Planificado" selected>Planificado</option><option value="Evaluado">Evaluado</option><option value="none">No cambiar el estado</option></select><div class="pev-track-note">Recomendado: “Planificado” cuando apenas estás preparando el plan. Usa “Evaluado” cuando la evaluación ya fue aplicada o quieres cerrar esos contenidos.</div>`;
+      gen.closest('.pev-actions')?.insertAdjacentElement('beforebegin',box);
+    }
+    if(!gen.dataset.phase5Bound){
+      gen.dataset.phase5Bound='1';gen.addEventListener('click',()=>{
+        const topics=readJSON(PLAN_KEY,[]),estado=sec.querySelector('#pev-track-after-generate')?.value||'Planificado';if(!topics.length||estado==='none')return;
+        topics.forEach(x=>setTrack(x.grado,x.tema,estado,estado==='Evaluado'?'Marcado como Evaluado desde Plan de evaluación':'Marcado como Planificado desde Plan de evaluación',`Actualización automática al generar el plan de evaluación.`));
+        toast(`${topics.length} tema${topics.length===1?'':'s'} marcado${topics.length===1?'':'s'} como ${estado}.`);
+      },true);
+    }
+  }
+
+  function refresh(){styles();ensureModal();decorateCards();bindTrackingHistory();ensurePlanChoice();}
+  function init(){refresh();const root=document.body;if(!root.dataset.cefHistoryObserver){root.dataset.cefHistoryObserver='1';new MutationObserver(()=>setTimeout(refresh,0)).observe(root,{childList:true,subtree:true});}document.getElementById('tab-cuadernillo-ef')?.addEventListener('click',()=>setTimeout(refresh,40));document.getElementById('tab-plan-evaluacion-ef')?.addEventListener('click',()=>setTimeout(refresh,40));}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+/* EDUGESTION_CUADERNILLO_EF_FASE5_HISTORIAL_END */
