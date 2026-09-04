@@ -1531,9 +1531,14 @@
         <h2>Calendario escolar</h2>
         <p>Consulta mes a mes las fechas, actividades pedagógicas, asuetos y efemérides indicadas en el calendario escolar.</p>
        </div>
-       <a class="school-calendar-pdf" href="assets/calendario/calendario_escolar_2026-2027.pdf" target="_blank" rel="noopener">
-        <i class="fa-solid fa-file-pdf"></i><span>Ver PDF original</span>
-       </a>
+       <div style="display:flex;gap:.65rem;flex-wrap:wrap;justify-content:flex-end;align-items:center">
+        <button class="school-calendar-pdf" id="calendario-crear-ia" type="button" title="Crear una actividad con Gemini usando la efeméride de hoy">
+         <i class="fa-solid fa-wand-magic-sparkles"></i><span>Crear actividad con IA</span>
+        </button>
+        <a class="school-calendar-pdf" href="assets/calendario/calendario_escolar_2026-2027.pdf" target="_blank" rel="noopener">
+         <i class="fa-solid fa-file-pdf"></i><span>Ver PDF original</span>
+        </a>
+       </div>
       </header>
 
       <div class="school-calendar-toolbar">
@@ -1559,6 +1564,14 @@
       </div>
 
       <div class="school-calendar-months" id="calendario-meses-rapidos" aria-label="Meses del calendario escolar"></div>
+
+      <div id="calendario-ia-info" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:rgba(255,255,255,.9);border:1px solid rgba(148,163,184,.22);border-radius:18px;padding:14px 18px;box-shadow:0 10px 25px rgba(15,23,42,.05)">
+       <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
+        <span style="width:42px;height:42px;border-radius:13px;background:#e8f4ff;color:#0f6fbf;display:grid;place-items:center;flex:0 0 auto"><i class="fa-solid fa-sparkles"></i></span>
+        <div><strong style="display:block;color:#12304b">Actividad IA del día</strong><small id="calendario-ia-efemeride" style="color:#64748b">Usará la efeméride de hoy indicada en el calendario escolar.</small></div>
+       </div>
+       <button id="calendario-crear-ia-secundario" class="school-calendar-pdf" type="button"><i class="fa-solid fa-arrow-right"></i><span>Preparar actividad</span></button>
+      </div>
 
       <article class="school-calendar-viewer">
        <div class="school-calendar-viewer__header">

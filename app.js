@@ -440,6 +440,9 @@ const SESSION_KEY = 'edugestion_session_v2';
     const schoolReminderLabel = document.getElementById('school-reminder-label');
     const schoolReminderText = document.getElementById('school-reminder-text');
     const schoolReminderOpen = document.getElementById('school-reminder-open');
+    const calendarioCrearIA = document.getElementById('calendario-crear-ia');
+    const calendarioCrearIASecundario = document.getElementById('calendario-crear-ia-secundario');
+    const calendarioIAEfemeride = document.getElementById('calendario-ia-efemeride');
 
     const mesesCalendarioEscolar = [
       { nombre: 'Septiembre', ano: 2026, archivo: 'mes-02.jpg' },
@@ -673,6 +676,42 @@ const SESSION_KEY = 'edugestion_session_v2';
       return 0;
     }
 
+    function efemerideEscolarDeHoy() {
+      const hoy = new Date();
+      const clave = claveFechaLocal(hoy);
+      return { hoy, clave, texto: recordatoriosEscolares[clave] || '' };
+    }
+
+    function actualizarActividadIACalendario() {
+      if (!calendarioIAEfemeride) return;
+      const { hoy, texto } = efemerideEscolarDeHoy();
+      const fechaBonita = new Intl.DateTimeFormat('es-VE', { day:'numeric', month:'long' }).format(hoy);
+      calendarioIAEfemeride.textContent = texto
+        ? `${fechaBonita}: ${texto}`
+        : `${fechaBonita}: no hay una efeméride específica destacada; Gemini puede preparar una actividad escolar general.`;
+    }
+
+    function crearActividadIADesdeCalendario() {
+      const { hoy, texto } = efemerideEscolarDeHoy();
+      const fechaBonita = new Intl.DateTimeFormat('es-VE', { weekday:'long', day:'numeric', month:'long', year:'numeric' }).format(hoy);
+      const tema = texto || 'la jornada escolar de hoy';
+      const prompt = `Crea una actividad didáctica breve, práctica y atractiva para estudiantes de primaria relacionada con ${tema}. Fecha: ${fechaBonita}. Organízala con: título, objetivo, materiales sencillos, inicio, desarrollo, cierre y 3 preguntas de reflexión. Usa lenguaje claro para docentes y no realices búsqueda web.`;
+      const tabIA = document.getElementById('tab-gemini');
+      const inputIA = document.getElementById('gemini-input');
+      const formIA = document.getElementById('gemini-form');
+      if (!tabIA || !inputIA || !formIA) {
+        if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Calendario');
+        return;
+      }
+      tabIA.click();
+      inputIA.value = prompt;
+      setTimeout(() => {
+        inputIA.focus();
+        if (typeof formIA.requestSubmit === 'function') formIA.requestSubmit();
+        else formIA.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
+      }, 180);
+    }
+
     function renderRecordatorioEscolar() {
       if (!schoolReminderText || !schoolReminderLabel) return;
       const hoy = new Date();
@@ -745,6 +784,8 @@ const SESSION_KEY = 'edugestion_session_v2';
     calendarioMes?.addEventListener('change', () => renderCalendarioEscolar(Number(calendarioMes.value)));
     calendarioAnterior?.addEventListener('click', () => renderCalendarioEscolar(Number(calendarioMes?.value || 0) - 1));
     calendarioSiguiente?.addEventListener('click', () => renderCalendarioEscolar(Number(calendarioMes?.value || 0) + 1));
+    calendarioCrearIA?.addEventListener('click', crearActividadIADesdeCalendario);
+    calendarioCrearIASecundario?.addEventListener('click', crearActividadIADesdeCalendario);
     tabCalendario?.addEventListener('click', () => {
       cambiarPestana(tabCalendario, sectionCalendario);
       abrirCalendarioEscolar();
@@ -756,6 +797,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
     renderRecordatorioEscolar();
+    actualizarActividadIACalendario();
     function abrirModalClave() {
       if (!passwordModal) return;
       passwordModal.classList.remove('hidden');
