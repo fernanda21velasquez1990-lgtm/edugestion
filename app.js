@@ -7200,6 +7200,7 @@ Archivo enviado directamente desde EduGestión.`);
     style.id = 'evaluaciones-ia-styles';
     style.textContent = `
       .eval-ia-page{display:grid;gap:1.25rem}
+      .eval-ia-page.hidden{display:none!important}
       .eval-ia-hero{display:flex;justify-content:space-between;align-items:center;gap:1.2rem;padding:1.7rem 1.85rem;border-radius:24px;background:linear-gradient(135deg,#173b63,#1f6fa7);color:#fff;overflow:hidden;position:relative}
       .eval-ia-hero:after{content:"";position:absolute;width:240px;height:240px;border:36px solid rgba(255,255,255,.08);border-radius:50%;right:-70px;top:-85px}
       .eval-ia-hero__copy{position:relative;z-index:1;max-width:760px}
@@ -7494,3 +7495,231 @@ Archivo enviado directamente desde EduGestión.`);
   else iniciar();
 })();
 /* EDUGESTION_MENU_SCROLL_RECOVERY_V1_END */
+
+/* EDUGESTION_BIBLIOTECA_EVALUACIONES_IA_V1_START */
+(() => {
+  const STORAGE_KEY = 'edugestion_biblioteca_evaluaciones_v1';
+  const TAB_ID = 'tab-biblioteca-evaluaciones';
+  const SECTION_ID = 'section-biblioteca-evaluaciones';
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const clean = v => String(v ?? '').replace(/\s+/g,' ').trim();
+
+  function leer() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch (_) { return []; }
+  }
+  function guardar(items) { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
+  function id() { return `eval-${Date.now()}-${Math.random().toString(36).slice(2,8)}`; }
+  function toast(msg, type='success') {
+    if (typeof mostrarToast === 'function') mostrarToast(msg, type, 'Biblioteca de evaluaciones');
+  }
+
+  function capturarContextoEvaluacion() {
+    const tema = clean(document.getElementById('eval-ia-tema')?.value);
+    if (!tema) return;
+    const dificultad = document.querySelector('input[name="eval-ia-dificultad"]:checked')?.value || 'Básico';
+    window.EDUGESTION_EVALUACION_ACTUAL = {
+      tipo: clean(document.getElementById('eval-ia-tipo')?.value) || 'Cuestionario',
+      grado: clean(document.getElementById('eval-ia-grado')?.value),
+      seccion: clean(document.getElementById('eval-ia-seccion')?.value),
+      institucion: clean(document.getElementById('eval-ia-institucion')?.value),
+      docente: clean(document.getElementById('eval-ia-docente')?.value),
+      area: clean(document.getElementById('eval-ia-area')?.value),
+      fecha: clean(document.getElementById('eval-ia-fecha')?.value),
+      cantidad: clean(document.getElementById('eval-ia-cantidad')?.value),
+      tema,
+      formato: clean(document.getElementById('eval-ia-formato')?.value),
+      indicaciones: clean(document.getElementById('eval-ia-indicaciones')?.value),
+      dificultad,
+      solucionario: Boolean(document.getElementById('eval-ia-solucionario')?.checked),
+      puntaje: Boolean(document.getElementById('eval-ia-puntaje')?.checked),
+      nombreAlumno: Boolean(document.getElementById('eval-ia-nombre-alumno')?.checked),
+      creadoEn: new Date().toISOString()
+    };
+  }
+
+  function guardarRespuestaComoEvaluacion(texto) {
+    const contenido = String(texto || '').trim();
+    const ctx = window.EDUGESTION_EVALUACION_ACTUAL;
+    if (!contenido) return;
+    if (!ctx?.tema) {
+      toast('Primero genera el material desde Evaluaciones IA para poder guardarlo aquí.', 'warning');
+      return;
+    }
+    const items = leer();
+    items.unshift({ id:id(), ...ctx, contenido, guardadoEn:new Date().toISOString() });
+    guardar(items.slice(0,300));
+    toast('Evaluación guardada en tu biblioteca.');
+    render();
+  }
+
+  function agregarBotonBiblioteca(row) {
+    if (!row || row.dataset.evalLibraryReady === '1') return;
+    const rich = row.querySelector('.gemini-rich');
+    const actions = row.querySelector('.gemini-save-row');
+    if (!rich || !actions) return;
+    row.dataset.evalLibraryReady = '1';
+    if (actions.querySelector('.gemini-save-eval-library')) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gemini-response-action gemini-save-eval-library';
+    btn.innerHTML = '<i class="fa-solid fa-box-archive"></i> Guardar en Biblioteca de evaluaciones';
+    btn.addEventListener('click', () => guardarRespuestaComoEvaluacion(rich.innerText.trim()));
+    actions.appendChild(btn);
+  }
+
+  function instalarBotonEnRespuestas() {
+    const conv = document.getElementById('gemini-conversation');
+    if (!conv) return false;
+    conv.querySelectorAll('.gemini-message--assistant').forEach(agregarBotonBiblioteca);
+    const obs = new MutationObserver(() => conv.querySelectorAll('.gemini-message--assistant').forEach(agregarBotonBiblioteca));
+    obs.observe(conv,{childList:true,subtree:true});
+    return true;
+  }
+
+  function estilos() {
+    if (document.getElementById('eval-library-styles')) return;
+    const s = document.createElement('style');
+    s.id = 'eval-library-styles';
+    s.textContent = `
+      .eval-lib-page{display:grid;gap:1.15rem}.eval-lib-page.hidden{display:none!important}.eval-lib-hero{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.45rem 1.55rem;border-radius:22px;background:linear-gradient(135deg,#1e3a5f,#255f8d);color:#fff}.eval-lib-hero h2{margin:.25rem 0 .35rem;font-size:1.65rem}.eval-lib-hero p{margin:0;opacity:.9;line-height:1.5}.eval-lib-hero i{font-size:2rem}.eval-lib-tools{display:grid;grid-template-columns:minmax(0,1fr) 220px 180px;gap:.8rem;padding:1rem;background:var(--surface,#fff);border:1px solid rgba(148,163,184,.35);border-radius:18px}.eval-lib-tools input,.eval-lib-tools select{min-height:46px;border:1px solid #cbd5e1;border-radius:12px;padding:.7rem .85rem;background:transparent;color:inherit;font:inherit}.eval-lib-count{display:flex;align-items:center;justify-content:center;border-radius:12px;background:rgba(37,99,235,.08);font-weight:800;color:#1d4ed8}.eval-lib-list{display:grid;gap:.9rem}.eval-lib-card{background:var(--surface,#fff);border:1px solid rgba(148,163,184,.32);border-radius:18px;padding:1.05rem 1.1rem;box-shadow:0 8px 24px rgba(15,23,42,.05)}.eval-lib-card__top{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}.eval-lib-card h3{margin:0 0 .28rem;font-size:1.05rem}.eval-lib-meta{display:flex;flex-wrap:wrap;gap:.45rem;margin:.65rem 0}.eval-lib-meta span{font-size:.75rem;font-weight:800;padding:.34rem .55rem;border-radius:999px;background:rgba(148,163,184,.14);color:#475569}.eval-lib-date{font-size:.76rem;color:#64748b;white-space:nowrap}.eval-lib-preview{margin:.65rem 0 0;color:#64748b;font-size:.86rem;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.eval-lib-actions{display:flex;flex-wrap:wrap;gap:.55rem;margin-top:.85rem;padding-top:.85rem;border-top:1px solid rgba(148,163,184,.25)}.eval-lib-actions button{border:1px solid #cbd5e1;background:transparent;color:inherit;border-radius:10px;min-height:40px;padding:.5rem .7rem;font-weight:800;cursor:pointer}.eval-lib-actions button.primary{background:#2563eb;color:#fff;border-color:#2563eb}.eval-lib-actions button.danger{color:#b91c1c;border-color:#fecaca}.eval-lib-empty{text-align:center;padding:2rem 1rem;border:1px dashed #cbd5e1;border-radius:18px;color:#64748b}.eval-lib-empty i{font-size:1.8rem;margin-bottom:.6rem}.eval-lib-modal{position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.55);display:grid;place-items:center;padding:1rem}.eval-lib-modal.hidden{display:none}.eval-lib-modal__box{width:min(850px,96vw);max-height:88vh;overflow:auto;background:#fff;color:#111827;border-radius:18px;padding:1.2rem;box-shadow:0 24px 70px rgba(15,23,42,.28)}.eval-lib-modal__head{display:flex;justify-content:space-between;gap:1rem;align-items:center;border-bottom:1px solid #e2e8f0;padding-bottom:.8rem}.eval-lib-modal__head h3{margin:0}.eval-lib-modal__close{border:0;background:#f1f5f9;border-radius:10px;width:42px;height:42px;cursor:pointer}.eval-lib-modal__content{white-space:pre-wrap;line-height:1.58;margin-top:1rem}.gemini-save-eval-library{border-color:#93c5fd!important;background:rgba(37,99,235,.08)!important}.edugestion-dark .eval-lib-tools,.edugestion-dark .eval-lib-card{background:rgba(15,23,42,.72)}.edugestion-dark .eval-lib-meta span,.edugestion-dark .eval-lib-preview,.edugestion-dark .eval-lib-date{color:#cbd5e1}.edugestion-dark .eval-lib-tools input,.edugestion-dark .eval-lib-tools select{border-color:rgba(148,163,184,.4);color:#e5e7eb}.edugestion-dark .eval-lib-actions button{border-color:rgba(148,163,184,.38)}@media(max-width:760px){.eval-lib-tools{grid-template-columns:1fr}.eval-lib-card__top{flex-direction:column}.eval-lib-date{white-space:normal}.eval-lib-hero i{display:none}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function crearCategoria() {
+    if (document.getElementById(TAB_ID) || document.getElementById(SECTION_ID)) return false;
+    const nav = document.getElementById('app-nav');
+    const main = document.getElementById('app-main');
+    if (!nav || !main) return false;
+    estilos();
+    const tab = document.createElement('button');
+    tab.id = TAB_ID; tab.type='button'; tab.className='nav-item'; tab.setAttribute('aria-selected','false');
+    tab.dataset.title='Biblioteca de evaluaciones';
+    tab.dataset.description='Guarda, busca, reutiliza, duplica e imprime cuestionarios, talleres y exámenes creados con IA.';
+    tab.innerHTML='<i class="fa-solid fa-box-archive"></i><span>Biblioteca evaluaciones</span>';
+    const evalTab = document.getElementById('tab-evaluaciones-ia');
+    if (evalTab?.nextSibling) nav.insertBefore(tab, evalTab.nextSibling); else nav.appendChild(tab);
+
+    const section = document.createElement('section');
+    section.id=SECTION_ID; section.className='hidden eval-lib-page';
+    section.innerHTML=`
+      <header class="eval-lib-hero"><div><small>ARCHIVO PERSONAL DEL DOCENTE</small><h2>Biblioteca de evaluaciones</h2><p>Encuentra rápidamente cuestionarios, talleres y exámenes generados con Gemini y vuelve a utilizarlos cuando los necesites.</p></div><i class="fa-solid fa-box-archive"></i></header>
+      <div class="eval-lib-tools"><input id="eval-lib-search" type="search" placeholder="Buscar por tema, materia, grado o sección..."><select id="eval-lib-filter"><option value="">Todos los materiales</option><option value="Cuestionario">Cuestionarios</option><option value="Taller">Talleres</option><option value="Examen">Exámenes</option></select><div class="eval-lib-count" id="eval-lib-count">0 guardadas</div></div>
+      <div class="eval-lib-list" id="eval-lib-list"></div>`;
+    main.appendChild(section);
+
+    tab.addEventListener('click',()=>{
+      document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});
+      document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));
+      tab.classList.add('is-active'); tab.setAttribute('aria-selected','true'); section.classList.remove('hidden');
+      const t=document.getElementById('page-title'), d=document.getElementById('page-description'); if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description; render();
+    });
+    section.querySelector('#eval-lib-search')?.addEventListener('input',render);
+    section.querySelector('#eval-lib-filter')?.addEventListener('change',render);
+    return true;
+  }
+
+  function fmtFecha(v){try{return new Date(v).toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})}catch(_){return ''}}
+  function render(){
+    const list=document.getElementById('eval-lib-list'), count=document.getElementById('eval-lib-count'); if(!list)return;
+    const q=clean(document.getElementById('eval-lib-search')?.value).toLowerCase();
+    const f=clean(document.getElementById('eval-lib-filter')?.value);
+    const all=leer();
+    const items=all.filter(x=>(!f||x.tipo===f)&&(!q||[x.tema,x.area,x.grado,x.seccion,x.tipo,x.dificultad,x.contenido].join(' ').toLowerCase().includes(q)));
+    if(count)count.textContent=`${items.length} ${items.length===1?'guardada':'guardadas'}`;
+    if(!items.length){list.innerHTML='<div class="eval-lib-empty"><i class="fa-regular fa-folder-open"></i><strong>No hay evaluaciones para mostrar</strong><p>Genera una desde Evaluaciones IA y usa el botón “Guardar en Biblioteca de evaluaciones”.</p></div>';return;}
+    list.innerHTML=items.map(x=>`<article class="eval-lib-card" data-id="${esc(x.id)}"><div class="eval-lib-card__top"><div><h3>${esc(x.tema||x.tipo||'Evaluación')}</h3><div class="eval-lib-meta"><span>${esc(x.tipo||'Material')}</span><span>${esc(x.grado||'Sin grado')}</span><span>${esc(x.area||'Sin materia')}</span><span>Dificultad: ${esc(x.dificultad||'No indicada')}</span></div></div><span class="eval-lib-date">${esc(fmtFecha(x.guardadoEn))}</span></div><p class="eval-lib-preview">${esc(String(x.contenido||'').slice(0,420))}</p><div class="eval-lib-actions"><button class="primary" data-action="ver"><i class="fa-solid fa-eye"></i> Ver</button><button data-action="reutilizar"><i class="fa-solid fa-rotate"></i> Reutilizar</button><button data-action="duplicar"><i class="fa-regular fa-copy"></i> Duplicar</button><button data-action="imprimir"><i class="fa-solid fa-print"></i> Imprimir</button><button class="danger" data-action="eliminar"><i class="fa-solid fa-trash"></i> Eliminar</button></div></article>`).join('');
+  }
+
+  function obtenerItem(el){const idv=el.closest('[data-id]')?.dataset.id;return leer().find(x=>x.id===idv)}
+  function abrirModal(item){
+    let m=document.getElementById('eval-lib-modal'); if(!m){m=document.createElement('div');m.id='eval-lib-modal';m.className='eval-lib-modal hidden';m.innerHTML='<div class="eval-lib-modal__box"><div class="eval-lib-modal__head"><h3 id="eval-lib-modal-title"></h3><button class="eval-lib-modal__close" type="button"><i class="fa-solid fa-xmark"></i></button></div><div class="eval-lib-modal__content" id="eval-lib-modal-content"></div></div>';document.body.appendChild(m);m.querySelector('.eval-lib-modal__close').addEventListener('click',()=>m.classList.add('hidden'));m.addEventListener('click',e=>{if(e.target===m)m.classList.add('hidden')})}
+    m.querySelector('#eval-lib-modal-title').textContent=item.tema||item.tipo||'Evaluación'; m.querySelector('#eval-lib-modal-content').textContent=item.contenido||'';m.classList.remove('hidden');
+  }
+  function reutilizar(item){
+    document.getElementById('tab-evaluaciones-ia')?.click();
+    setTimeout(()=>{
+      const set=(id,v)=>{const el=document.getElementById(id);if(el&&v!=null){el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))}};
+      set('eval-ia-tipo',item.tipo);set('eval-ia-grado',item.grado);set('eval-ia-seccion',item.seccion);set('eval-ia-institucion',item.institucion);set('eval-ia-docente',item.docente);set('eval-ia-area',item.area);set('eval-ia-fecha',item.fecha);set('eval-ia-cantidad',item.cantidad);set('eval-ia-tema',item.tema);set('eval-ia-formato',item.formato);set('eval-ia-indicaciones',item.indicaciones);
+      const radio=[...document.querySelectorAll('input[name="eval-ia-dificultad"]')].find(r=>r.value===item.dificultad);if(radio)radio.checked=true;
+      if(document.getElementById('eval-ia-solucionario'))document.getElementById('eval-ia-solucionario').checked=!!item.solucionario;
+      if(document.getElementById('eval-ia-puntaje'))document.getElementById('eval-ia-puntaje').checked=!!item.puntaje;
+      if(document.getElementById('eval-ia-nombre-alumno'))document.getElementById('eval-ia-nombre-alumno').checked=!!item.nombreAlumno;
+      toast('Datos cargados en Evaluaciones IA. Puedes modificarlos y generar una nueva versión.');
+    },120);
+  }
+  function duplicar(item){const all=leer();all.unshift({...item,id:id(),tema:`${item.tema||item.tipo||'Evaluación'} - copia`,guardadoEn:new Date().toISOString()});guardar(all);render();toast('Se creó una copia de la evaluación.');}
+  function eliminar(item){if(!confirm(`¿Eliminar “${item.tema||item.tipo||'esta evaluación'}” de la biblioteca?`))return;guardar(leer().filter(x=>x.id!==item.id));render();toast('Evaluación eliminada.');}
+  function imprimir(item){
+    const w=window.open('','_blank','width=900,height=700');if(!w){toast('El navegador bloqueó la ventana de impresión.','warning');return}
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(item.tema||item.tipo||'Evaluación')}</title><style>@page{size:A4;margin:18mm}body{font-family:Arial,sans-serif;color:#111827;line-height:1.55;font-size:12pt}main{max-width:760px;margin:auto}.actions{text-align:right;margin-bottom:14px}.actions button{padding:8px 12px}pre{white-space:pre-wrap;font:inherit}@media print{.actions{display:none}}</style></head><body><main><div class="actions"><button onclick="window.print()">Imprimir / Guardar PDF</button></div><pre>${esc(item.contenido||'')}</pre></main></body></html>`);w.document.close();w.focus();
+  }
+
+  document.addEventListener('click',e=>{
+    if(e.target.closest('#eval-ia-generar')) capturarContextoEvaluacion();
+    const btn=e.target.closest('.eval-lib-actions button');if(!btn)return;const item=obtenerItem(btn);if(!item)return;const a=btn.dataset.action;if(a==='ver')abrirModal(item);else if(a==='reutilizar')reutilizar(item);else if(a==='duplicar')duplicar(item);else if(a==='imprimir')imprimir(item);else if(a==='eliminar')eliminar(item);
+  });
+
+  function iniciar(){crearCategoria();instalarBotonEnRespuestas();const obs=new MutationObserver(()=>{if(!document.getElementById(TAB_ID))crearCategoria();if(!document.querySelector('.gemini-save-eval-library'))instalarBotonEnRespuestas()});obs.observe(document.body,{childList:true,subtree:true});}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',iniciar,{once:true});else iniciar();
+})();
+/* EDUGESTION_BIBLIOTECA_EVALUACIONES_IA_V1_END */
+
+
+/* EDUGESTION_VISIBILIDAD_CATEGORIAS_IA_V2_START */
+(() => {
+  const DYNAMIC = {
+    'tab-evaluaciones-ia': 'section-evaluaciones-ia',
+    'tab-biblioteca-evaluaciones': 'section-biblioteca-evaluaciones',
+    'tab-respuestas-ia': 'section-respuestas-ia'
+  };
+
+  function ocultarDinamicas(exceptId='') {
+    Object.values(DYNAMIC).forEach(id => {
+      const sec = document.getElementById(id);
+      if (sec && id !== exceptId) sec.classList.add('hidden');
+    });
+  }
+
+  function corregirVista(tab) {
+    if (!tab) return;
+    const sectionId = DYNAMIC[tab.id];
+    if (sectionId) {
+      document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.add('hidden'));
+      const sec = document.getElementById(sectionId);
+      if (sec) sec.classList.remove('hidden');
+      ocultarDinamicas(sectionId);
+    } else {
+      ocultarDinamicas();
+    }
+  }
+
+  function iniciar() {
+    if (!document.getElementById('edugestion-dynamic-hidden-fix')) {
+      const st = document.createElement('style');
+      st.id = 'edugestion-dynamic-hidden-fix';
+      st.textContent = `
+        #section-evaluaciones-ia.hidden,
+        #section-biblioteca-evaluaciones.hidden,
+        #section-respuestas-ia.hidden{display:none!important}
+      `;
+      document.head.appendChild(st);
+    }
+
+    const nav = document.getElementById('app-nav');
+    if (!nav || nav.dataset.visibilityFixV2 === '1') return;
+    nav.dataset.visibilityFixV2 = '1';
+    nav.addEventListener('click', e => {
+      const tab = e.target.closest('.nav-item');
+      if (!tab) return;
+      window.setTimeout(() => corregirVista(tab), 0);
+    });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, {once:true});
+  else iniciar();
+})();
+/* EDUGESTION_VISIBILIDAD_CATEGORIAS_IA_V2_END */
