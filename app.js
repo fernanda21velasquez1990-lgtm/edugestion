@@ -6222,3 +6222,239 @@ Archivo enviado directamente desde EduGestión.`);
     }, 180);
   });
 })();
+
+/* =========================================================
+   EduGestion · Mis respuestas IA
+   Guarda, busca y reutiliza respuestas útiles de Gemini.
+   Los datos se conservan en este navegador (localStorage).
+   ========================================================= */
+(() => {
+  const STORAGE_KEY = 'edugestion_respuestas_ia_v1';
+  const conversation = document.getElementById('gemini-conversation');
+  const tabGemini = document.getElementById('tab-gemini');
+  if (!conversation || !tabGemini) return;
+
+  const escIA = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+
+  function leerGuardadas() {
+    try {
+      const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      return Array.isArray(data) ? data : [];
+    } catch (_) { return []; }
+  }
+
+  function escribirGuardadas(items) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }
+
+  function idIA() {
+    return `ia_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  }
+
+  function fechaBonitaIA(iso) {
+    try {
+      return new Intl.DateTimeFormat('es-VE', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}).format(new Date(iso));
+    } catch (_) { return iso || ''; }
+  }
+
+  function detectarOrigen() {
+    const mensajes = [...conversation.querySelectorAll('.gemini-message--user .gemini-bubble p')];
+    const ultimo = mensajes.at(-1)?.textContent?.toLowerCase() || '';
+    if (ultimo.includes('planificación') || ultimo.includes('planificacion')) return 'Planificación';
+    if (ultimo.includes('estudiante') || ultimo.includes('boletín') || ultimo.includes('boletin') || ultimo.includes('representante')) return 'Estudiantes';
+    if (ultimo.includes('efeméride') || ultimo.includes('efemeride') || ultimo.includes('fecha:')) return 'Calendario';
+    if (ultimo.includes('biblioteca') || ultimo.includes('recurso') || ultimo.includes('guía de estudio') || ultimo.includes('guia de estudio')) return 'Biblioteca digital';
+    return 'Asistente IA';
+  }
+
+  function sugerirCategoria(texto) {
+    const t = String(texto || '').toLowerCase();
+    if (t.includes('planificación') || t.includes('planificacion') || t.includes('inicio') && t.includes('desarrollo') && t.includes('cierre')) return 'Planificación';
+    if (t.includes('observación') || t.includes('observacion') || t.includes('estudiante')) return 'Observación pedagógica';
+    if (t.includes('actividad')) return 'Actividad';
+    if (t.includes('resumen')) return 'Resumen';
+    if (t.includes('pregunta')) return 'Preguntas';
+    if (t.includes('guía') || t.includes('guia')) return 'Guía de estudio';
+    return 'General';
+  }
+
+  function asegurarEstilosGuardadosIA() {
+    if (document.getElementById('respuestas-ia-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'respuestas-ia-styles';
+    style.textContent = `
+      .gemini-save-row{display:flex;justify-content:flex-end;margin-top:.8rem;padding-top:.7rem;border-top:1px solid rgba(100,116,139,.18)}
+      .gemini-save-response{border:0;border-radius:10px;padding:.55rem .8rem;background:#eef2ff;color:#4338ca;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:.45rem}
+      .gemini-save-response:hover{filter:brightness(.97)}
+      body.edugestion-dark .gemini-save-response{background:rgba(99,102,241,.18);color:#c7d2fe}
+      .ia-saved-hero{background:linear-gradient(135deg,#312e81,#4f46e5 55%,#7c3aed);color:#fff;border-radius:24px;padding:1.4rem 1.55rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;box-shadow:0 18px 42px rgba(79,70,229,.18)}
+      .ia-saved-hero h2{font-size:1.45rem;font-weight:900;margin:.2rem 0}.ia-saved-hero p{opacity:.9;margin:0}.ia-saved-hero__icon{font-size:2rem;opacity:.9}
+      .ia-saved-tools{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:.8rem;margin-bottom:1rem}
+      .ia-saved-tools input,.ia-saved-tools select{width:100%;border:1px solid #dbe3ef;border-radius:14px;padding:.82rem 1rem;background:#fff;color:#0f172a}
+      .ia-saved-list{display:grid;gap:.85rem}
+      .ia-saved-card{background:#fff;border:1px solid #e6ebf2;border-radius:18px;padding:1rem 1.05rem;box-shadow:0 8px 24px rgba(15,23,42,.05)}
+      .ia-saved-card__top{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}.ia-saved-card h3{font-size:1rem;font-weight:900;color:#0f172a;margin:0}.ia-saved-meta{display:flex;flex-wrap:wrap;gap:.4rem;margin:.45rem 0 .7rem}.ia-saved-meta span{font-size:.75rem;background:#f1f5f9;color:#475569;border-radius:999px;padding:.28rem .55rem;font-weight:700}
+      .ia-saved-preview{white-space:pre-wrap;color:#475569;line-height:1.55;max-height:9rem;overflow:hidden}.ia-saved-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.85rem}.ia-saved-actions button{border:0;border-radius:10px;padding:.55rem .75rem;font-weight:800;cursor:pointer;background:#f1f5f9;color:#334155}.ia-saved-actions button[data-action="reuse"]{background:#4f46e5;color:#fff}.ia-saved-actions button[data-action="delete"]{background:#fff1f2;color:#be123c}
+      .ia-saved-empty{background:#fff;border:1px dashed #cbd5e1;border-radius:18px;padding:2rem;text-align:center;color:#64748b}.ia-saved-empty i{font-size:2rem;color:#818cf8;margin-bottom:.6rem}
+      .ia-save-modal{position:fixed;inset:0;background:rgba(15,23,42,.58);display:grid;place-items:center;z-index:9999;padding:1rem}.ia-save-modal.hidden{display:none}.ia-save-dialog{width:min(560px,100%);background:#fff;border-radius:22px;padding:1.15rem;box-shadow:0 24px 70px rgba(15,23,42,.3)}.ia-save-dialog h3{font-weight:900;font-size:1.2rem;margin:0 0 .25rem}.ia-save-dialog p{color:#64748b;margin:0 0 1rem}.ia-save-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}.ia-save-field{display:grid;gap:.35rem}.ia-save-field.full{grid-column:1/-1}.ia-save-field label{font-weight:800;color:#334155;font-size:.83rem}.ia-save-field input,.ia-save-field select{border:1px solid #dbe3ef;border-radius:12px;padding:.72rem .8rem;width:100%}.ia-save-actions{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1rem}.ia-save-actions button{border:0;border-radius:11px;padding:.68rem .9rem;font-weight:800;cursor:pointer}.ia-save-cancel{background:#f1f5f9;color:#334155}.ia-save-confirm{background:#4f46e5;color:#fff}
+      body.edugestion-dark .ia-saved-card,body.edugestion-dark .ia-saved-empty,body.edugestion-dark .ia-save-dialog,body.edugestion-dark .ia-saved-tools input,body.edugestion-dark .ia-saved-tools select{background:#111827;color:#e5e7eb;border-color:#334155}body.edugestion-dark .ia-saved-card h3,body.edugestion-dark .ia-save-dialog h3,body.edugestion-dark .ia-save-field label{color:#f8fafc}body.edugestion-dark .ia-saved-preview{color:#cbd5e1}body.edugestion-dark .ia-saved-meta span{background:#1f2937;color:#cbd5e1}
+      @media(max-width:700px){.ia-saved-tools,.ia-save-grid{grid-template-columns:1fr}.ia-save-field.full{grid-column:auto}.ia-saved-card__top{flex-direction:column}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function crearModuloGuardados() {
+    asegurarEstilosGuardadosIA();
+    if (document.getElementById('tab-respuestas-ia')) return;
+    const nav = tabGemini.parentElement;
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.id = 'tab-respuestas-ia';
+    tab.className = 'nav-item';
+    tab.dataset.title = 'Mis respuestas IA';
+    tab.dataset.description = 'Guarda y reutiliza las respuestas útiles que genera Gemini.';
+    tab.innerHTML = '<i class="fa-solid fa-bookmark"></i><span>Mis respuestas IA</span>';
+    tabGemini.insertAdjacentElement('afterend', tab);
+
+    const main = document.getElementById('app-main') || document.querySelector('main');
+    if (!main) return;
+    const section = document.createElement('section');
+    section.id = 'section-respuestas-ia';
+    section.className = 'hidden max-w-[1400px] mx-auto';
+    section.innerHTML = `
+      <header class="ia-saved-hero"><div><small><i class="fa-solid fa-sparkles"></i> Biblioteca personal de Gemini</small><h2>Mis respuestas IA</h2><p>Guarda planificaciones, actividades, observaciones, resúmenes y otras respuestas para reutilizarlas cuando quieras.</p></div><div class="ia-saved-hero__icon"><i class="fa-solid fa-bookmark"></i></div></header>
+      <div class="ia-saved-tools"><input id="ia-saved-search" type="search" placeholder="Buscar por título, categoría, origen o contenido..."><select id="ia-saved-filter"><option value="">Todas las categorías</option></select></div>
+      <div id="ia-saved-list" class="ia-saved-list"></div>`;
+    main.appendChild(section);
+
+    tab.addEventListener('click', () => {
+      if (typeof cambiarPestana === 'function') cambiarPestana(tab, section);
+      else {
+        document.querySelectorAll('#app-nav .nav-item').forEach(item => item.classList.toggle('is-active', item === tab));
+        document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.toggle('hidden', sec !== section));
+      }
+      const pageTitle = document.getElementById('page-title'); if (pageTitle) pageTitle.textContent = 'Mis respuestas IA';
+      renderGuardadas();
+    });
+    section.querySelector('#ia-saved-search')?.addEventListener('input', renderGuardadas);
+    section.querySelector('#ia-saved-filter')?.addEventListener('change', renderGuardadas);
+  }
+
+  function crearModalGuardar() {
+    if (document.getElementById('ia-save-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'ia-save-modal';
+    modal.className = 'ia-save-modal hidden';
+    modal.innerHTML = `<div class="ia-save-dialog" role="dialog" aria-modal="true" aria-labelledby="ia-save-title"><h3 id="ia-save-title">Guardar respuesta de Gemini</h3><p>Agrega un título para encontrarla fácilmente después.</p><div class="ia-save-grid"><div class="ia-save-field full"><label for="ia-save-name">Título</label><input id="ia-save-name" maxlength="120" placeholder="Ej.: Planificación de coordinación motriz"></div><div class="ia-save-field"><label for="ia-save-category">Categoría</label><select id="ia-save-category"><option>Planificación</option><option>Actividad</option><option>Observación pedagógica</option><option>Resumen</option><option>Preguntas</option><option>Guía de estudio</option><option>Efeméride</option><option>General</option></select></div><div class="ia-save-field"><label for="ia-save-origin">Origen</label><select id="ia-save-origin"><option>Asistente IA</option><option>Planificación</option><option>Estudiantes</option><option>Calendario</option><option>Biblioteca digital</option></select></div></div><div class="ia-save-actions"><button type="button" class="ia-save-cancel">Cancelar</button><button type="button" class="ia-save-confirm"><i class="fa-solid fa-floppy-disk"></i> Guardar</button></div></div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('.ia-save-cancel')) modal.classList.add('hidden'); });
+  }
+
+  let respuestaPendiente = null;
+  function abrirModalGuardar(texto) {
+    crearModalGuardar();
+    const modal = document.getElementById('ia-save-modal');
+    const categoria = sugerirCategoria(texto);
+    const origen = detectarOrigen();
+    const primeraLinea = String(texto || '').split('\n').map(x=>x.trim()).find(Boolean) || 'Respuesta de Gemini';
+    const titulo = primeraLinea.replace(/^#+\s*/, '').replace(/[*_`]/g,'').slice(0,90);
+    document.getElementById('ia-save-name').value = titulo;
+    document.getElementById('ia-save-category').value = [...document.getElementById('ia-save-category').options].some(o=>o.value===categoria) ? categoria : 'General';
+    document.getElementById('ia-save-origin').value = origen;
+    respuestaPendiente = String(texto || '').trim();
+    modal.classList.remove('hidden');
+    setTimeout(() => document.getElementById('ia-save-name')?.select(), 80);
+  }
+
+  function confirmarGuardado() {
+    const modal = document.getElementById('ia-save-modal');
+    if (!modal || !respuestaPendiente) return;
+    const titulo = document.getElementById('ia-save-name').value.trim() || 'Respuesta de Gemini';
+    const categoria = document.getElementById('ia-save-category').value;
+    const origen = document.getElementById('ia-save-origin').value;
+    const items = leerGuardadas();
+    items.unshift({id:idIA(), titulo, categoria, origen, fecha:new Date().toISOString(), contenido:respuestaPendiente});
+    escribirGuardadas(items);
+    modal.classList.add('hidden'); respuestaPendiente = null;
+    if (typeof mostrarToast === 'function') mostrarToast('La respuesta quedó guardada en Mis respuestas IA.', 'success', 'Respuesta guardada');
+    renderGuardadas();
+  }
+
+  document.addEventListener('click', e => {
+    if (e.target.closest('.ia-save-confirm')) confirmarGuardado();
+  });
+
+  function mejorarMensajeAssistant(row) {
+    if (!row || row.dataset.saveReady === '1') return;
+    row.dataset.saveReady = '1';
+    const rich = row.querySelector('.gemini-rich');
+    const bubble = row.querySelector('.gemini-bubble');
+    if (!rich || !bubble) return; // no agrega botón al mensaje de bienvenida
+    const texto = rich.innerText?.trim();
+    if (!texto) return;
+    const actions = document.createElement('div');
+    actions.className = 'gemini-save-row';
+    actions.innerHTML = '<button type="button" class="gemini-save-response"><i class="fa-solid fa-bookmark"></i> Guardar respuesta</button>';
+    actions.querySelector('button').addEventListener('click', () => abrirModalGuardar(rich.innerText.trim()));
+    bubble.appendChild(actions);
+  }
+
+  conversation.querySelectorAll('.gemini-message--assistant').forEach(mejorarMensajeAssistant);
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(m => m.addedNodes.forEach(node => {
+      if (!(node instanceof HTMLElement)) return;
+      if (node.matches?.('.gemini-message--assistant')) mejorarMensajeAssistant(node);
+      node.querySelectorAll?.('.gemini-message--assistant').forEach(mejorarMensajeAssistant);
+    }));
+  });
+  observer.observe(conversation, {childList:true, subtree:false});
+
+  function renderGuardadas() {
+    const list = document.getElementById('ia-saved-list');
+    const search = document.getElementById('ia-saved-search');
+    const filter = document.getElementById('ia-saved-filter');
+    if (!list || !filter) return;
+    const all = leerGuardadas();
+    const categorias = [...new Set(all.map(x=>x.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+    const previo = filter.value;
+    filter.innerHTML = '<option value="">Todas las categorías</option>' + categorias.map(c=>`<option value="${escIA(c)}">${escIA(c)}</option>`).join('');
+    if (categorias.includes(previo)) filter.value = previo;
+    const q = String(search?.value || '').trim().toLowerCase();
+    const cat = filter.value;
+    const items = all.filter(x => (!cat || x.categoria===cat) && (!q || [x.titulo,x.categoria,x.origen,x.contenido].join(' ').toLowerCase().includes(q)));
+    if (!items.length) {
+      list.innerHTML = `<div class="ia-saved-empty"><i class="fa-solid fa-bookmark"></i><strong>${all.length ? 'No encontramos coincidencias' : 'Todavía no has guardado respuestas'}</strong><p>${all.length ? 'Prueba con otra búsqueda o categoría.' : 'Cuando Gemini te dé una respuesta útil, pulsa “Guardar respuesta”.'}</p></div>`;
+      return;
+    }
+    list.innerHTML = items.map(x => `<article class="ia-saved-card" data-id="${escIA(x.id)}"><div class="ia-saved-card__top"><div><h3>${escIA(x.titulo)}</h3><div class="ia-saved-meta"><span>${escIA(x.categoria || 'General')}</span><span>${escIA(x.origen || 'Asistente IA')}</span><span>${escIA(fechaBonitaIA(x.fecha))}</span></div></div></div><div class="ia-saved-preview">${escIA(x.contenido)}</div><div class="ia-saved-actions"><button type="button" data-action="copy"><i class="fa-solid fa-copy"></i> Copiar</button><button type="button" data-action="reuse"><i class="fa-solid fa-wand-magic-sparkles"></i> Reutilizar con Gemini</button><button type="button" data-action="delete"><i class="fa-solid fa-trash"></i> Eliminar</button></div></article>`).join('');
+  }
+
+  document.addEventListener('click', async e => {
+    const action = e.target.closest('#section-respuestas-ia [data-action]');
+    if (!action) return;
+    const card = action.closest('.ia-saved-card');
+    const item = leerGuardadas().find(x=>x.id===card?.dataset.id);
+    if (!item) return;
+    const type = action.dataset.action;
+    if (type === 'copy') {
+      try { await navigator.clipboard.writeText(item.contenido); if (typeof mostrarToast === 'function') mostrarToast('Contenido copiado.', 'success', 'Mis respuestas IA'); }
+      catch (_) { if (typeof mostrarToast === 'function') mostrarToast('No se pudo copiar automáticamente.', 'warning', 'Mis respuestas IA'); }
+    }
+    if (type === 'delete') {
+      if (!window.confirm(`¿Eliminar “${item.titulo}”?`)) return;
+      escribirGuardadas(leerGuardadas().filter(x=>x.id!==item.id)); renderGuardadas();
+      if (typeof mostrarToast === 'function') mostrarToast('Respuesta eliminada.', 'success', 'Mis respuestas IA');
+    }
+    if (type === 'reuse') {
+      const input = document.getElementById('gemini-input');
+      tabGemini.click();
+      if (input) {
+        input.value = `Quiero reutilizar y adaptar esta respuesta que guardé anteriormente. Ayúdame a mejorarla o ajustarla según la nueva indicación que escribiré al final.\n\nRESPUESTA GUARDADA:\n${item.contenido}\n\nNUEVA INDICACIÓN:\n`;
+        setTimeout(()=>{ input.focus(); input.setSelectionRange(input.value.length,input.value.length); },120);
+      }
+    }
+  });
+
+  crearModuloGuardados();
+  crearModalGuardar();
+})();
