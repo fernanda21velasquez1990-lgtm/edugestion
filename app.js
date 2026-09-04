@@ -8447,3 +8447,286 @@ Archivo enviado directamente desde EduGestión.`);
   window.addEventListener('storage',()=>{if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))render()});
 })();
 /* EDUGESTION_CUADERNILLO_EF_FASE8_PLAN_ANUAL_END */
+
+/* =========================================================
+   EduGestión · FASE 9
+   Perfil docente + personalización por materia + separación local
+   ========================================================= */
+(() => {
+  const PROFILE_VERSION = 'v1';
+  const PROFILE_PREFIX = 'edugestion_docente_perfil_';
+  const MIGRATION_OWNER_KEY = 'edugestion_local_data_owner_v1';
+  const PROFILE_TAB_ID = 'tab-perfil-docente';
+  const PROFILE_SECTION_ID = 'section-perfil-docente';
+  const EF_TABS = [
+    'tab-cuadernillo-ef',
+    'tab-plan-evaluacion-ef',
+    'tab-resumen-curricular-ef',
+    'tab-panel-lapsos-ef',
+    'tab-plan-anual-ef'
+  ];
+  const PERSONAL_KEYS = new Set([
+    'edugestion_respuestas_ia_v1',
+    'edugestion_biblioteca_evaluaciones_v1',
+    'edugestion_cuadernillo_ef_seleccion',
+    'edugestion_plan_evaluacion_ef_temas',
+    'edugestion_cuadernillo_ef_seguimiento_v1',
+    'edugestion_cuadernillo_ef_historial_v1',
+    'edugestion_cuadernillo_ef_lapsos_v1'
+  ]);
+  const MATERIAS = [
+    'Educación Física','Matemática','Lengua y Literatura','Castellano','Inglés',
+    'Ciencias Naturales','Biología','Física','Química','Ciencias Sociales',
+    'Geografía, Historia y Ciudadanía','Arte y Patrimonio','Formación para la Soberanía Nacional',
+    'Orientación y Convivencia','Informática','Educación Inicial','Otra'
+  ];
+  const GRADOS = ['Inicial','1er Grado','2do Grado','3er Grado','4to Grado','5to Grado','6to Grado','1er Año','2do Año','3er Año','4to Año','5to Año'];
+
+  const rawGet = Storage.prototype.getItem;
+  const rawSet = Storage.prototype.setItem;
+  const rawRemove = Storage.prototype.removeItem;
+
+  function norm(v='') {
+    return String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  }
+  function esc(v='') {
+    return String(v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function identityFrom(prof) {
+    const p = prof || (typeof profesorActual !== 'undefined' ? profesorActual : null) || {};
+    const raw = p.id || p.usuario || p.username || p.correo || p.email || p.nombre || 'anonimo';
+    return String(raw).trim().toLowerCase().replace(/[^a-z0-9._-]+/g,'_') || 'anonimo';
+  }
+  function activeIdentity() {
+    if (typeof profesorActual === 'undefined' || !profesorActual) return '';
+    return identityFrom(profesorActual);
+  }
+  function scopedKey(key, identity=activeIdentity()) {
+    return identity ? `${key}__docente_${identity}` : key;
+  }
+
+  // A partir de esta fase, las bibliotecas IA y el seguimiento curricular local se separan por docente.
+  Storage.prototype.getItem = function(key) {
+    const k = String(key);
+    if (this === window.localStorage && PERSONAL_KEYS.has(k) && activeIdentity()) {
+      return rawGet.call(this, scopedKey(k));
+    }
+    return rawGet.call(this, k);
+  };
+  Storage.prototype.setItem = function(key, value) {
+    const k = String(key);
+    if (this === window.localStorage && PERSONAL_KEYS.has(k) && activeIdentity()) {
+      return rawSet.call(this, scopedKey(k), String(value));
+    }
+    return rawSet.call(this, k, String(value));
+  };
+  Storage.prototype.removeItem = function(key) {
+    const k = String(key);
+    if (this === window.localStorage && PERSONAL_KEYS.has(k) && activeIdentity()) {
+      return rawRemove.call(this, scopedKey(k));
+    }
+    return rawRemove.call(this, k);
+  };
+
+  function migrateLegacyDataForFirstTeacher(prof) {
+    const identity = identityFrom(prof);
+    let owner = rawGet.call(localStorage, MIGRATION_OWNER_KEY) || '';
+    if (!owner) {
+      // El primer docente que entra tras actualizar es el propietario de los datos locales ya existentes.
+      owner = identity;
+      rawSet.call(localStorage, MIGRATION_OWNER_KEY, owner);
+    }
+    if (owner !== identity) return;
+    PERSONAL_KEYS.forEach(key => {
+      const oldVal = rawGet.call(localStorage, key);
+      const newKey = scopedKey(key, identity);
+      const newVal = rawGet.call(localStorage, newKey);
+      if (oldVal !== null && newVal === null) rawSet.call(localStorage, newKey, oldVal);
+    });
+  }
+
+  function profileKey(prof) { return `${PROFILE_PREFIX}${identityFrom(prof)}_${PROFILE_VERSION}`; }
+  function loadProfile(prof) {
+    let saved = {};
+    try { saved = JSON.parse(rawGet.call(localStorage, profileKey(prof)) || '{}') || {}; } catch (_) {}
+    return {
+      nombre: saved.nombre || prof?.nombre || '',
+      materia: saved.materia || prof?.materia || '',
+      anioEscolar: saved.anioEscolar || '2026-2027',
+      grados: Array.isArray(saved.grados) ? saved.grados : [],
+      otraMateria: saved.otraMateria || '',
+      perfilConfigurado: !!saved.perfilConfigurado
+    };
+  }
+  function saveProfile(prof, profile) {
+    rawSet.call(localStorage, profileKey(prof), JSON.stringify(profile));
+  }
+  function effectiveMateria(profile) {
+    return profile.materia === 'Otra' ? String(profile.otraMateria || '').trim() : String(profile.materia || '').trim();
+  }
+  function isEducacionFisica(materia) {
+    const n = norm(materia);
+    return n === 'educacion fisica' || n.includes('educacion fisica') || n === 'ef';
+  }
+
+  function ensureStyles() {
+    if (document.getElementById('edu-profile-v1-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'edu-profile-v1-styles';
+    style.textContent = `
+      .dp-hero{padding:22px;border-radius:22px;background:linear-gradient(135deg,#0f5f8d,#1596a7);color:white;margin-bottom:18px;box-shadow:0 12px 30px rgba(15,95,141,.18)}
+      .dp-hero small{font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.88}.dp-hero h2{margin:6px 0 8px;font-size:1.55rem}.dp-hero p{margin:0;max-width:820px;opacity:.94}
+      .dp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.dp-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dfe7ee);border-radius:18px;padding:18px}
+      .dp-card h3{margin:0 0 12px}.dp-field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}.dp-field span{font-weight:800;font-size:.86rem}.dp-field input,.dp-field select{width:100%;padding:11px 12px;border:1px solid var(--border-color,#ccd7e0);border-radius:11px;background:var(--input-bg,#fff);color:inherit}
+      .dp-grades{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dp-grade{display:flex;gap:7px;align-items:center;padding:9px;border:1px solid var(--border-color,#dfe7ee);border-radius:10px;font-size:.84rem}
+      .dp-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:15px}.dp-btn{border:0;border-radius:11px;padding:11px 15px;font-weight:900;cursor:pointer}.dp-btn.primary{background:#087a9a;color:#fff}.dp-btn.soft{background:#eaf4f7;color:#0e627b}
+      .dp-status{margin-top:12px;padding:11px 13px;border-radius:12px;background:#edf8f3;color:#176c4c;font-size:.86rem}.dp-status.warn{background:#fff6df;color:#8a5d00}
+      .dp-hidden-by-profile{display:none!important}
+      @media(max-width:760px){.dp-grid{grid-template-columns:1fr}.dp-grades{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureProfileUI() {
+    if (document.getElementById(PROFILE_TAB_ID)) return;
+    ensureStyles();
+    const nav = document.getElementById('app-nav');
+    const main = document.getElementById('app-main');
+    if (!nav || !main) return;
+    const tab = document.createElement('button');
+    tab.id = PROFILE_TAB_ID; tab.type='button'; tab.className='nav-item'; tab.setAttribute('aria-selected','false');
+    tab.dataset.title='Mi perfil docente'; tab.dataset.description='Configura tu materia, grados y año escolar para adaptar EduGestión a tu trabajo.';
+    tab.innerHTML='<i class="fa-solid fa-user-gear"></i><span>Mi perfil docente</span>';
+    const settingsTab = document.getElementById('tab-configuracion');
+    nav.insertBefore(tab, settingsTab || null);
+
+    const section = document.createElement('section');
+    section.id = PROFILE_SECTION_ID; section.className='hidden';
+    section.innerHTML = `
+      <header class="dp-hero"><small><i class="fa-solid fa-user-gear"></i> Fase 9 · Personalización docente</small><h2>Mi perfil docente</h2><p>EduGestión adapta la materia, los grados y las herramientas visibles para cada profesor. Tus bibliotecas IA y tu seguimiento curricular local quedan separados de los demás docentes.</p></header>
+      <div class="dp-grid">
+        <div class="dp-card"><h3>Datos del docente</h3>
+          <label class="dp-field"><span>Nombre</span><input id="dp-name" type="text" placeholder="Nombre del docente"></label>
+          <label class="dp-field"><span>Área / materia</span><select id="dp-subject">${MATERIAS.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}</select></label>
+          <label class="dp-field" id="dp-other-wrap" style="display:none"><span>Escribe tu materia</span><input id="dp-other" type="text" placeholder="Ej.: Educación Comercial"></label>
+          <label class="dp-field"><span>Año escolar</span><input id="dp-school-year" type="text" placeholder="2026-2027"></label>
+          <div id="dp-profile-status" class="dp-status"></div>
+        </div>
+        <div class="dp-card"><h3>Grados / años que atiendo</h3><div class="dp-grades">${GRADOS.map(g=>`<label class="dp-grade"><input type="checkbox" data-dp-grade="${esc(g)}"><span>${esc(g)}</span></label>`).join('')}</div>
+          <div class="dp-actions"><button id="dp-save" class="dp-btn primary"><i class="fa-solid fa-floppy-disk"></i> Guardar perfil</button><button id="dp-select-all" class="dp-btn soft">Seleccionar todos</button></div>
+        </div>
+      </div>`;
+    main.appendChild(section);
+
+    tab.addEventListener('click', () => {
+      if (typeof cambiarPestana === 'function') cambiarPestana(tab, section);
+      else {
+        document.querySelectorAll('#app-nav .nav-item').forEach(x=>x.classList.toggle('is-active',x===tab));
+        document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==section));
+      }
+      renderProfileForm();
+    });
+    document.getElementById('dp-subject')?.addEventListener('change', e => {
+      document.getElementById('dp-other-wrap').style.display = e.target.value === 'Otra' ? '' : 'none';
+    });
+    document.getElementById('dp-select-all')?.addEventListener('click',()=>document.querySelectorAll('[data-dp-grade]').forEach(c=>c.checked=true));
+    document.getElementById('dp-save')?.addEventListener('click', saveProfileFromForm);
+  }
+
+  function renderProfileForm() {
+    if (typeof profesorActual === 'undefined' || !profesorActual) return;
+    const p = loadProfile(profesorActual);
+    const name=document.getElementById('dp-name'), subject=document.getElementById('dp-subject'), other=document.getElementById('dp-other'), year=document.getElementById('dp-school-year');
+    if(name)name.value=p.nombre||'';
+    if(subject){
+      const exists=[...subject.options].some(o=>o.value===p.materia);
+      subject.value=exists?p.materia:(p.materia?'Otra':'Educación Física');
+    }
+    if(other)other.value=p.otraMateria || (!MATERIAS.includes(p.materia)?p.materia:'');
+    const wrap=document.getElementById('dp-other-wrap'); if(wrap)wrap.style.display=subject?.value==='Otra'?'':'none';
+    if(year)year.value=p.anioEscolar||'2026-2027';
+    document.querySelectorAll('[data-dp-grade]').forEach(c=>c.checked=p.grados.includes(c.dataset.dpGrade));
+    const st=document.getElementById('dp-profile-status');
+    if(st){const mat=effectiveMateria(p)||'Sin materia configurada';st.className='dp-status'+(p.perfilConfigurado?'':' warn');st.innerHTML=p.perfilConfigurado?`<b>Perfil activo:</b> ${esc(mat)}${p.grados.length?` · ${p.grados.length} grado(s)/año(s) seleccionados`:''}`:'<b>Completa tu perfil.</b> Al guardarlo, EduGestión adaptará automáticamente las herramientas a tu materia.'}
+  }
+
+  function saveProfileFromForm() {
+    if (typeof profesorActual === 'undefined' || !profesorActual) return;
+    const materia=document.getElementById('dp-subject')?.value||'';
+    const otra=document.getElementById('dp-other')?.value.trim()||'';
+    if(materia==='Otra'&&!otra){
+      if(typeof mostrarToast==='function')mostrarToast('Escribe el nombre de tu materia.','warning','Falta la materia');
+      return;
+    }
+    const p={
+      nombre:document.getElementById('dp-name')?.value.trim()||profesorActual.nombre||'',
+      materia,
+      otraMateria:otra,
+      anioEscolar:document.getElementById('dp-school-year')?.value.trim()||'2026-2027',
+      grados:[...document.querySelectorAll('[data-dp-grade]:checked')].map(x=>x.dataset.dpGrade),
+      perfilConfigurado:true
+    };
+    saveProfile(profesorActual,p);
+    applyPersonalization(false);
+    renderProfileForm();
+    if(typeof mostrarToast==='function')mostrarToast('El menú y las herramientas se adaptaron a tu perfil.','success','Perfil docente guardado');
+  }
+
+  function updateCommonFields(materia, profile) {
+    const ids=['plan-ia-area','eval-ia-area'];
+    ids.forEach(id=>{const el=document.getElementById(id);if(el&&(!el.value||norm(el.value)==='educacion fisica'||el.dataset.dpAuto==='1')){el.value=materia;el.dataset.dpAuto='1'}});
+    const annualYear=document.getElementById('pa-year'); if(annualYear&&profile?.anioEscolar)annualYear.value=profile.anioEscolar;
+    const annualTeacher=document.getElementById('pa-teacher'); if(annualTeacher&&profile?.nombre&&!annualTeacher.value)annualTeacher.value=profile.nombre;
+  }
+
+  function applyMenuVisibility(materia) {
+    const ef=isEducacionFisica(materia);
+    EF_TABS.forEach(id=>document.getElementById(id)?.classList.toggle('dp-hidden-by-profile',!ef));
+    // Si un docente no EF estaba dentro de un módulo EF, volver a una herramienta general.
+    if(!ef){
+      const active=EF_TABS.some(id=>document.getElementById(id)?.classList.contains('is-active'));
+      if(active)document.getElementById('tab-planificacion')?.click();
+    }
+  }
+
+  function applyPersonalization(openIfNeeded=true) {
+    if (typeof profesorActual === 'undefined' || !profesorActual) return;
+    migrateLegacyDataForFirstTeacher(profesorActual);
+    const p=loadProfile(profesorActual);
+    const materia=effectiveMateria(p)||String(profesorActual.materia||'').trim();
+    const nombre=p.nombre||profesorActual.nombre||'Docente';
+    window.EDUGESTION_DOCENTE_PERFIL={...p,materiaEfectiva:materia,docenteId:identityFrom(profesorActual)};
+    // Conserva los datos de sesión, pero expone la preferencia efectiva a las herramientas IA.
+    if(p.perfilConfigurado){profesorActual={...profesorActual,nombre,materia:materia||profesorActual.materia};}
+    if(typeof profesorName!=='undefined'&&profesorName)profesorName.textContent=nombre;
+    if(typeof profesorMateria!=='undefined'&&profesorMateria)profesorMateria.textContent=materia||'Configura tu materia';
+    applyMenuVisibility(materia);
+    updateCommonFields(materia,p);
+    if(openIfNeeded && (!materia || (!p.perfilConfigurado && !profesorActual.materia))){
+      setTimeout(()=>{document.getElementById(PROFILE_TAB_ID)?.click();if(typeof mostrarToast==='function')mostrarToast('Selecciona tu materia y los grados que atiendes para personalizar EduGestión.','info','Configura tu perfil docente')},180);
+    }
+  }
+
+  function installLoginHook() {
+    if (typeof aplicarPerfilDocente !== 'function' || aplicarPerfilDocente.__dpWrapped) return;
+    const original=aplicarPerfilDocente;
+    const wrapped=function(profesor){
+      migrateLegacyDataForFirstTeacher(profesor);
+      const result=original(profesor);
+      setTimeout(()=>applyPersonalization(true),0);
+      return result;
+    };
+    wrapped.__dpWrapped=true;
+    aplicarPerfilDocente=wrapped;
+  }
+
+  function boot() {
+    ensureProfileUI();
+    installLoginHook();
+    if(typeof profesorActual!=='undefined'&&profesorActual)applyPersonalization(false);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+
+  window.EDUGESTION_PROFILE_V1={apply:applyPersonalization,load:()=>typeof profesorActual!=='undefined'&&profesorActual?loadProfile(profesorActual):null,isEducacionFisica};
+})();
+/* EDUGESTION_PROFILE_V1_END */
