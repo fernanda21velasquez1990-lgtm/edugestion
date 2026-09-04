@@ -7898,3 +7898,121 @@ Archivo enviado directamente desde EduGestión.`);
   function init(){try{return crear()}catch(e){console.warn('EduGestión Plan Evaluación EF:',e);return false}}
   if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>30)clearInterval(tm)},250)}
 })();
+
+/* ================================================================
+   EduGestión · Cuadernillo Educación Física · FASE 4
+   Seguimiento curricular por tema: Pendiente / Planificado / Trabajado / Evaluado
+   ================================================================ */
+(() => {
+  const STORAGE_KEY='edugestion_cuadernillo_ef_seguimiento_v1';
+  const STYLE_ID='style-cuadernillo-seguimiento-v1';
+  const STATUSES=['Pendiente','Planificado','Trabajado','Evaluado'];
+  let filtroEstado='Todos';
+  let procesando=false;
+
+  const esc=s=>String(s??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
+  const normaliza=s=>String(s||'').trim().replace(/\s+/g,' ');
+  const clave=(grado,tema)=>`${normaliza(grado)}|||${normaliza(tema)}`;
+
+  function leer(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}')}catch(_){return {}}}
+  function guardar(data){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(data))}catch(_){}}
+  function estadoDe(grado,tema){return leer()[clave(grado,tema)]?.estado||'Pendiente'}
+  function setEstado(grado,tema,estado){
+    if(!STATUSES.includes(estado))return;
+    const data=leer();
+    data[clave(grado,tema)]={grado:normaliza(grado),tema:normaliza(tema),estado,actualizadoEn:new Date().toISOString()};
+    guardar(data);
+    actualizarTodo();
+    const msg=`${tema}: ${estado}`;
+    if(typeof mostrarToast==='function') mostrarToast(msg,'success','Seguimiento curricular');
+  }
+
+  function estilos(){
+    if(document.getElementById(STYLE_ID))return;
+    const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      .cef-progress-panel{display:grid;gap:12px;border:1px solid #d8e4ee;background:linear-gradient(135deg,#f8fbff,#f4fbf7);border-radius:18px;padding:15px 16px;margin:0 0 15px}
+      .cef-progress-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.cef-progress-title{display:flex;align-items:center;gap:10px}.cef-progress-title i{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#e9f4ff;color:#1769aa}.cef-progress-title strong{display:block;color:#193650}.cef-progress-title small{display:block;color:#6b7f91;margin-top:2px}.cef-progress-filter{display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:800;color:#52687d}.cef-progress-filter select{border:1px solid #cbd9e6;background:#fff;color:#223a50;border-radius:10px;padding:8px 10px;font:inherit;font-weight:800}
+      .cef-progress-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.cef-stat{border:1px solid #dce7ef;border-radius:13px;padding:10px 11px;background:#fff}.cef-stat small{display:block;color:#718498;font-weight:700}.cef-stat strong{display:block;margin-top:2px;color:#193650;font-size:1.15rem}.cef-stat[data-s='Planificado']{border-left:4px solid #3b82f6}.cef-stat[data-s='Trabajado']{border-left:4px solid #f59e0b}.cef-stat[data-s='Evaluado']{border-left:4px solid #10b981}.cef-stat[data-s='Pendiente']{border-left:4px solid #94a3b8}
+      .cef-progress-line{height:9px;border-radius:999px;background:#e7eef4;overflow:hidden}.cef-progress-line span{display:block;height:100%;width:0;background:linear-gradient(90deg,#1769aa,#13a36f);transition:width .25s ease}
+      .cef-status-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:12px;background:#f7fafc;border:1px solid #dce6ef;flex-wrap:wrap}.cef-status-label{display:flex;align-items:center;gap:7px;font-size:.82rem;font-weight:900;color:#4a6379}.cef-status-dot{width:9px;height:9px;border-radius:50%;background:#94a3b8}.cef-card[data-status='Planificado'] .cef-status-dot{background:#3b82f6}.cef-card[data-status='Trabajado'] .cef-status-dot{background:#f59e0b}.cef-card[data-status='Evaluado'] .cef-status-dot{background:#10b981}.cef-card[data-status='Pendiente'] .cef-status-dot{background:#94a3b8}.cef-status-select{border:1px solid #cbd9e6;background:#fff;color:#244158;border-radius:9px;padding:7px 9px;font:inherit;font-size:.82rem;font-weight:800;max-width:160px}.cef-card.cef-track-hidden{display:none!important}.cef-card[data-status='Planificado']{box-shadow:inset 4px 0 0 #3b82f6}.cef-card[data-status='Trabajado']{box-shadow:inset 4px 0 0 #f59e0b}.cef-card[data-status='Evaluado']{box-shadow:inset 4px 0 0 #10b981}.cef-card[data-status='Pendiente']{box-shadow:inset 4px 0 0 #94a3b8}
+      .edugestion-dark .cef-progress-panel,.dark-mode .cef-progress-panel{background:#152435;border-color:#344a60}.edugestion-dark .cef-stat,.dark-mode .cef-stat,.edugestion-dark .cef-status-row,.dark-mode .cef-status-row{background:#17283a;border-color:#385066}.edugestion-dark .cef-progress-title strong,.dark-mode .cef-progress-title strong,.edugestion-dark .cef-stat strong,.dark-mode .cef-stat strong{color:#edf5fb}.edugestion-dark .cef-progress-title small,.dark-mode .cef-progress-title small,.edugestion-dark .cef-stat small,.dark-mode .cef-stat small,.edugestion-dark .cef-status-label,.dark-mode .cef-status-label{color:#a9bac9}.edugestion-dark .cef-progress-filter select,.dark-mode .cef-progress-filter select,.edugestion-dark .cef-status-select,.dark-mode .cef-status-select{background:#17283a;border-color:#425b72;color:#edf5fb}
+      @media(max-width:760px){.cef-progress-stats{grid-template-columns:1fr 1fr}.cef-progress-filter{width:100%;justify-content:space-between}.cef-progress-filter select{flex:1}.cef-status-row{align-items:stretch}.cef-status-select{max-width:none;flex:1}}
+    `;document.head.appendChild(st);
+  }
+
+  function gradoActual(){return document.querySelector('#cef-levels .cef-level.active')?.dataset.nivel||document.getElementById('cef-level-title')?.textContent?.trim()||''}
+
+  function asegurarPanel(){
+    const section=document.getElementById('section-cuadernillo-ef');
+    const grid=document.getElementById('cef-grid');
+    if(!section||!grid)return;
+    estilos();
+    if(document.getElementById('cef-progress-panel'))return;
+    const p=document.createElement('div');p.id='cef-progress-panel';p.className='cef-progress-panel';p.innerHTML=`
+      <div class="cef-progress-top"><div class="cef-progress-title"><i class="fa-solid fa-chart-line"></i><div><strong>Seguimiento curricular</strong><small id="cef-progress-caption">Controla el avance de los temas de este grado.</small></div></div><label class="cef-progress-filter">Ver <select id="cef-track-filter"><option>Todos</option>${STATUSES.map(s=>`<option>${s}</option>`).join('')}</select></label></div>
+      <div class="cef-progress-stats">${STATUSES.map(s=>`<div class="cef-stat" data-s="${s}"><small>${s}</small><strong id="cef-stat-${s.toLowerCase()}">0</strong></div>`).join('')}</div>
+      <div class="cef-progress-line"><span id="cef-progress-fill"></span></div>`;
+    grid.parentElement.insertBefore(p,grid);
+    p.querySelector('#cef-track-filter')?.addEventListener('change',e=>{filtroEstado=e.target.value;aplicarFiltro();actualizarResumen();});
+  }
+
+  function decorarTarjetas(){
+    const grado=gradoActual();
+    document.querySelectorAll('#cef-grid .cef-card').forEach(card=>{
+      const tema=normaliza(card.querySelector('h4')?.textContent);
+      if(!tema)return;
+      const estado=estadoDe(grado,tema);
+      card.dataset.trackGrado=grado;card.dataset.trackTema=tema;card.dataset.status=estado;
+      let row=card.querySelector('.cef-status-row');
+      if(!row){
+        row=document.createElement('div');row.className='cef-status-row';
+        const actions=card.querySelector('.cef-actions');
+        card.insertBefore(row,actions||null);
+      }
+      row.innerHTML=`<span class="cef-status-label"><span class="cef-status-dot"></span> Estado curricular</span><select class="cef-status-select" aria-label="Estado de ${esc(tema)}">${STATUSES.map(s=>`<option value="${s}" ${s===estado?'selected':''}>${s}</option>`).join('')}</select>`;
+      row.querySelector('select')?.addEventListener('change',e=>setEstado(grado,tema,e.target.value));
+      const plan=card.querySelector('[data-plan]');
+      if(plan&&!plan.dataset.trackHook){plan.dataset.trackHook='1';plan.addEventListener('click',()=>{if(estadoDe(grado,tema)==='Pendiente')setEstado(grado,tema,'Planificado')},{capture:true});}
+    });
+  }
+
+  function aplicarFiltro(){
+    document.querySelectorAll('#cef-grid .cef-card').forEach(card=>{
+      const ok=filtroEstado==='Todos'||card.dataset.status===filtroEstado;
+      card.classList.toggle('cef-track-hidden',!ok);
+    });
+  }
+
+  function actualizarResumen(){
+    const grado=gradoActual();
+    const cards=[...document.querySelectorAll('#cef-grid .cef-card')];
+    const counts=Object.fromEntries(STATUSES.map(s=>[s,0]));
+    cards.forEach(c=>{const s=c.dataset.status||'Pendiente';counts[s]=(counts[s]||0)+1;});
+    STATUSES.forEach(s=>{const el=document.getElementById(`cef-stat-${s.toLowerCase()}`);if(el)el.textContent=counts[s]||0;});
+    const total=cards.length,completados=(counts.Planificado||0)+(counts.Trabajado||0)+(counts.Evaluado||0);
+    const pct=total?Math.round(completados*100/total):0;
+    const fill=document.getElementById('cef-progress-fill');if(fill)fill.style.width=`${pct}%`;
+    const cap=document.getElementById('cef-progress-caption');if(cap)cap.textContent=`${grado||'Grado'} · ${total} temas · ${pct}% con avance registrado`;
+  }
+
+  function actualizarTodo(){
+    if(procesando)return;procesando=true;
+    try{asegurarPanel();decorarTarjetas();aplicarFiltro();actualizarResumen();}finally{procesando=false;}
+  }
+
+  function iniciar(){
+    const section=document.getElementById('section-cuadernillo-ef');
+    if(!section)return false;
+    actualizarTodo();
+    if(!section.dataset.trackObserver){
+      section.dataset.trackObserver='1';
+      const obs=new MutationObserver(()=>setTimeout(actualizarTodo,0));
+      obs.observe(section,{childList:true,subtree:true});
+    }
+    document.getElementById('tab-cuadernillo-ef')?.addEventListener('click',()=>setTimeout(actualizarTodo,40));
+    return true;
+  }
+
+  if(!iniciar()){let n=0;const tm=setInterval(()=>{n++;if(iniciar()||n>40)clearInterval(tm)},250);}
+})();
+/* EDUGESTION_CUADERNILLO_EF_FASE4_SEGUIMIENTO_END */
