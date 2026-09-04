@@ -6728,3 +6728,134 @@ Archivo enviado directamente desde EduGestión.`);
   else iniciar();
 })();
 /* EDUGESTION_STATS_AI_V1_END */
+
+/* EDUGESTION_AUDITORIA_AI_V1_START */
+(() => {
+  const TAB_ID = 'tab-auditoria';
+  const SECTION_ID = 'section-auditoria';
+  const CARD_ID = 'auditoria-ia-card';
+
+  const text = id => String(document.getElementById(id)?.textContent || '').replace(/\s+/g, ' ').trim();
+  const val = id => String(document.getElementById(id)?.value || '').trim();
+
+  function asegurarTarjetaIA() {
+    const section = document.getElementById(SECTION_ID);
+    if (!section || document.getElementById(CARD_ID)) return;
+
+    const card = document.createElement('section');
+    card.id = CARD_ID;
+    card.className = 'audit-filter-card';
+    card.innerHTML = `
+      <div class="audit-filter-card__title">
+        <div>
+          <span><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+          <div><strong>Analizar auditoría con Gemini</strong><small>Resume movimientos, detecta pendientes y prepara conclusiones usando únicamente los datos visibles.</small></div>
+        </div>
+        <span class="audit-count"><i class="fa-solid fa-gift"></i> Modo gratuito</span>
+      </div>
+      <div class="audit-filters" style="margin-top:16px;">
+        <label class="audit-field">
+          <span>Tipo de análisis</span>
+          <select id="auditoria-ia-tipo">
+            <option value="resumen">Resumir incidencias</option>
+            <option value="pendientes">Detectar pendientes</option>
+            <option value="repetidos">Identificar movimientos repetidos</option>
+            <option value="conclusiones">Generar conclusiones</option>
+            <option value="recomendaciones">Crear recomendaciones</option>
+            <option value="informe">Preparar informe breve</option>
+          </select>
+        </label>
+        <label class="audit-field">
+          <span>Enfoque</span>
+          <select id="auditoria-ia-enfoque">
+            <option value="general">General</option>
+            <option value="asistencia">Cambios de asistencia</option>
+            <option value="origen">Origen Web / Telegram</option>
+            <option value="responsables">Responsables de cambios</option>
+            <option value="estudiantes">Estudiantes con más movimientos</option>
+          </select>
+        </label>
+        <label class="audit-field audit-field--wide">
+          <span>Nota adicional para Gemini (opcional)</span>
+          <textarea id="auditoria-ia-nota" rows="3" placeholder="Ej.: Señala solamente lo que necesite seguimiento del docente." style="width:100%;resize:vertical;"></textarea>
+        </label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px;">
+        <button id="auditoria-ia-generar" type="button" class="audit-button audit-button--primary"><i class="fa-solid fa-sparkles"></i> Analizar auditoría con IA</button>
+        <small style="opacity:.72;"><i class="fa-solid fa-shield-halved"></i> No realiza búsqueda web ni inventa información.</small>
+      </div>`;
+
+    const metrics = section.querySelector('.audit-metrics');
+    if (metrics?.parentNode) metrics.parentNode.insertBefore(card, metrics.nextSibling);
+    else section.prepend(card);
+
+    document.getElementById('auditoria-ia-generar')?.addEventListener('click', enviarAuditoriaIA);
+  }
+
+  function filasVisibles(max = 30) {
+    const body = document.getElementById('auditoria-tabla-body');
+    if (!body) return [];
+    return [...body.querySelectorAll('tr')].slice(0, max).map(tr =>
+      [...tr.querySelectorAll('td')].map(td => String(td.innerText || td.textContent || '').replace(/\s+/g, ' ').trim()).join(' | ')
+    ).filter(Boolean);
+  }
+
+  function objetivo(tipo) {
+    return ({
+      resumen: 'Resume de forma clara las incidencias o movimientos registrados y destaca los puntos más relevantes.',
+      pendientes: 'Detecta qué elementos podrían requerir revisión o seguimiento. No asumas que algo está pendiente si los datos no lo demuestran; usa expresiones como “conviene revisar” cuando corresponda.',
+      repetidos: 'Identifica patrones de movimientos repetidos por estudiante, responsable, origen o tipo de cambio, solo cuando sean visibles en los datos.',
+      conclusiones: 'Redacta conclusiones objetivas y breves basadas únicamente en los movimientos mostrados.',
+      recomendaciones: 'Propón recomendaciones operativas y prudentes para el docente basadas solo en los patrones observables, sin atribuir causas no registradas.',
+      informe: 'Prepara un informe breve, formal y ordenado de auditoría para uso docente.'
+    })[tipo] || 'Resume los movimientos de auditoría.';
+  }
+
+  function enviarAuditoriaIA() {
+    const filas = filasVisibles();
+    const total = text('auditoria-total');
+    if ((!total || Number(total.replace(/\D/g, '')) === 0) && !filas.length) {
+      if (typeof mostrarToast === 'function') mostrarToast('Primero carga movimientos de auditoría.', 'warning', 'Auditoría con IA');
+      return;
+    }
+
+    const tipo = val('auditoria-ia-tipo') || 'resumen';
+    const enfoque = val('auditoria-ia-enfoque') || 'general';
+    const nota = val('auditoria-ia-nota');
+    const origenFiltro = document.getElementById('auditoria-origen')?.selectedOptions?.[0]?.textContent?.trim() || 'Todos';
+    const seccionFiltro = document.getElementById('auditoria-seccion')?.selectedOptions?.[0]?.textContent?.trim() || 'Todas';
+    const fechaFiltro = val('auditoria-fecha') || 'Todas';
+    const busqueda = val('auditoria-buscar') || 'Sin búsqueda';
+
+    const prompt = `Analiza este historial de auditoría de EduGestión como apoyo para un docente. No realices búsqueda web. Usa ÚNICAMENTE la información proporcionada. No inventes causas, hechos, responsables, estudiantes, fechas ni pendientes. Si los datos no permiten afirmar algo, indícalo claramente.\n\nObjetivo: ${objetivo(tipo)}\nEnfoque: ${enfoque}.\n${nota ? `Nota del docente: ${nota}\n` : ''}\nFiltros visibles:\n- Fecha de asistencia: ${fechaFiltro}\n- Origen: ${origenFiltro}\n- Sección: ${seccionFiltro}\n- Búsqueda: ${busqueda}\n\nResumen de auditoría:\n- Cambios registrados: ${total || '0'}\n- Desde la web: ${text('auditoria-web') || '0'}\n- Desde Telegram: ${text('auditoria-telegram') || '0'}\n- Cambios de hoy: ${text('auditoria-hoy') || '0'}\n\nMovimientos visibles (máximo 30, del más reciente al más antiguo):\n${filas.length ? filas.map(x => `- ${x}`).join('\n') : '- Sin movimientos visibles en la tabla'}\n\nPresenta la respuesta con estos apartados cuando apliquen: Resumen, Hallazgos objetivos, Elementos que conviene revisar, Patrones observables, Recomendaciones y Conclusión. Evita lenguaje acusatorio y diferencia claramente hechos visibles de recomendaciones.`;
+
+    const tabIA = document.getElementById('tab-gemini');
+    const inputIA = document.getElementById('gemini-input');
+    const formIA = document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Auditoría con IA');
+      return;
+    }
+    tabIA.click();
+    inputIA.value = prompt;
+    setTimeout(() => {
+      inputIA.focus();
+      if (typeof formIA.requestSubmit === 'function') formIA.requestSubmit();
+      else formIA.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    }, 180);
+  }
+
+  function activar() {
+    asegurarTarjetaIA();
+    document.getElementById(TAB_ID)?.addEventListener('click', () => setTimeout(asegurarTarjetaIA, 120));
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(activar, 200));
+  else setTimeout(activar, 200);
+
+  const observer = new MutationObserver(() => {
+    if (document.getElementById(SECTION_ID) && !document.getElementById(CARD_ID)) asegurarTarjetaIA();
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
+/* EDUGESTION_AUDITORIA_AI_V1_END */
