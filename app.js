@@ -8730,3 +8730,131 @@ Archivo enviado directamente desde EduGestión.`);
   window.EDUGESTION_PROFILE_V1={apply:applyPersonalization,load:()=>typeof profesorActual!=='undefined'&&profesorActual?loadProfile(profesorActual):null,isEducacionFisica};
 })();
 /* EDUGESTION_PROFILE_V1_END */
+
+/* =========================================================
+   EduGestión · FASE 10
+   IA adaptada automáticamente al perfil docente
+   ========================================================= */
+(() => {
+  const MARK='EDUGESTION_PROFILE_AI_V1';
+  if (window[MARK]) return;
+  window[MARK]=true;
+
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+
+  function perfilIA(){
+    const p=window.EDUGESTION_DOCENTE_PERFIL||{};
+    const materia=String(p.materiaEfectiva||p.materia||window.profesorActual?.materia||'').trim();
+    const nombre=String(p.nombre||window.profesorActual?.nombre||'Docente').trim();
+    const grados=Array.isArray(p.grados)?p.grados.filter(Boolean):[];
+    const anio=String(p.anioEscolar||'').trim();
+    return {nombre,materia,grados,anio};
+  }
+
+  function contextoPerfil(){
+    const p=perfilIA();
+    const lineas=[
+      'CONTEXTO DEL PERFIL DOCENTE DE EDUGESTIÓN:',
+      `- Docente: ${p.nombre||'No indicado'}`,
+      `- Área o materia principal: ${p.materia||'No indicada'}`,
+      `- Grados/Años que atiende: ${p.grados.length?p.grados.join(', '):'No indicados'}`,
+      `- Año escolar: ${p.anio||'No indicado'}`,
+      '',
+      'INSTRUCCIONES DE PERSONALIZACIÓN:',
+      '- Adapta la respuesta al área o materia del perfil cuando la consulta sea pedagógica o escolar.',
+      '- Si la consulta ya indica otra materia, grado, año, tema o contexto específico, respeta primero lo escrito por el docente en esa consulta.',
+      '- No cambies ni sustituyas una base curricular, texto, documento o material que el docente haya proporcionado. Si existe una fuente curricular obligatoria dentro de la consulta, esa fuente tiene prioridad.',
+      '- Usa ejemplos, actividades, instrumentos y lenguaje apropiados para los grados/años indicados cuando sean pertinentes.',
+      '- No inventes datos institucionales, contenidos oficiales ni referencias curriculares que no hayan sido proporcionados.',
+      '- No realices búsqueda web salvo que la propia herramienta lo solicite expresamente.'
+    ];
+    return lineas.join('\n');
+  }
+
+  function enriquecerMensaje(texto){
+    const raw=String(texto||'').trim();
+    if(!raw || raw.includes('CONTEXTO DEL PERFIL DOCENTE DE EDUGESTIÓN:')) return raw;
+    return `${contextoPerfil()}\n\nCONSULTA DEL DOCENTE:\n${raw}`;
+  }
+
+  function instalarFetchPerfil(){
+    if(!window.fetch || window.fetch.__edugestionPerfilIA) return;
+    const original=window.fetch.bind(window);
+    const wrapped=async function(input, init){
+      try{
+        const url=typeof input==='string'?input:(input?.url||'');
+        if(String(url).includes('/api/gemini') && init && typeof init.body==='string'){
+          const data=JSON.parse(init.body);
+          if(data && typeof data.message==='string'){
+            data.message=enriquecerMensaje(data.message);
+            init={...init,body:JSON.stringify(data)};
+          }
+        }
+      }catch(e){/* Si el cuerpo no es JSON, se conserva intacto. */}
+      return original(input,init);
+    };
+    wrapped.__edugestionPerfilIA=true;
+    window.fetch=wrapped;
+  }
+
+  function autocompletarCampos(){
+    const p=perfilIA();
+    const materia=p.materia;
+    if(materia){
+      ['plan-ia-area','eval-ia-area'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(el && (!String(el.value||'').trim() || el.dataset.dpAuto==='1')){
+          el.value=materia;
+          el.dataset.dpAuto='1';
+        }
+      });
+    }
+    if(p.grados.length===1){
+      ['plan-ia-grado','eval-ia-grado'].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el || String(el.value||'').trim()) return;
+        const exact=[...el.options||[]].find(o=>String(o.value||o.textContent).trim()===p.grados[0]);
+        if(exact) el.value=exact.value;
+      });
+    }
+  }
+
+  function asegurarIndicadorIA(){
+    const section=document.getElementById('section-gemini');
+    if(!section || document.getElementById('profile-ai-context-card')) return;
+    const p=perfilIA();
+    const card=document.createElement('div');
+    card.id='profile-ai-context-card';
+    card.style.cssText='margin:0 0 14px;padding:12px 14px;border:1px solid rgba(14,116,144,.22);border-radius:14px;background:rgba(6,182,212,.08);display:flex;gap:10px;align-items:flex-start;line-height:1.35';
+    card.innerHTML=`<i class="fa-solid fa-user-graduate" style="margin-top:2px;color:#0e7490"></i><div><strong>IA adaptada a tu perfil</strong><div id="profile-ai-context-text" style="font-size:.86rem;opacity:.82;margin-top:2px"></div></div>`;
+    section.insertBefore(card,section.firstChild);
+    actualizarIndicadorIA();
+  }
+
+  function actualizarIndicadorIA(){
+    const out=document.getElementById('profile-ai-context-text');
+    if(!out) return;
+    const p=perfilIA();
+    const partes=[p.materia||'Materia sin configurar'];
+    if(p.grados.length)partes.push(p.grados.join(', '));
+    if(p.anio)partes.push(`Año escolar ${p.anio}`);
+    out.innerHTML=esc(partes.join(' · '));
+  }
+
+  function aplicar(){
+    instalarFetchPerfil();
+    autocompletarCampos();
+    asegurarIndicadorIA();
+    actualizarIndicadorIA();
+  }
+
+  // Reaplica al guardar/cambiar el perfil sin modificar el flujo de Fase 9.
+  document.addEventListener('click',e=>{
+    if(e.target?.closest?.('#dp-save')) setTimeout(aplicar,80);
+    if(e.target?.closest?.('#tab-gemini,#tab-planificacion,#tab-evaluaciones-ia')) setTimeout(aplicar,20);
+  });
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',aplicar,{once:true});else aplicar();
+  window.EDUGESTION_PROFILE_AI_V1={apply:aplicar,context:perfilIA,enrich:enriquecerMensaje};
+})();
+/* EDUGESTION_PROFILE_AI_V1_END */
