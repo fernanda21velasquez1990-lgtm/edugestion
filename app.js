@@ -2817,8 +2817,10 @@ const SESSION_KEY = 'edugestion_session_v2';
 
   function crearPanelDirector() {
     if (document.getElementById(DIRECTOR_IDS.tab)) return;
-    const nav = document.getElementById('app-nav');
-    const main = document.getElementById('app-main');
+    const planificacionTab = document.getElementById('tab-planificacion');
+    const geminiTab = document.getElementById('tab-gemini');
+    const nav = document.getElementById('app-nav') || planificacionTab?.parentElement || geminiTab?.parentElement || document.querySelector('.app-sidebar nav');
+    const main = document.getElementById('app-main') || document.getElementById('section-planificacion')?.parentElement || document.querySelector('main');
     if (!nav || !main) return;
 
     const tab = document.createElement('button');
@@ -6229,10 +6231,11 @@ Archivo enviado directamente desde EduGestión.`);
    Los datos se conservan en este navegador (localStorage).
    ========================================================= */
 (() => {
+  function iniciarRespuestasIAModulo() {
   const STORAGE_KEY = 'edugestion_respuestas_ia_v1';
   const conversation = document.getElementById('gemini-conversation');
   const tabGemini = document.getElementById('tab-gemini');
-  if (!conversation || !tabGemini) return;
+  if (!conversation || !tabGemini) return false;
 
   const escIA = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 
@@ -6283,10 +6286,16 @@ Archivo enviado directamente desde EduGestión.`);
     const style = document.createElement('style');
     style.id = 'respuestas-ia-styles';
     style.textContent = `
-      .gemini-save-row{display:flex;justify-content:flex-end;margin-top:.8rem;padding-top:.7rem;border-top:1px solid rgba(100,116,139,.18)}
-      .gemini-save-response{border:0;border-radius:10px;padding:.55rem .8rem;background:#eef2ff;color:#4338ca;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:.45rem}
-      .gemini-save-response:hover{filter:brightness(.97)}
+      .gemini-save-row{display:flex;justify-content:flex-end;gap:.55rem;flex-wrap:wrap;margin-top:.8rem;padding-top:.7rem;border-top:1px solid rgba(100,116,139,.18)}
+      .gemini-response-action{border:0;border-radius:10px;padding:.58rem .82rem;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:40px}
+      .gemini-response-action:hover{filter:brightness(.97)}
+      .gemini-copy-response{background:#f1f5f9;color:#334155}
+      .gemini-save-response{background:#eef2ff;color:#4338ca}
+      .gemini-print-response{background:#ecfdf5;color:#047857}
+      body.edugestion-dark .gemini-copy-response{background:rgba(148,163,184,.16);color:#e2e8f0}
       body.edugestion-dark .gemini-save-response{background:rgba(99,102,241,.18);color:#c7d2fe}
+      body.edugestion-dark .gemini-print-response{background:rgba(16,185,129,.16);color:#a7f3d0}
+      @media(max-width:620px){.gemini-save-row{justify-content:stretch}.gemini-response-action{flex:1 1 100%}}
       .ia-saved-hero{background:linear-gradient(135deg,#312e81,#4f46e5 55%,#7c3aed);color:#fff;border-radius:24px;padding:1.4rem 1.55rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;box-shadow:0 18px 42px rgba(79,70,229,.18)}
       .ia-saved-hero h2{font-size:1.45rem;font-weight:900;margin:.2rem 0}.ia-saved-hero p{opacity:.9;margin:0}.ia-saved-hero__icon{font-size:2rem;opacity:.9}
       .ia-saved-tools{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:.8rem;margin-bottom:1rem}
@@ -6384,18 +6393,62 @@ Archivo enviado directamente desde EduGestión.`);
     if (e.target.closest('.ia-save-confirm')) confirmarGuardado();
   });
 
+  function copiarRespuestaIA(texto) {
+    const contenido = String(texto || '').trim();
+    if (!contenido) return;
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = contenido;
+      ta.setAttribute('readonly','');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); if (typeof mostrarToast === 'function') mostrarToast('Contenido copiado.', 'success', 'Asistente IA'); }
+      catch (_) { if (typeof mostrarToast === 'function') mostrarToast('No se pudo copiar automáticamente.', 'warning', 'Asistente IA'); }
+      ta.remove();
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(contenido).then(() => { if (typeof mostrarToast === 'function') mostrarToast('Contenido copiado.', 'success', 'Asistente IA'); }).catch(fallback);
+    } else fallback();
+  }
+
+  function imprimirRespuestaIA(rich) {
+    if (!rich) return;
+    const contenidoHtml = rich.innerHTML?.trim();
+    const contenidoTexto = rich.innerText?.trim();
+    if (!contenidoHtml && !contenidoTexto) return;
+    const primera = (contenidoTexto || 'Material generado con IA').split(/\n+/).find(Boolean) || 'Material generado con IA';
+    const titulo = primera.replace(/^#+\s*/, '').replace(/[*_`]/g,'').slice(0,100);
+    const ventana = window.open('', '_blank', 'width=900,height=700');
+    if (!ventana) {
+      if (typeof mostrarToast === 'function') mostrarToast('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes e inténtalo de nuevo.', 'warning', 'Preparar para imprimir');
+      return;
+    }
+    ventana.document.open();
+    ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escIA(titulo)}</title><style>
+      @page{size:A4;margin:18mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111827;background:#fff;line-height:1.55;font-size:12.5pt;margin:0}main{max-width:760px;margin:0 auto}h1,h2,h3,h4{color:#111827;margin:1.05em 0 .45em;page-break-after:avoid}h1{font-size:20pt}h2{font-size:16pt}h3{font-size:14pt}p{margin:.55em 0}ul,ol{padding-left:1.4rem}li{margin:.3em 0}strong{font-weight:700}hr{border:0;border-top:1px solid #cbd5e1;margin:1rem 0}.print-head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;border-bottom:2px solid #111827;padding-bottom:.7rem;margin-bottom:1.2rem}.print-head h1{font-size:16pt;margin:0}.print-meta{font-size:9.5pt;color:#475569}.no-print{margin:0 0 1rem;display:flex;justify-content:flex-end;gap:.5rem}.no-print button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:.55rem .8rem;font-weight:700;cursor:pointer}@media print{.no-print{display:none}a{color:inherit;text-decoration:none}}
+    </style></head><body><main><div class="no-print"><button onclick="window.print()">Imprimir / Guardar PDF</button><button onclick="window.close()">Cerrar</button></div><div class="print-head"><h1>${escIA(titulo)}</h1><div class="print-meta">Preparado desde EduGestión</div></div><section>${contenidoHtml || `<pre>${escIA(contenidoTexto)}</pre>`}</section></main></body></html>`);
+    ventana.document.close();
+    ventana.focus();
+    if (typeof mostrarToast === 'function') mostrarToast('Versión para imprimir preparada.', 'success', 'Asistente IA');
+  }
+
   function mejorarMensajeAssistant(row) {
     if (!row || row.dataset.saveReady === '1') return;
     row.dataset.saveReady = '1';
     const rich = row.querySelector('.gemini-rich');
     const bubble = row.querySelector('.gemini-bubble');
-    if (!rich || !bubble) return; // no agrega botón al mensaje de bienvenida
+    if (!rich || !bubble) return; // no agrega botones al mensaje de bienvenida
     const texto = rich.innerText?.trim();
     if (!texto) return;
     const actions = document.createElement('div');
     actions.className = 'gemini-save-row';
-    actions.innerHTML = '<button type="button" class="gemini-save-response"><i class="fa-solid fa-bookmark"></i> Guardar respuesta</button>';
-    actions.querySelector('button').addEventListener('click', () => abrirModalGuardar(rich.innerText.trim()));
+    actions.innerHTML = `
+      <button type="button" class="gemini-response-action gemini-copy-response"><i class="fa-solid fa-copy"></i> Copiar</button>
+      <button type="button" class="gemini-response-action gemini-save-response"><i class="fa-solid fa-bookmark"></i> Guardar en Mis respuestas IA</button>
+      <button type="button" class="gemini-response-action gemini-print-response"><i class="fa-solid fa-print"></i> Preparar para imprimir</button>`;
+    actions.querySelector('.gemini-copy-response')?.addEventListener('click', () => copiarRespuestaIA(rich.innerText.trim()));
+    actions.querySelector('.gemini-save-response')?.addEventListener('click', () => abrirModalGuardar(rich.innerText.trim()));
+    actions.querySelector('.gemini-print-response')?.addEventListener('click', () => imprimirRespuestaIA(rich));
     bubble.appendChild(actions);
   }
 
@@ -6457,6 +6510,22 @@ Archivo enviado directamente desde EduGestión.`);
 
   crearModuloGuardados();
   crearModalGuardar();
+  return true;
+  }
+
+  function intentarIniciarRespuestasIA() {
+    if (document.getElementById('tab-respuestas-ia') && document.getElementById('section-respuestas-ia')) return true;
+    try { return iniciarRespuestasIAModulo(); } catch (error) { console.warn('EduGestion: reintentando Mis respuestas IA', error); return false; }
+  }
+
+  if (!intentarIniciarRespuestasIA()) {
+    const observer = new MutationObserver(() => {
+      if (intentarIniciarRespuestasIA()) observer.disconnect();
+    });
+    observer.observe(document.documentElement, { childList:true, subtree:true });
+    window.setTimeout(() => { intentarIniciarRespuestasIA(); }, 450);
+    window.setTimeout(() => { intentarIniciarRespuestasIA(); }, 1200);
+  }
 })();
 
 
@@ -7270,7 +7339,7 @@ Archivo enviado directamente desde EduGestión.`);
   }
 
   function abrirCategoria(tab, section) {
-    document.querySelectorAll('#app-nav .nav-item').forEach(item => { item.classList.remove('is-active'); item.setAttribute('aria-selected','false'); });
+    document.querySelectorAll('.app-sidebar .nav-item, #app-nav .nav-item').forEach(item => { item.classList.remove('is-active'); item.setAttribute('aria-selected','false'); });
     document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.add('hidden'));
     tab.classList.add('is-active');
     tab.setAttribute('aria-selected','true');
@@ -7360,3 +7429,68 @@ Archivo enviado directamente desde EduGestión.`);
   else iniciar();
 })();
 /* EDUGESTION_EVALUACIONES_IA_V1_END */
+
+
+/* EDUGESTION_MENU_SCROLL_RECOVERY_V1_START */
+(() => {
+  function instalarMenuScrollable() {
+    const sidebar = document.querySelector('.app-sidebar');
+    const planTab = document.getElementById('tab-planificacion');
+    const geminiTab = document.getElementById('tab-gemini');
+    const nav = document.getElementById('app-nav') || planTab?.parentElement || geminiTab?.parentElement || sidebar?.querySelector('nav');
+    if (!sidebar || !nav) return false;
+
+    if (!document.getElementById('edugestion-menu-scroll-styles')) {
+      const style = document.createElement('style');
+      style.id = 'edugestion-menu-scroll-styles';
+      style.textContent = `
+        .app-sidebar{display:flex!important;flex-direction:column!important;overflow:hidden!important}
+        .app-sidebar #app-nav,.app-sidebar nav{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain;padding-right:5px!important;scrollbar-width:thin;scrollbar-color:rgba(148,163,184,.65) transparent}
+        .app-sidebar #app-nav::-webkit-scrollbar,.app-sidebar nav::-webkit-scrollbar{width:6px}
+        .app-sidebar #app-nav::-webkit-scrollbar-track,.app-sidebar nav::-webkit-scrollbar-track{background:transparent}
+        .app-sidebar #app-nav::-webkit-scrollbar-thumb,.app-sidebar nav::-webkit-scrollbar-thumb{background:rgba(148,163,184,.55);border-radius:999px}
+        .app-sidebar #app-nav::-webkit-scrollbar-thumb:hover,.app-sidebar nav::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.78)}
+        .app-sidebar .nav-item{flex:0 0 auto}
+        @media(max-width:900px){.app-sidebar #app-nav,.app-sidebar nav{padding-bottom:18px!important}}
+      `;
+      document.head.appendChild(style);
+    }
+
+    nav.addEventListener('click', event => {
+      const item = event.target.closest('.nav-item');
+      if (item) window.setTimeout(() => item.scrollIntoView({block:'nearest',behavior:'smooth'}), 40);
+    }, {passive:true});
+
+    return true;
+  }
+
+  function recuperarEvaluaciones() {
+    const existe = document.getElementById('tab-evaluaciones-ia');
+    if (existe) return true;
+    // El módulo principal de Evaluaciones IA posee su propio observador; un cambio DOM
+    // adicional fuerza un nuevo ciclo de detección en navegadores que cargan el menú tarde.
+    const nav = document.getElementById('app-nav') || document.getElementById('tab-planificacion')?.parentElement || document.getElementById('tab-gemini')?.parentElement;
+    if (!nav) return false;
+    const ping = document.createComment('edugestion-evaluaciones-retry');
+    nav.appendChild(ping); ping.remove();
+    return Boolean(document.getElementById('tab-evaluaciones-ia'));
+  }
+
+  function iniciar() {
+    instalarMenuScrollable();
+    recuperarEvaluaciones();
+    let intentos = 0;
+    const timer = window.setInterval(() => {
+      intentos += 1;
+      instalarMenuScrollable();
+      recuperarEvaluaciones();
+      const okEval = Boolean(document.getElementById('tab-evaluaciones-ia'));
+      const okSaved = Boolean(document.getElementById('tab-respuestas-ia'));
+      if ((okEval && okSaved) || intentos >= 12) window.clearInterval(timer);
+    }, 250);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, {once:true});
+  else iniciar();
+})();
+/* EDUGESTION_MENU_SCROLL_RECOVERY_V1_END */
