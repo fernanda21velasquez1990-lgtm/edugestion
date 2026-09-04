@@ -114,7 +114,7 @@ export default {
       }
 
       const apiKey = getRequiredEnv('GEMINI_API_KEY');
-      const model = String(process.env.GEMINI_MODEL || 'gemini-3.6-flash').trim();
+      const model = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').trim();
 
       const systemInstruction = [
         'Eres el asistente educativo privado de EduGestión.',
