@@ -1227,6 +1227,46 @@
        </div>
       </header>
 
+      <section class="bg-white rounded-3xl border border-indigo-100 shadow-sm p-5 md:p-6 mb-6" id="estudiante-ia-card">
+       <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-5">
+        <div class="flex items-start gap-3">
+         <span class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+         <div>
+          <small class="block text-[11px] font-black uppercase tracking-[0.18em] text-indigo-500 mb-1">Asistente pedagógico</small>
+          <h3 class="text-xl font-black text-slate-800">Observaciones del estudiante con Gemini</h3>
+          <p class="text-sm text-slate-500 mt-1">Escribe tus notas y Gemini las convierte en una observación clara, respetuosa y profesional.</p>
+         </div>
+        </div>
+        <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-2 text-xs font-black"><i class="fa-solid fa-shield-halved"></i> Modo gratuito · sin búsqueda web</span>
+       </div>
+       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <label class="student-field lg:col-span-2"><span>Estudiante</span><input id="est-ia-nombre" type="text" placeholder="Nombre y apellido"></label>
+        <label class="student-field"><span>Año / grado</span><input id="est-ia-grado" type="text" placeholder="Ej.: 1er Año"></label>
+        <label class="student-field"><span>Sección</span><input id="est-ia-seccion" type="text" placeholder="Ej.: A"></label>
+        <label class="student-field lg:col-span-2"><span>Tipo de texto</span>
+         <select id="est-ia-tipo">
+          <option value="Observación pedagógica general">Observación pedagógica general</option>
+          <option value="Fortalezas y aspectos por mejorar">Fortalezas y aspectos por mejorar</option>
+          <option value="Comentario para boletín">Comentario para boletín</option>
+          <option value="Recomendación pedagógica">Recomendación pedagógica</option>
+          <option value="Mensaje para representante">Mensaje para representante</option>
+          <option value="Seguimiento del estudiante">Seguimiento del estudiante</option>
+         </select>
+        </label>
+        <label class="student-field lg:col-span-2"><span>Extensión</span>
+         <select id="est-ia-extension"><option value="breve, de 3 a 5 líneas">Breve</option><option value="media, de 1 a 2 párrafos">Media</option><option value="detallada, con apartados claros">Detallada</option></select>
+        </label>
+        <label class="student-field md:col-span-2 lg:col-span-4"><span>Notas del docente</span><textarea id="est-ia-notas" rows="4" placeholder="Ej.: participa con entusiasmo, cumple instrucciones, necesita reforzar puntualidad y trabajo en equipo..."></textarea></label>
+       </div>
+       <div class="mt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <p class="text-xs text-slate-400 flex items-center gap-2"><i class="fa-solid fa-circle-info"></i> Gemini redactará únicamente a partir de la información que tú escribas. No inventará datos.</p>
+        <div class="flex flex-wrap gap-2">
+         <button id="btn-estudiante-ia-cargar" type="button" class="px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 font-black text-sm hover:bg-slate-50 transition"><i class="fa-solid fa-user-check mr-2"></i>Usar datos de la ficha</button>
+         <button id="btn-estudiante-ia" type="button" class="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm shadow-md transition"><i class="fa-solid fa-wand-magic-sparkles mr-2"></i>Generar observación con IA</button>
+        </div>
+       </div>
+      </section>
+
       <div class="student-register-layout">
        <form class="student-register-form" id="form-registro-manual">
         <div class="student-form-progress" aria-label="Progreso del formulario">

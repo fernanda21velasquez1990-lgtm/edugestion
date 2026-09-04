@@ -6094,3 +6094,67 @@ Archivo enviado directamente desde EduGestión.`);
     input?.focus();
   }));
 })();
+
+
+/* =========================================================
+   EduGestion · Estudiantes: observaciones pedagógicas con IA
+   ========================================================= */
+(() => {
+  const btn = document.getElementById('btn-estudiante-ia');
+  const btnCargar = document.getElementById('btn-estudiante-ia-cargar');
+  if (!btn) return;
+
+  const nombre = document.getElementById('est-ia-nombre');
+  const grado = document.getElementById('est-ia-grado');
+  const seccion = document.getElementById('est-ia-seccion');
+  const tipo = document.getElementById('est-ia-tipo');
+  const extension = document.getElementById('est-ia-extension');
+  const notas = document.getElementById('est-ia-notas');
+
+  const cargarFicha = () => {
+    const nombreFicha = document.getElementById('reg-nombre');
+    const gradoFicha = document.getElementById('reg-ano');
+    const seccionFicha = document.getElementById('reg-seccion');
+    const obsFicha = document.getElementById('reg-observaciones');
+    if (nombre && nombreFicha?.value) nombre.value = nombreFicha.value;
+    if (grado && gradoFicha?.value) grado.value = gradoFicha.options?.[gradoFicha.selectedIndex]?.text || gradoFicha.value;
+    if (seccion && seccionFicha?.value) seccion.value = seccionFicha.value;
+    if (notas && obsFicha?.value && !notas.value.trim()) notas.value = obsFicha.value;
+    if (typeof mostrarToast === 'function') mostrarToast('Datos cargados desde la ficha del estudiante.', 'success', 'Observaciones con IA');
+  };
+
+  btnCargar?.addEventListener('click', cargarFicha);
+
+  btn.addEventListener('click', () => {
+    const nombreValor = String(nombre?.value || '').trim();
+    const notasValor = String(notas?.value || '').trim();
+    if (!nombreValor) {
+      if (typeof mostrarToast === 'function') mostrarToast('Indica el nombre del estudiante.', 'warning', 'Observaciones con IA');
+      nombre?.focus();
+      return;
+    }
+    if (!notasValor) {
+      if (typeof mostrarToast === 'function') mostrarToast('Escribe primero algunas notas del estudiante.', 'warning', 'Observaciones con IA');
+      notas?.focus();
+      return;
+    }
+
+    const prompt = `Redacta en español una ${tipo?.value || 'observación pedagógica general'} sobre el estudiante indicado, en un tono profesional, respetuoso, constructivo y apropiado para un contexto escolar. No realices búsqueda web y no inventes información que no aparezca en mis notas.\n\nDatos aportados por el docente:\n- Estudiante: ${nombreValor}\n- Grado/Año: ${grado?.value || 'No indicado'}\n- Sección: ${seccion?.value || 'No indicada'}\n- Extensión deseada: ${extension?.value || 'breve'}\n- Notas del docente: ${notasValor}\n\nRedacta el texto listo para copiar. Evita diagnósticos, etiquetas o afirmaciones no sustentadas. Resalta fortalezas de forma concreta y, si corresponde, plantea aspectos por mejorar y una recomendación práctica con lenguaje positivo.`;
+
+    const tabIA = document.getElementById('tab-gemini');
+    const inputIA = document.getElementById('gemini-input');
+    const formIA = document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Observaciones con IA');
+      return;
+    }
+
+    tabIA.click();
+    inputIA.value = prompt;
+    setTimeout(() => {
+      inputIA.focus();
+      if (typeof formIA.requestSubmit === 'function') formIA.requestSubmit();
+      else formIA.dispatchEvent(new Event('submit', { bubbles:true, cancelable:true }));
+    }, 180);
+  });
+})();
