@@ -8139,3 +8139,97 @@ Archivo enviado directamente desde EduGestión.`);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
 /* EDUGESTION_CUADERNILLO_EF_FASE5_HISTORIAL_END */
+
+/* ================================================================
+   EduGestión · Cuadernillo Educación Física · FASE 6
+   Resumen curricular general por grado/año
+   ================================================================ */
+(() => {
+  const TAB_ID='tab-resumen-curricular-ef';
+  const SECTION_ID='section-resumen-curricular-ef';
+  const STYLE_ID='style-resumen-curricular-ef';
+  const TRACK_KEY='edugestion_cuadernillo_ef_seguimiento_v1';
+  const HISTORY_KEY='edugestion_cuadernillo_ef_historial_v1';
+  const STATUSES=['Pendiente','Planificado','Trabajado','Evaluado'];
+  const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
+  const key=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const readJSON=(k,fallback)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(fallback))}catch(_){return fallback}};
+
+  function styles(){
+    if(document.getElementById(STYLE_ID))return;
+    const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      #${SECTION_ID}{padding-bottom:30px}
+      .rc-hero{border-radius:24px;padding:24px;background:linear-gradient(135deg,#173f6d,#287eaa);color:#fff;margin-bottom:18px}.rc-hero small{font-weight:900;letter-spacing:.08em;text-transform:uppercase}.rc-hero h2{margin:8px 0 6px;font-size:1.75rem}.rc-hero p{margin:0;opacity:.92;max-width:900px;line-height:1.55}
+      .rc-overall{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px;margin-bottom:16px}.rc-kpi{border:1px solid var(--border-color,#d7e2ec);background:var(--card-bg,#fff);border-radius:16px;padding:14px}.rc-kpi small{display:block;color:#6f8295;font-weight:800}.rc-kpi strong{display:block;font-size:1.5rem;color:var(--text-color,#21384d);margin-top:3px}.rc-kpi.eval strong{color:#16775a}.rc-kpi.work strong{color:#9a6500}.rc-kpi.plan strong{color:#1f6faa}.rc-kpi.pending strong{color:#6d7680}
+      .rc-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}.rc-filter{display:flex;gap:8px;flex-wrap:wrap}.rc-filter button,.rc-print{border:1px solid #cad8e5;background:var(--card-bg,#fff);color:#36516b;border-radius:999px;padding:8px 11px;font-weight:850;cursor:pointer}.rc-filter button.active{background:#1b6fa9;color:#fff;border-color:#1b6fa9}.rc-print{border-radius:11px}
+      .rc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}.rc-card{border:1px solid var(--border-color,#d7e2ec);background:var(--card-bg,#fff);border-radius:18px;padding:16px}.rc-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.rc-head h3{margin:0;color:var(--text-color,#21384d)}.rc-head button{border:0;background:#edf5fb;color:#165d8f;border-radius:10px;padding:8px 10px;font-weight:850;cursor:pointer}.rc-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:13px}.rc-count{border-radius:11px;padding:9px;background:#f5f8fb;text-align:center}.rc-count b{display:block;font-size:1.05rem;color:#28445e}.rc-count span{font-size:.72rem;color:#6b8095;font-weight:800}.rc-progress{height:10px;background:#e9eff4;border-radius:999px;overflow:hidden;margin-top:13px}.rc-progress > i{display:block;height:100%;background:#1f7eaa;border-radius:999px}.rc-foot{display:flex;justify-content:space-between;gap:8px;margin-top:7px;color:#6c8194;font-size:.8rem;font-weight:750}.rc-empty{grid-column:1/-1;border:1px dashed #bdcad7;border-radius:16px;padding:28px;text-align:center;color:#718497}
+      .rc-history{margin-top:18px;border:1px solid var(--border-color,#d7e2ec);background:var(--card-bg,#fff);border-radius:18px;padding:16px}.rc-history h3{margin:0 0 11px;color:var(--text-color,#21384d)}.rc-history-list{display:flex;flex-direction:column;gap:8px}.rc-history-item{display:grid;grid-template-columns:130px 160px 1fr;gap:10px;padding:10px;border-radius:11px;background:#f6f9fc;font-size:.82rem}.rc-history-item b{color:#294760}.rc-history-item span{color:#657b8f}.dark-mode .rc-count,.edugestion-dark .rc-count,.dark-mode .rc-history-item,.edugestion-dark .rc-history-item{background:#1b2d40}.dark-mode .rc-filter button,.edugestion-dark .rc-filter button,.dark-mode .rc-print,.edugestion-dark .rc-print{background:#17283a;border-color:#3c546b;color:#e7f0f8}
+      @media(max-width:900px){.rc-overall{grid-template-columns:repeat(2,1fr)}.rc-grid{grid-template-columns:1fr}.rc-history-item{grid-template-columns:1fr}}
+      @media(max-width:520px){.rc-overall{grid-template-columns:1fr 1fr}.rc-counts{grid-template-columns:1fr 1fr}.rc-head{flex-direction:column}.rc-head button{width:100%}}
+    `;document.head.appendChild(st);
+  }
+
+  function crear(){
+    if(document.getElementById(SECTION_ID))return true;
+    const nav=document.getElementById('app-nav')||document.querySelector('.app-sidebar nav');
+    const main=document.getElementById('app-main')||document.querySelector('main');
+    if(!nav||!main||!window.EDUGESTION_CEF_DATA)return false;
+    styles();
+    const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Resumen curricular';tab.dataset.description='Consulta el avance general del Cuadernillo de Educación Física por grado y año.';tab.innerHTML='<i class="fa-solid fa-chart-pie"></i><span>Resumen curricular</span>';
+    const ref=document.getElementById('tab-plan-evaluacion-ef')||document.getElementById('tab-cuadernillo-ef');if(ref?.nextSibling)nav.insertBefore(tab,ref.nextSibling);else nav.appendChild(tab);
+    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
+      <header class="rc-hero"><small><i class="fa-solid fa-chart-pie"></i> Seguimiento general</small><h2>Resumen curricular de Educación Física</h2><p>Visualiza en una sola pantalla cuánto has planificado, trabajado y evaluado en cada grado o año del cuadernillo.</p></header>
+      <div class="rc-overall" id="rc-overall"></div>
+      <div class="rc-toolbar"><div class="rc-filter" id="rc-filters"><button type="button" class="active" data-filter="Todos">Todos</button><button type="button" data-filter="con-avance">Con avance</button><button type="button" data-filter="Pendiente">Solo pendientes</button><button type="button" data-filter="Evaluado">Con evaluados</button></div><button type="button" class="rc-print" id="rc-print"><i class="fa-solid fa-print"></i> Imprimir resumen</button></div>
+      <div class="rc-grid" id="rc-grid"></div>
+      <div class="rc-history"><h3><i class="fa-solid fa-clock-rotate-left"></i> Movimientos recientes</h3><div class="rc-history-list" id="rc-history-list"></div></div>`;
+    main.appendChild(sec);
+    tab.addEventListener('click',()=>abrir(tab,sec));
+    sec.querySelectorAll('#rc-filters button').forEach(b=>b.addEventListener('click',()=>{sec.querySelectorAll('#rc-filters button').forEach(x=>x.classList.remove('active'));b.classList.add('active');sec.dataset.filter=b.dataset.filter;render();}));
+    sec.querySelector('#rc-print').addEventListener('click',imprimir);
+    render();return true;
+  }
+
+  function abrir(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;window.scrollTo({top:0,behavior:'smooth'});render();}
+
+  function resumenNivel(grado,temas,track){
+    const out={grado,total:temas.length,Pendiente:0,Planificado:0,Trabajado:0,Evaluado:0};
+    temas.forEach(x=>{const estado=track[key(grado,x.tema)]?.estado||'Pendiente';out[STATUSES.includes(estado)?estado:'Pendiente']++;});
+    out.avance=out.Planificado+out.Trabajado+out.Evaluado;out.pct=out.total?Math.round((out.avance/out.total)*100):0;return out;
+  }
+
+  function render(){
+    const sec=document.getElementById(SECTION_ID),grid=document.getElementById('rc-grid'),overall=document.getElementById('rc-overall');if(!sec||!grid||!overall||!window.EDUGESTION_CEF_DATA)return;
+    const data=window.EDUGESTION_CEF_DATA,track=readJSON(TRACK_KEY,{});const rows=Object.entries(data).map(([g,t])=>resumenNivel(g,t,track));
+    const total=rows.reduce((a,x)=>a+x.total,0),pend=rows.reduce((a,x)=>a+x.Pendiente,0),plan=rows.reduce((a,x)=>a+x.Planificado,0),work=rows.reduce((a,x)=>a+x.Trabajado,0),evald=rows.reduce((a,x)=>a+x.Evaluado,0);
+    overall.innerHTML=`<div class="rc-kpi"><small>Total de temas</small><strong>${total}</strong></div><div class="rc-kpi pending"><small>Pendientes</small><strong>${pend}</strong></div><div class="rc-kpi plan"><small>Planificados</small><strong>${plan}</strong></div><div class="rc-kpi work"><small>Trabajados</small><strong>${work}</strong></div><div class="rc-kpi eval"><small>Evaluados</small><strong>${evald}</strong></div>`;
+    const f=sec.dataset.filter||'Todos';const shown=rows.filter(x=>f==='Todos'||(f==='con-avance'&&x.avance>0)||(f==='Pendiente'&&x.Pendiente>0)||(f==='Evaluado'&&x.Evaluado>0));
+    if(!shown.length){grid.innerHTML='<div class="rc-empty"><i class="fa-solid fa-circle-info"></i><h4>No hay grados que coincidan con este filtro</h4></div>';}
+    else grid.innerHTML=shown.map(x=>`<article class="rc-card"><div class="rc-head"><div><h3>${esc(x.grado)}</h3><div style="font-size:.8rem;color:#6d8194;margin-top:3px">${x.total} temas curriculares</div></div><button type="button" data-open-grade="${esc(x.grado)}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Abrir grado</button></div><div class="rc-counts"><div class="rc-count"><b>${x.Pendiente}</b><span>Pendientes</span></div><div class="rc-count"><b>${x.Planificado}</b><span>Planificados</span></div><div class="rc-count"><b>${x.Trabajado}</b><span>Trabajados</span></div><div class="rc-count"><b>${x.Evaluado}</b><span>Evaluados</span></div></div><div class="rc-progress"><i style="width:${x.pct}%"></i></div><div class="rc-foot"><span>Avance curricular</span><span>${x.avance}/${x.total} · ${x.pct}%</span></div></article>`).join('');
+    grid.querySelectorAll('[data-open-grade]').forEach(b=>b.addEventListener('click',()=>abrirGrado(b.dataset.openGrade)));
+    renderHistory();
+  }
+
+  function abrirGrado(grado){
+    document.getElementById('tab-cuadernillo-ef')?.click();
+    setTimeout(()=>{const btn=[...document.querySelectorAll('#cef-levels .cef-level')].find(x=>norm(x.dataset.nivel)===norm(grado));if(btn)btn.click();},120);
+  }
+
+  function renderHistory(){
+    const box=document.getElementById('rc-history-list');if(!box)return;const all=readJSON(HISTORY_KEY,{}),items=[];Object.values(all).forEach(list=>{if(Array.isArray(list))items.push(...list)});items.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));const top=items.slice(0,8);
+    if(!top.length){box.innerHTML='<div class="rc-empty"><i class="fa-solid fa-clock"></i><p>Aún no hay movimientos registrados.</p></div>';return;}
+    box.innerHTML=top.map(x=>{const d=new Date(x.fecha);const fecha=Number.isNaN(d.getTime())?x.fecha:new Intl.DateTimeFormat('es-VE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(d);return `<div class="rc-history-item"><b>${esc(fecha)}</b><span>${esc(x.grado||'')}</span><div><b>${esc(x.tema||'')}</b><br><span>${esc(x.accion||'Actualización')}${x.estado?` · ${esc(x.estado)}`:''}</span></div></div>`}).join('');
+  }
+
+  function imprimir(){
+    const data=window.EDUGESTION_CEF_DATA||{},track=readJSON(TRACK_KEY,{}),rows=Object.entries(data).map(([g,t])=>resumenNivel(g,t,track));const w=window.open('','_blank','width=1050,height=800');if(!w)return;
+    const filas=rows.map(x=>`<tr><td>${esc(x.grado)}</td><td>${x.total}</td><td>${x.Pendiente}</td><td>${x.Planificado}</td><td>${x.Trabajado}</td><td>${x.Evaluado}</td><td>${x.pct}%</td></tr>`).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Resumen curricular Educación Física</title><style>body{font-family:Arial,sans-serif;color:#1c2d3d;padding:28px}h1{margin-bottom:4px}p{color:#617487}table{width:100%;border-collapse:collapse;margin-top:22px}th,td{border:1px solid #cfd9e2;padding:9px;text-align:left}th{background:#eef4f8}@media print{button{display:none}}</style></head><body><h1>Resumen curricular de Educación Física</h1><p>Seguimiento del Cuadernillo Curricular MPPE en EduGestión.</p><table><thead><tr><th>Grado/Año</th><th>Total</th><th>Pendientes</th><th>Planificados</th><th>Trabajados</th><th>Evaluados</th><th>Avance</th></tr></thead><tbody>${filas}</tbody></table><p style="margin-top:20px;font-size:12px">Generado: ${new Intl.DateTimeFormat('es-VE',{dateStyle:'long',timeStyle:'short'}).format(new Date())}</p><button onclick="window.print()">Imprimir</button></body></html>`);w.document.close();setTimeout(()=>w.focus(),150);
+  }
+
+  function init(){try{return crear()}catch(e){console.warn('EduGestión Resumen Curricular EF:',e);return false}}
+  if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>30)clearInterval(tm)},250)}
+  window.addEventListener('storage',()=>{if(document.getElementById(SECTION_ID)?.classList.contains('hidden')===false)render();});
+})();
+/* EDUGESTION_CUADERNILLO_EF_FASE6_RESUMEN_END */
