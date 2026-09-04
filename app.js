@@ -6345,7 +6345,7 @@ Archivo enviado directamente desde EduGestión.`);
     const modal = document.createElement('div');
     modal.id = 'ia-save-modal';
     modal.className = 'ia-save-modal hidden';
-    modal.innerHTML = `<div class="ia-save-dialog" role="dialog" aria-modal="true" aria-labelledby="ia-save-title"><h3 id="ia-save-title">Guardar respuesta de Gemini</h3><p>Agrega un título para encontrarla fácilmente después.</p><div class="ia-save-grid"><div class="ia-save-field full"><label for="ia-save-name">Título</label><input id="ia-save-name" maxlength="120" placeholder="Ej.: Planificación de coordinación motriz"></div><div class="ia-save-field"><label for="ia-save-category">Categoría</label><select id="ia-save-category"><option>Planificación</option><option>Actividad</option><option>Observación pedagógica</option><option>Resumen</option><option>Preguntas</option><option>Guía de estudio</option><option>Efeméride</option><option>General</option></select></div><div class="ia-save-field"><label for="ia-save-origin">Origen</label><select id="ia-save-origin"><option>Asistente IA</option><option>Planificación</option><option>Estudiantes</option><option>Calendario</option><option>Biblioteca digital</option></select></div></div><div class="ia-save-actions"><button type="button" class="ia-save-cancel">Cancelar</button><button type="button" class="ia-save-confirm"><i class="fa-solid fa-floppy-disk"></i> Guardar</button></div></div>`;
+    modal.innerHTML = `<div class="ia-save-dialog" role="dialog" aria-modal="true" aria-labelledby="ia-save-title"><h3 id="ia-save-title">Guardar respuesta de Gemini</h3><p>Agrega un título para encontrarla fácilmente después.</p><div class="ia-save-grid"><div class="ia-save-field full"><label for="ia-save-name">Título</label><input id="ia-save-name" maxlength="120" placeholder="Ej.: Planificación de coordinación motriz"></div><div class="ia-save-field"><label for="ia-save-category">Categoría</label><select id="ia-save-category"><option>Planificación</option><option>Actividad</option><option>Observación pedagógica</option><option>Resumen</option><option>Preguntas</option><option>Guía de estudio</option><option>Efeméride</option><option>Acta</option><option>General</option></select></div><div class="ia-save-field"><label for="ia-save-origin">Origen</label><select id="ia-save-origin"><option>Asistente IA</option><option>Planificación</option><option>Estudiantes</option><option>Calendario</option><option>Biblioteca digital</option><option>Actas</option></select></div></div><div class="ia-save-actions"><button type="button" class="ia-save-cancel">Cancelar</button><button type="button" class="ia-save-confirm"><i class="fa-solid fa-floppy-disk"></i> Guardar</button></div></div>`;
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('.ia-save-cancel')) modal.classList.add('hidden'); });
   }
@@ -6457,4 +6457,137 @@ Archivo enviado directamente desde EduGestión.`);
 
   crearModuloGuardados();
   crearModalGuardar();
+})();
+
+
+/* =========================================================
+   EduGestion · Actas: redacción profesional con IA
+   ========================================================= */
+(() => {
+  const section = document.getElementById('section-actas');
+  const hero = section?.querySelector('.actas-hero');
+  if (!section || !hero || document.getElementById('actas-ia-panel')) return;
+
+  const panel = document.createElement('section');
+  panel.id = 'actas-ia-panel';
+  panel.className = 'actas-ia-panel';
+  panel.innerHTML = `
+    <div class="actas-ia-head">
+      <div class="actas-ia-head__icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+      <div class="actas-ia-head__text">
+        <span>ASISTENTE DOCENTE</span>
+        <h3>Redactar acta con Gemini</h3>
+        <p>Completa los datos principales y Gemini preparará un borrador profesional para que lo revises antes de usarlo.</p>
+      </div>
+      <div class="actas-ia-free"><i class="fa-solid fa-shield-halved"></i> Modo gratuito · sin búsqueda web</div>
+    </div>
+    <div class="actas-ia-grid">
+      <label><span>TIPO DE ACTA</span><select id="acta-ia-tipo">
+        <option>Incidencia escolar</option><option>Reunión docente</option><option>Reunión con padres</option>
+        <option>Compromiso</option><option>Seguimiento</option><option>Orientación</option>
+        <option>Inasistencia</option><option>Accidente escolar</option><option>Calificaciones</option><option>Mediación</option>
+      </select></label>
+      <label><span>FECHA</span><input id="acta-ia-fecha" type="date"></label>
+      <label><span>PARTICIPANTES / PERSONAS INVOLUCRADAS</span><input id="acta-ia-participantes" placeholder="Ej.: estudiante, representante y docente"></label>
+      <label class="actas-ia-wide"><span>MOTIVO O ASUNTO</span><input id="acta-ia-motivo" placeholder="Describe brevemente el motivo del acta"></label>
+      <label class="actas-ia-wide"><span>HECHOS / INFORMACIÓN PRINCIPAL</span><textarea id="acta-ia-hechos" rows="3" placeholder="Escribe los hechos de forma breve y objetiva. Gemini los organizará sin inventar información."></textarea></label>
+      <label><span>ACUERDOS O COMPROMISOS</span><textarea id="acta-ia-acuerdos" rows="3" placeholder="Ej.: seguimiento semanal, comunicación con representante..."></textarea></label>
+      <label><span>OBSERVACIONES ADICIONALES</span><textarea id="acta-ia-observaciones" rows="3" placeholder="Opcional"></textarea></label>
+    </div>
+    <div class="actas-ia-actions">
+      <button type="button" id="btn-acta-ia-cargar" class="actas-ia-secondary"><i class="fa-solid fa-file-import"></i> Usar datos del acta</button>
+      <small><i class="fa-solid fa-circle-info"></i> Gemini redactará un borrador. Revísalo antes de guardarlo o entregarlo.</small>
+      <button type="button" id="btn-acta-ia-generar" class="actas-ia-primary"><i class="fa-solid fa-wand-magic-sparkles"></i> Redactar acta con IA</button>
+    </div>`;
+  hero.insertAdjacentElement('afterend', panel);
+
+  const style = document.createElement('style');
+  style.textContent = `
+    .actas-ia-panel{background:linear-gradient(135deg,#fff,#f8fbff);border:1px solid #cfe0f5;border-radius:22px;padding:24px;box-shadow:0 10px 28px rgba(42,76,120,.08)}
+    .actas-ia-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:20px}.actas-ia-head__icon{width:48px;height:48px;border-radius:14px;background:#eef5ff;color:#18579d;display:flex;align-items:center;justify-content:center;font-size:21px;flex:none}.actas-ia-head__text{flex:1}.actas-ia-head__text span{font-size:11px;font-weight:900;letter-spacing:.13em;color:#6557e8}.actas-ia-head__text h3{font-size:22px;font-weight:900;color:#1f2937;margin:3px 0}.actas-ia-head__text p{font-size:14px;color:#718096;margin:0}.actas-ia-free{font-size:12px;font-weight:800;color:#07845c;background:#ecfdf5;border:1px solid #b8f1d9;border-radius:999px;padding:8px 12px;white-space:nowrap}
+    .actas-ia-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.actas-ia-grid label{display:flex;flex-direction:column;gap:6px}.actas-ia-grid label span{font-size:11px;font-weight:900;color:#475569;letter-spacing:.03em}.actas-ia-grid input,.actas-ia-grid select,.actas-ia-grid textarea{width:100%;border:1px solid #d7e1ee;border-radius:12px;background:#fff;padding:12px 13px;color:#253248;font:inherit;outline:none}.actas-ia-grid input:focus,.actas-ia-grid select:focus,.actas-ia-grid textarea:focus{border-color:#4f8fd8;box-shadow:0 0 0 3px rgba(79,143,216,.13)}.actas-ia-wide{grid-column:1/-1}
+    .actas-ia-actions{display:flex;gap:14px;align-items:center;margin-top:18px}.actas-ia-actions small{flex:1;color:#8a96a8}.actas-ia-actions button{border:0;border-radius:12px;padding:12px 17px;font-weight:900;cursor:pointer}.actas-ia-secondary{background:#eef4fb;color:#245b91}.actas-ia-primary{background:#174f8b;color:#fff;box-shadow:0 7px 16px rgba(23,79,139,.18)}
+    body.app-dark .actas-ia-panel{background:#111b2a;border-color:#2b405a}.app-dark .actas-ia-head__text h3,.app-dark .actas-ia-grid label span{color:#edf5ff}.app-dark .actas-ia-head__text p,.app-dark .actas-ia-actions small{color:#a9b7c9}.app-dark .actas-ia-grid input,.app-dark .actas-ia-grid select,.app-dark .actas-ia-grid textarea{background:#182538;border-color:#31465f;color:#eef6ff}
+    @media(max-width:760px){.actas-ia-head{flex-wrap:wrap}.actas-ia-free{order:3}.actas-ia-grid{grid-template-columns:1fr}.actas-ia-wide{grid-column:auto}.actas-ia-actions{flex-direction:column;align-items:stretch}.actas-ia-actions small{order:3}.actas-ia-actions button{width:100%}}
+  `;
+  document.head.appendChild(style);
+
+  const tipo = document.getElementById('acta-ia-tipo');
+  const fecha = document.getElementById('acta-ia-fecha');
+  const participantes = document.getElementById('acta-ia-participantes');
+  const motivo = document.getElementById('acta-ia-motivo');
+  const hechos = document.getElementById('acta-ia-hechos');
+  const acuerdos = document.getElementById('acta-ia-acuerdos');
+  const observaciones = document.getElementById('acta-ia-observaciones');
+
+  const mapTipo = {
+    reunion:'Reunión docente', padres:'Reunión con padres', incidencia:'Incidencia escolar', compromiso:'Compromiso',
+    seguimiento:'Seguimiento', orientacion:'Orientación', inasistencia:'Inasistencia', accidente:'Accidente escolar',
+    calificaciones:'Calificaciones', mediacion:'Mediación'
+  };
+
+  const hoy = () => new Date().toISOString().slice(0,10);
+  fecha.value = document.getElementById('acta-fecha-global')?.value || hoy();
+
+  function textoVisiblePlantilla() {
+    const visible = [...section.querySelectorAll('.acta-plantilla')].find(el => !el.classList.contains('hidden'));
+    if (!visible) return '';
+    return [...visible.querySelectorAll('input,textarea,select')]
+      .map(el => String(el.value || '').trim()).filter(Boolean).join('\n');
+  }
+
+  function cargarDatos() {
+    const titulo = String(document.getElementById('acta-titulo-dinamico')?.value || '').trim();
+    const tipoGlobal = typeof actaTipoActual !== 'undefined' ? actaTipoActual : '';
+    const valorTipo = mapTipo[tipoGlobal] || titulo.replace(/^\d+\.\s*/, '') || 'Incidencia escolar';
+    [...tipo.options].forEach(opt => { opt.selected = opt.textContent.trim().toLowerCase() === valorTipo.toLowerCase(); });
+    fecha.value = document.getElementById('acta-fecha-global')?.value || hoy();
+
+    const alumnoId = document.getElementById('acta-select-alumno')?.value;
+    let alumno = null;
+    try { alumno = Array.isArray(alumnosFiltradosActas) ? alumnosFiltradosActas.find(a => String(a.id) === String(alumnoId)) : null; } catch (_) {}
+    const nombres = [];
+    if (alumno?.nombre) nombres.push(`Estudiante: ${alumno.nombre}`);
+    if (alumno?.representante) nombres.push(`Representante: ${alumno.representante}`);
+    if (typeof profesorActual !== 'undefined' && profesorActual?.nombre) nombres.push(`Docente: ${profesorActual.nombre}`);
+    if (nombres.length) participantes.value = nombres.join(' · ');
+
+    const motInc = String(document.getElementById('acta-motivo')?.value || '').trim();
+    const descInc = String(document.getElementById('acta-incidencia')?.value || '').trim();
+    const faltas = String(document.getElementById('acta-inasistencia-fechas')?.value || '').trim();
+    const obsFaltas = String(document.getElementById('acta-inasistencia-motivo')?.value || '').trim();
+    if (motInc) motivo.value = motInc;
+    else if (faltas) motivo.value = `Reporte de inasistencia: ${faltas}`;
+    else if (!motivo.value.trim()) motivo.value = titulo || valorTipo;
+    if (descInc) hechos.value = descInc;
+    else if (obsFaltas) hechos.value = obsFaltas;
+    else {
+      const extra = textoVisiblePlantilla();
+      if (extra && !hechos.value.trim()) hechos.value = extra;
+    }
+    if (typeof mostrarToast === 'function') mostrarToast('Datos del acta cargados en el asistente.', 'success', 'Actas con IA');
+  }
+
+  document.getElementById('btn-acta-ia-cargar')?.addEventListener('click', cargarDatos);
+
+  document.getElementById('btn-acta-ia-generar')?.addEventListener('click', () => {
+    const motivoValor = String(motivo.value || '').trim();
+    const hechosValor = String(hechos.value || '').trim();
+    if (!motivoValor) { mostrarToast?.('Indica el motivo o asunto del acta.', 'warning', 'Actas con IA'); motivo.focus(); return; }
+    if (!hechosValor) { mostrarToast?.('Escribe los hechos o información principal.', 'warning', 'Actas con IA'); hechos.focus(); return; }
+
+    const prompt = `Redacta un borrador formal de acta escolar en español, listo para ser revisado por un docente. No realices búsqueda web. Usa únicamente la información que te proporciono y NO inventes nombres, fechas, hechos, acuerdos ni datos faltantes. Mantén un tono institucional, objetivo, respetuoso y claro.\n\nDatos del acta:\n- Tipo: ${tipo.value}\n- Fecha: ${fecha.value || 'No indicada'}\n- Participantes o personas involucradas: ${participantes.value.trim() || 'No indicados'}\n- Motivo o asunto: ${motivoValor}\n- Hechos / información principal: ${hechosValor}\n- Acuerdos o compromisos: ${acuerdos.value.trim() || 'No indicados'}\n- Observaciones adicionales: ${observaciones.value.trim() || 'Ninguna'}\n\nOrganiza el borrador con: Título del acta, Fecha, Participantes, Motivo, Desarrollo de los hechos, Acuerdos o compromisos, Observaciones finales y espacios de firma cuando correspondan. Si falta algún dato importante, indícalo como [PENDIENTE DE COMPLETAR] en vez de inventarlo.`;
+
+    const tabIA = document.getElementById('tab-gemini');
+    const inputIA = document.getElementById('gemini-input');
+    const formIA = document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) { mostrarToast?.('No se pudo abrir el Asistente IA.', 'warning', 'Actas con IA'); return; }
+    tabIA.click();
+    inputIA.value = prompt;
+    setTimeout(() => {
+      inputIA.focus();
+      if (typeof formIA.requestSubmit === 'function') formIA.requestSubmit();
+      else formIA.dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}));
+    }, 180);
+  });
 })();
