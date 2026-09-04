@@ -7116,3 +7116,247 @@ Archivo enviado directamente desde EduGestión.`);
   else iniciar();
 })();
 /* EDUGESTION_ASISTENCIA_LABORAL_IA_V1_END */
+
+/* EDUGESTION_EVALUACIONES_IA_V1_START */
+(() => {
+  const TAB_ID = 'tab-evaluaciones-ia';
+  const SECTION_ID = 'section-evaluaciones-ia';
+
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const clean = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+  function inyectarEstilos() {
+    if (document.getElementById('evaluaciones-ia-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'evaluaciones-ia-styles';
+    style.textContent = `
+      .eval-ia-page{display:grid;gap:1.25rem}
+      .eval-ia-hero{display:flex;justify-content:space-between;align-items:center;gap:1.2rem;padding:1.7rem 1.85rem;border-radius:24px;background:linear-gradient(135deg,#173b63,#1f6fa7);color:#fff;overflow:hidden;position:relative}
+      .eval-ia-hero:after{content:"";position:absolute;width:240px;height:240px;border:36px solid rgba(255,255,255,.08);border-radius:50%;right:-70px;top:-85px}
+      .eval-ia-hero__copy{position:relative;z-index:1;max-width:760px}
+      .eval-ia-hero__eyebrow{display:inline-flex;align-items:center;gap:.45rem;font-size:.76rem;font-weight:900;letter-spacing:.11em;text-transform:uppercase;opacity:.9}
+      .eval-ia-hero h2{margin:.45rem 0 .55rem;font-size:clamp(1.55rem,3vw,2.35rem);line-height:1.08}
+      .eval-ia-hero p{margin:0;line-height:1.6;opacity:.92;max-width:680px}
+      .eval-ia-hero__icon{width:88px;height:88px;border-radius:24px;display:grid;place-items:center;background:rgba(255,255,255,.14);font-size:2rem;position:relative;z-index:1;flex:0 0 auto}
+      .eval-ia-card{background:var(--surface,#fff);border:1px solid rgba(148,163,184,.35);border-radius:22px;padding:1.4rem;box-shadow:0 12px 32px rgba(15,23,42,.06)}
+      .eval-ia-card__head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1.2rem}
+      .eval-ia-card__head h3{margin:0 0 .28rem;font-size:1.16rem}
+      .eval-ia-card__head p{margin:0;color:#64748b;line-height:1.5}
+      .eval-ia-badge{display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .7rem;border-radius:999px;background:#ecfdf5;color:#047857;font-size:.78rem;font-weight:800;white-space:nowrap}
+      .eval-ia-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:1rem}
+      .eval-ia-field{grid-column:span 4;display:flex;flex-direction:column;gap:.42rem;min-width:0}
+      .eval-ia-field.half{grid-column:span 6}
+      .eval-ia-field.full{grid-column:1/-1}
+      .eval-ia-field label,.eval-ia-field>span{font-size:.78rem;font-weight:900;color:#475569;text-transform:uppercase;letter-spacing:.035em}
+      .eval-ia-field input,.eval-ia-field select,.eval-ia-field textarea{width:100%;min-height:48px;border:1px solid #cbd5e1;border-radius:13px;background:transparent;color:inherit;padding:.78rem .9rem;font:inherit;outline:none;box-sizing:border-box}
+      .eval-ia-field textarea{min-height:104px;resize:vertical;line-height:1.5}
+      .eval-ia-field input:focus,.eval-ia-field select:focus,.eval-ia-field textarea:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+      .eval-ia-difficulty{display:grid;grid-template-columns:repeat(3,1fr);gap:.65rem}
+      .eval-ia-difficulty input{position:absolute;opacity:0;pointer-events:none}
+      .eval-ia-difficulty label{min-height:48px;border:1px solid #cbd5e1;border-radius:13px;display:flex;align-items:center;justify-content:center;gap:.45rem;font-weight:900;cursor:pointer;background:transparent;text-transform:none;letter-spacing:0}
+      .eval-ia-difficulty input:checked+label{border-color:#2563eb;background:rgba(37,99,235,.1);color:#1d4ed8}
+      .eval-ia-options{display:flex;flex-wrap:wrap;gap:.75rem 1.1rem;padding:.8rem 0 .15rem}
+      .eval-ia-check{display:inline-flex;align-items:center;gap:.5rem;font-weight:700;color:#475569}
+      .eval-ia-check input{width:18px;height:18px;min-height:auto}
+      .eval-ia-actions{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-top:1.15rem;padding-top:1.1rem;border-top:1px solid rgba(148,163,184,.3)}
+      .eval-ia-generate{border:0;border-radius:14px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;min-height:50px;padding:.8rem 1.15rem;font-weight:900;font-size:.95rem;display:inline-flex;align-items:center;gap:.55rem;cursor:pointer}
+      .eval-ia-help{display:flex;align-items:center;gap:.45rem;color:#64748b;font-size:.82rem;line-height:1.45}
+      .eval-ia-preview{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}
+      .eval-ia-preview article{padding:1rem;border:1px solid rgba(148,163,184,.28);border-radius:16px;background:rgba(248,250,252,.65)}
+      .eval-ia-preview strong{display:block;margin-bottom:.28rem}
+      .eval-ia-preview span{font-size:.84rem;color:#64748b;line-height:1.45}
+      body.edugestion-dark .eval-ia-card{background:rgba(15,23,42,.72);border-color:rgba(148,163,184,.24)}
+      body.edugestion-dark .eval-ia-field input,body.edugestion-dark .eval-ia-field select,body.edugestion-dark .eval-ia-field textarea,body.edugestion-dark .eval-ia-difficulty label{border-color:rgba(148,163,184,.38);background:rgba(15,23,42,.32);color:#e5e7eb}
+      body.edugestion-dark .eval-ia-card__head p,body.edugestion-dark .eval-ia-field label,body.edugestion-dark .eval-ia-field>span,body.edugestion-dark .eval-ia-help,body.edugestion-dark .eval-ia-check,body.edugestion-dark .eval-ia-preview span{color:#cbd5e1}
+      body.edugestion-dark .eval-ia-preview article{background:rgba(30,41,59,.55)}
+      @media(max-width:900px){.eval-ia-field{grid-column:span 6}.eval-ia-preview{grid-template-columns:1fr}.eval-ia-hero__icon{display:none}}
+      @media(max-width:620px){.eval-ia-hero{padding:1.25rem;border-radius:18px}.eval-ia-card{padding:1rem;border-radius:18px}.eval-ia-field,.eval-ia-field.half{grid-column:1/-1}.eval-ia-difficulty{grid-template-columns:1fr}.eval-ia-actions{align-items:stretch}.eval-ia-generate{width:100%;justify-content:center}.eval-ia-badge{white-space:normal}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function crearCategoria() {
+    if (document.getElementById(TAB_ID) || document.getElementById(SECTION_ID)) return;
+    const nav = document.getElementById('app-nav');
+    const main = document.getElementById('app-main');
+    if (!nav || !main) return;
+    inyectarEstilos();
+
+    const tab = document.createElement('button');
+    tab.id = TAB_ID;
+    tab.type = 'button';
+    tab.className = 'nav-item';
+    tab.setAttribute('aria-selected','false');
+    tab.dataset.title = 'Evaluaciones IA';
+    tab.dataset.description = 'Crea cuestionarios, talleres y exámenes adaptados al año y nivel de dificultad.';
+    tab.innerHTML = '<i class="fa-solid fa-file-circle-question"></i><span>Evaluaciones IA</span>';
+
+    const planTab = nav.querySelector('#tab-planificacion');
+    if (planTab?.nextSibling) nav.insertBefore(tab, planTab.nextSibling);
+    else nav.appendChild(tab);
+
+    const section = document.createElement('section');
+    section.id = SECTION_ID;
+    section.className = 'hidden eval-ia-page';
+    section.innerHTML = `
+      <header class="eval-ia-hero">
+        <div class="eval-ia-hero__copy">
+          <span class="eval-ia-hero__eyebrow"><i class="fa-solid fa-wand-magic-sparkles"></i> Creador docente con Gemini</span>
+          <h2>Cuestionarios, talleres y exámenes con IA</h2>
+          <p>Completa la información de tu actividad, selecciona el año y el nivel de dificultad. Gemini preparará el material con un encabezado listo para revisar, copiar o imprimir.</p>
+        </div>
+        <div class="eval-ia-hero__icon"><i class="fa-solid fa-file-pen"></i></div>
+      </header>
+
+      <section class="eval-ia-card">
+        <div class="eval-ia-card__head">
+          <div><h3>Información del material</h3><p>Los datos que coloques aquí aparecerán como referencia en la evaluación generada.</p></div>
+          <span class="eval-ia-badge"><i class="fa-solid fa-shield-halved"></i> Modo gratuito · sin búsqueda web</span>
+        </div>
+
+        <div class="eval-ia-grid">
+          <div class="eval-ia-field"><span>Tipo de material</span><select id="eval-ia-tipo"><option value="Cuestionario">Cuestionario</option><option value="Taller">Taller</option><option value="Examen">Examen</option></select></div>
+          <div class="eval-ia-field"><span>Año / grado</span><select id="eval-ia-grado"><option>1er Año</option><option>2do Año</option><option>3er Año</option><option>4to Año</option><option>5to Año</option><option>6to Grado</option><option>5to Grado</option><option>4to Grado</option><option>3er Grado</option><option>2do Grado</option><option>1er Grado</option></select></div>
+          <div class="eval-ia-field"><span>Sección</span><input id="eval-ia-seccion" placeholder="Ej.: A"></div>
+
+          <div class="eval-ia-field half"><span>Institución</span><input id="eval-ia-institucion" placeholder="Nombre de la institución"></div>
+          <div class="eval-ia-field half"><span>Docente</span><input id="eval-ia-docente" placeholder="Nombre del docente"></div>
+
+          <div class="eval-ia-field"><span>Área / materia</span><input id="eval-ia-area" value="Educación Física" placeholder="Ej.: Educación Física"></div>
+          <div class="eval-ia-field"><span>Fecha</span><input id="eval-ia-fecha" type="date"></div>
+          <div class="eval-ia-field"><span>Cantidad de preguntas</span><select id="eval-ia-cantidad"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>25</option><option>30</option></select></div>
+
+          <div class="eval-ia-field full"><span>Tema o contenido</span><input id="eval-ia-tema" placeholder="Ej.: Coordinación motriz, resistencia, sistema muscular..."></div>
+
+          <div class="eval-ia-field half"><span>Nivel de dificultad</span><div class="eval-ia-difficulty">
+            <div><input type="radio" name="eval-ia-dificultad" id="eval-dif-basico" value="Básico" checked><label for="eval-dif-basico"><i class="fa-solid fa-seedling"></i> Básico</label></div>
+            <div><input type="radio" name="eval-ia-dificultad" id="eval-dif-medio" value="Medio"><label for="eval-dif-medio"><i class="fa-solid fa-layer-group"></i> Medio</label></div>
+            <div><input type="radio" name="eval-ia-dificultad" id="eval-dif-fuerte" value="Fuerte"><label for="eval-dif-fuerte"><i class="fa-solid fa-bolt"></i> Fuerte</label></div>
+          </div></div>
+          <div class="eval-ia-field half"><span>Formato de preguntas</span><select id="eval-ia-formato"><option value="Mixto">Mixto</option><option value="Selección simple">Selección simple</option><option value="Verdadero o falso">Verdadero o falso</option><option value="Desarrollo">Desarrollo</option><option value="Completar">Completar</option><option value="Preguntas cortas">Preguntas cortas</option></select></div>
+
+          <div class="eval-ia-field full"><span>Indicaciones o información adicional</span><textarea id="eval-ia-indicaciones" placeholder="Ej.: Incluir ejercicios prácticos, evitar preguntas repetidas, usar lenguaje sencillo, valorar sobre 20 puntos..."></textarea></div>
+          <div class="eval-ia-field full"><span>Opciones del material</span><div class="eval-ia-options">
+            <label class="eval-ia-check"><input type="checkbox" id="eval-ia-solucionario" checked> Incluir solucionario para el docente</label>
+            <label class="eval-ia-check"><input type="checkbox" id="eval-ia-puntaje" checked> Sugerir puntaje por pregunta</label>
+            <label class="eval-ia-check"><input type="checkbox" id="eval-ia-nombre-alumno" checked> Incluir espacio para nombre del estudiante</label>
+          </div></div>
+        </div>
+
+        <div class="eval-ia-actions">
+          <button id="eval-ia-generar" class="eval-ia-generate" type="button"><i class="fa-solid fa-wand-magic-sparkles"></i> Generar material con IA</button>
+          <div class="eval-ia-help"><i class="fa-solid fa-circle-info"></i><span>Gemini preparará el borrador. El docente siempre debe revisarlo antes de imprimir o aplicar.</span></div>
+        </div>
+      </section>
+
+      <section class="eval-ia-preview" aria-label="Qué puede crear esta sección">
+        <article><strong><i class="fa-solid fa-list-check"></i> Cuestionarios</strong><span>Preguntas rápidas para repaso, práctica o comprobación de conocimientos.</span></article>
+        <article><strong><i class="fa-solid fa-clipboard-list"></i> Talleres</strong><span>Actividades combinadas con preguntas, ejercicios y desarrollo guiado.</span></article>
+        <article><strong><i class="fa-solid fa-file-signature"></i> Exámenes</strong><span>Evaluaciones organizadas por dificultad, cantidad de preguntas y formato elegido.</span></article>
+      </section>
+    `;
+    main.appendChild(section);
+
+    const hoy = new Date();
+    const fecha = section.querySelector('#eval-ia-fecha');
+    if (fecha) fecha.value = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+    const docente = section.querySelector('#eval-ia-docente');
+    if (docente) docente.value = clean(document.querySelector('[data-profesor-nombre], #profesor-nombre, #account-name')?.textContent) || '';
+    const institucion = section.querySelector('#eval-ia-institucion');
+    if (institucion) institucion.value = clean(document.getElementById('input-institucion')?.value) || '';
+
+    tab.addEventListener('click', () => abrirCategoria(tab, section));
+    section.querySelector('#eval-ia-generar')?.addEventListener('click', generarMaterialIA);
+  }
+
+  function abrirCategoria(tab, section) {
+    document.querySelectorAll('#app-nav .nav-item').forEach(item => { item.classList.remove('is-active'); item.setAttribute('aria-selected','false'); });
+    document.querySelectorAll('#app-main > section').forEach(sec => sec.classList.add('hidden'));
+    tab.classList.add('is-active');
+    tab.setAttribute('aria-selected','true');
+    section.classList.remove('hidden');
+    const pageTitle = document.getElementById('page-title');
+    const pageDescription = document.getElementById('page-description');
+    if (pageTitle) pageTitle.textContent = tab.dataset.title;
+    if (pageDescription) pageDescription.textContent = tab.dataset.description;
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function getValue(id) { return clean(document.getElementById(id)?.value); }
+  function marcado(id) { return Boolean(document.getElementById(id)?.checked); }
+
+  function generarMaterialIA() {
+    const tipo = getValue('eval-ia-tipo') || 'Cuestionario';
+    const grado = getValue('eval-ia-grado') || 'No indicado';
+    const seccion = getValue('eval-ia-seccion') || 'No indicada';
+    const institucion = getValue('eval-ia-institucion') || 'No indicada';
+    const docente = getValue('eval-ia-docente') || 'No indicado';
+    const area = getValue('eval-ia-area') || 'No indicada';
+    const fecha = getValue('eval-ia-fecha') || 'No indicada';
+    const cantidad = getValue('eval-ia-cantidad') || '10';
+    const tema = getValue('eval-ia-tema');
+    const formato = getValue('eval-ia-formato') || 'Mixto';
+    const indicaciones = getValue('eval-ia-indicaciones');
+    const dificultad = document.querySelector('input[name="eval-ia-dificultad"]:checked')?.value || 'Básico';
+
+    if (!tema) {
+      if (typeof mostrarToast === 'function') mostrarToast('Escribe primero el tema o contenido de la actividad.', 'warning', 'Evaluaciones IA');
+      document.getElementById('eval-ia-tema')?.focus();
+      return;
+    }
+
+    const opciones = [
+      marcado('eval-ia-solucionario') ? 'Incluye al final un solucionario separado y claramente identificado SOLO PARA EL DOCENTE.' : 'No incluyas solucionario.',
+      marcado('eval-ia-puntaje') ? 'Sugiere una distribución de puntaje por pregunta y un total.' : 'No es necesario asignar puntajes.',
+      marcado('eval-ia-nombre-alumno') ? 'Incluye en el encabezado una línea en blanco para Nombre y apellido del estudiante.' : ''
+    ].filter(Boolean).join('\n- ');
+
+    const reglaDificultad = dificultad === 'Básico'
+      ? 'Usa preguntas directas, vocabulario sencillo y conceptos esenciales, apropiados para comprobar comprensión básica.'
+      : dificultad === 'Medio'
+        ? 'Combina comprensión, aplicación y razonamiento moderado. Evita que todas las preguntas sean de memoria literal.'
+        : 'Haz la actividad exigente para el nivel indicado: incluye aplicación, análisis, situaciones prácticas y razonamiento, sin salirte de contenidos apropiados para ese año.';
+
+    const prompt = `Actúa como asistente docente y crea un ${tipo.toLowerCase()} completo en español. No realices búsqueda web. Trabaja únicamente con el tema y las instrucciones proporcionadas. No inventes datos institucionales que no se hayan indicado.\n\nINFORMACIÓN PARA EL ENCABEZADO:\n- Institución: ${institucion}\n- Docente: ${docente}\n- Área / materia: ${area}\n- Año / grado: ${grado}\n- Sección: ${seccion}\n- Fecha: ${fecha}\n- Tipo de material: ${tipo}\n- Tema: ${tema}\n- Nivel de dificultad: ${dificultad}\n\nCONFIGURACIÓN:\n- Cantidad aproximada de preguntas o actividades: ${cantidad}\n- Formato solicitado: ${formato}\n- Nivel: ${reglaDificultad}\n${indicaciones ? `- Indicaciones adicionales del docente: ${indicaciones}\n` : ''}- ${opciones}\n\nFORMATO DE ENTREGA:\n1. Presenta primero un encabezado limpio y listo para imprimir con los datos proporcionados.\n2. Incluye un título apropiado para el ${tipo.toLowerCase()}.\n3. Escribe instrucciones claras para el estudiante.\n4. Crea exactamente ${cantidad} preguntas o actividades, salvo que las indicaciones del docente pidan explícitamente otra organización.\n5. Mantén todas las preguntas relacionadas con el tema: ${tema}.\n6. Adecua el contenido al ${grado} y al nivel de dificultad ${dificultad}.\n7. Si el formato es Mixto, combina de manera equilibrada selección simple, verdadero/falso, completar, respuesta corta o desarrollo según sea apropiado.\n8. Evita preguntas ambiguas, repetidas o con más de una respuesta válida cuando sean de opción cerrada.\n9. ${marcado('eval-ia-solucionario') ? 'Después de una separación clara, agrega el SOLUCIONARIO PARA EL DOCENTE con las respuestas correspondientes.' : 'No agregues respuestas al final.'}\n10. Deja el material con presentación ordenada, numeración clara y listo para copiar a Word o imprimir después de revisión docente.`;
+
+    const tabIA = document.getElementById('tab-gemini');
+    const inputIA = document.getElementById('gemini-input');
+    const formIA = document.getElementById('gemini-form');
+    if (!tabIA || !inputIA || !formIA) {
+      if (typeof mostrarToast === 'function') mostrarToast('No se pudo abrir el Asistente IA.', 'warning', 'Evaluaciones IA');
+      return;
+    }
+
+    tabIA.click();
+    setTimeout(() => {
+      inputIA.value = prompt;
+      inputIA.dispatchEvent(new Event('input', {bubbles:true}));
+      inputIA.focus();
+      try {
+        if (location.protocol !== 'file:') formIA.requestSubmit();
+        else if (typeof mostrarToast === 'function') mostrarToast('Solicitud preparada. La respuesta real de Gemini se prueba desde Vercel.', 'success', 'Evaluaciones IA');
+      } catch (_) {}
+    }, 140);
+  }
+
+  function ampliarCategoriasGuardadas() {
+    const observer = new MutationObserver(() => {
+      const cat = document.getElementById('ia-save-category');
+      if (cat && ![...cat.options].some(o => o.value === 'Evaluación')) cat.add(new Option('Evaluación','Evaluación'));
+      const origin = document.getElementById('ia-save-origin');
+      if (origin && ![...origin.options].some(o => o.value === 'Evaluaciones IA')) origin.add(new Option('Evaluaciones IA','Evaluaciones IA'));
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+
+  function iniciar() {
+    crearCategoria();
+    ampliarCategoriasGuardadas();
+    const observer = new MutationObserver(() => { if (!document.getElementById(TAB_ID)) crearCategoria(); });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar,{once:true});
+  else iniciar();
+})();
+/* EDUGESTION_EVALUACIONES_IA_V1_END */
