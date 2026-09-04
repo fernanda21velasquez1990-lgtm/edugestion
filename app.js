@@ -8233,3 +8233,104 @@ Archivo enviado directamente desde EduGestión.`);
   window.addEventListener('storage',()=>{if(document.getElementById(SECTION_ID)?.classList.contains('hidden')===false)render();});
 })();
 /* EDUGESTION_CUADERNILLO_EF_FASE6_RESUMEN_END */
+
+
+/* ================================================================
+   EduGestión · Cuadernillo Educación Física · FASE 7
+   Panel por lapso + organización de temas + planificación IA del lapso
+   ================================================================ */
+(() => {
+  const TAB_ID='tab-panel-lapsos-ef';
+  const SECTION_ID='section-panel-lapsos-ef';
+  const STYLE_ID='style-panel-lapsos-ef';
+  const ASSIGN_KEY='edugestion_cuadernillo_ef_lapsos_v1';
+  const TRACK_KEY='edugestion_cuadernillo_ef_seguimiento_v1';
+  const HISTORY_KEY='edugestion_cuadernillo_ef_historial_v1';
+  const SELECT_KEY='edugestion_cuadernillo_ef_seleccion';
+  const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
+  const topicKey=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(_){return f}};
+  const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  let gradoActual='';
+  let lapsoActual='1er Lapso';
+  let filtroEstado='Todos';
+
+  function styles(){
+    if(document.getElementById(STYLE_ID))return;
+    const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      #${SECTION_ID}{padding-bottom:34px}.pl-hero{border-radius:25px;padding:25px 28px;background:linear-gradient(135deg,#0d5377,#1587a9);color:#fff;margin-bottom:18px}.pl-hero small{font-weight:900;letter-spacing:.08em;text-transform:uppercase}.pl-hero h2{margin:7px 0 6px;font-size:1.8rem}.pl-hero p{margin:0;line-height:1.55;max-width:900px;opacity:.94}
+      .pl-toolbar{border:1px solid var(--border-color,#d5e1eb);background:var(--card-bg,#fff);border-radius:20px;padding:15px;margin-bottom:15px}.pl-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pl-row+.pl-row{margin-top:11px}.pl-grade{min-width:210px;border:1px solid #c9d8e5;border-radius:12px;padding:10px 12px;background:var(--card-bg,#fff);color:var(--text-color,#23384c);font:inherit;font-weight:800}.pl-lapsos,.pl-statusfilters{display:flex;gap:7px;flex-wrap:wrap}.pl-pill{border:1px solid #c8d7e4;background:var(--card-bg,#fff);color:#34536d;border-radius:999px;padding:8px 11px;font-weight:850;cursor:pointer}.pl-pill.active{background:#176f9f;color:#fff;border-color:#176f9f}.pl-actions-top{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}.pl-action{border:0;border-radius:11px;padding:10px 12px;font-weight:850;cursor:pointer}.pl-action.primary{background:#176f9f;color:#fff}.pl-action.soft{background:#edf5f9;color:#155a7f}.pl-action.warn{background:#fff3df;color:#8a5b00}.pl-action:disabled{opacity:.5;cursor:not-allowed}
+      .pl-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:14px 0}.pl-kpi{border:1px solid var(--border-color,#d7e2eb);background:var(--card-bg,#fff);border-radius:14px;padding:12px}.pl-kpi small{display:block;color:#6f8193;font-weight:800}.pl-kpi strong{display:block;font-size:1.35rem;margin-top:2px;color:var(--text-color,#23384c)}
+      .pl-list{display:flex;flex-direction:column;gap:10px}.pl-item{border:1px solid var(--border-color,#d7e2eb);background:var(--card-bg,#fff);border-radius:17px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) 170px 155px;gap:12px;align-items:center}.pl-item h4{margin:0 0 5px;color:var(--text-color,#21384d);font-size:1rem}.pl-meta{display:flex;gap:7px;flex-wrap:wrap}.pl-chip{font-size:.74rem;border-radius:999px;padding:4px 8px;font-weight:850;background:#eef4f8;color:#536d83}.pl-chip.Pendiente{background:#f0f2f4;color:#65717c}.pl-chip.Planificado{background:#e8f4ff;color:#176aa0}.pl-chip.Trabajado{background:#fff3dc;color:#946100}.pl-chip.Evaluado{background:#e5f7ef;color:#167354}.pl-desc{margin:7px 0 0;color:#687d90;line-height:1.42;font-size:.87rem}.pl-select{width:100%;border:1px solid #cbd9e5;border-radius:10px;padding:9px;background:var(--card-bg,#fff);color:var(--text-color,#23384c);font:inherit}.pl-item-actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}.pl-small{border:0;border-radius:9px;padding:8px 9px;background:#edf5f9;color:#165d82;font-weight:800;cursor:pointer}.pl-empty{border:1px dashed #bdcbd7;border-radius:17px;padding:30px;text-align:center;color:#738697}.pl-note{margin-top:13px;border-radius:14px;padding:12px 14px;background:#edf8f2;color:#236e50;font-size:.86rem;line-height:1.45}.dark-mode .pl-chip,.edugestion-dark .pl-chip{background:#23374a;color:#d7e5f1}.dark-mode .pl-action.soft,.edugestion-dark .pl-action.soft,.dark-mode .pl-small,.edugestion-dark .pl-small{background:#21364a;color:#d7e9f5}
+      @media(max-width:900px){.pl-summary{grid-template-columns:repeat(2,1fr)}.pl-item{grid-template-columns:1fr}.pl-item-actions{justify-content:flex-start}.pl-actions-top{margin-left:0}}
+      @media(max-width:520px){.pl-summary{grid-template-columns:1fr 1fr}.pl-grade{width:100%}.pl-action{width:100%}.pl-actions-top{width:100%}}
+    `;document.head.appendChild(st);
+  }
+
+  function assignmentMap(){return readJSON(ASSIGN_KEY,{})}
+  function trackMap(){return readJSON(TRACK_KEY,{})}
+  function historyMap(){return readJSON(HISTORY_KEY,{})}
+  function setAssignment(grado,tema,lapso){
+    const m=assignmentMap(),k=topicKey(grado,tema),prev=m[k]||'';
+    if(lapso)m[k]=lapso;else delete m[k];writeJSON(ASSIGN_KEY,m);
+    if(prev!==lapso)addHistory(grado,tema,trackMap()[k]?.estado||'Pendiente','Cambio de lapso',lapso?`Tema asignado a ${lapso}.`:'Tema dejado sin lapso asignado.');
+  }
+  function addHistory(grado,tema,estado,accion,detalle){const all=historyMap(),k=topicKey(grado,tema);if(!Array.isArray(all[k]))all[k]=[];all[k].push({fecha:new Date().toISOString(),grado,tema,estado,accion,detalle});if(all[k].length>80)all[k]=all[k].slice(-80);writeJSON(HISTORY_KEY,all)}
+
+  function create(){
+    if(document.getElementById(SECTION_ID))return true;
+    const nav=document.getElementById('app-nav')||document.querySelector('.app-sidebar nav');
+    const main=document.getElementById('app-main')||document.querySelector('main');
+    const data=window.EDUGESTION_CEF_DATA;if(!nav||!main||!data)return false;
+    styles();gradoActual=gradoActual||Object.keys(data)[0]||'';
+    const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Panel por lapso';tab.dataset.description='Organiza los temas del Cuadernillo de Educación Física por lapso y prepara planificaciones con IA.';tab.innerHTML='<i class="fa-solid fa-calendar-week"></i><span>Panel por lapso</span>';
+    const ref=document.getElementById('tab-resumen-curricular-ef')||document.getElementById('tab-plan-evaluacion-ef')||document.getElementById('tab-cuadernillo-ef');if(ref?.nextSibling)nav.insertBefore(tab,ref.nextSibling);else nav.appendChild(tab);
+    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
+      <header class="pl-hero"><small><i class="fa-solid fa-calendar-week"></i> Organización del año escolar</small><h2>Panel curricular por lapso</h2><p>Distribuye los temas del cuadernillo entre 1er, 2do y 3er lapso. Puedes moverlos cuando quieras y generar una planificación con IA usando únicamente los temas asignados al período seleccionado.</p></header>
+      <div class="pl-toolbar"><div class="pl-row"><select class="pl-grade" id="pl-grade"></select><div class="pl-lapsos" id="pl-lapsos"></div><div class="pl-actions-top"><button class="pl-action soft" id="pl-open-grade"><i class="fa-solid fa-book-open"></i> Abrir en cuadernillo</button><button class="pl-action primary" id="pl-plan-lapso"><i class="fa-solid fa-wand-magic-sparkles"></i> Planificar lapso con IA</button></div></div><div class="pl-row"><strong style="color:var(--text-color,#24384c)">Filtrar estado:</strong><div class="pl-statusfilters" id="pl-statusfilters"></div></div></div>
+      <div class="pl-summary" id="pl-summary"></div><div class="pl-list" id="pl-list"></div><div class="pl-note"><i class="fa-solid fa-circle-info"></i> El lapso es una organización interna de EduGestión. No modifica el contenido curricular original del cuadernillo.</div>`;
+    main.appendChild(sec);
+    tab.addEventListener('click',()=>openSection(tab,sec));
+    const gs=sec.querySelector('#pl-grade');gs.innerHTML=Object.keys(data).map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');gs.value=gradoActual;gs.addEventListener('change',()=>{gradoActual=gs.value;render()});
+    sec.querySelector('#pl-open-grade').addEventListener('click',openGrade);
+    sec.querySelector('#pl-plan-lapso').addEventListener('click',planLapso);
+    renderLapsos();renderStatusFilters();render();return true;
+  }
+  function openSection(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;window.scrollTo({top:0,behavior:'smooth'});render()}
+  function renderLapsos(){const box=document.getElementById('pl-lapsos');if(!box)return;box.innerHTML=LAPSOS.map(l=>`<button type="button" class="pl-pill ${l===lapsoActual?'active':''}" data-lapso="${l}">${l}</button>`).join('');box.querySelectorAll('[data-lapso]').forEach(b=>b.addEventListener('click',()=>{lapsoActual=b.dataset.lapso;renderLapsos();render()}))}
+  function renderStatusFilters(){const box=document.getElementById('pl-statusfilters');if(!box)return;const opts=['Todos','Pendiente','Planificado','Trabajado','Evaluado'];box.innerHTML=opts.map(s=>`<button type="button" class="pl-pill ${s===filtroEstado?'active':''}" data-status="${s}">${s}</button>`).join('');box.querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>{filtroEstado=b.dataset.status;renderStatusFilters();render()}))}
+  function rowsForGrade(){const data=window.EDUGESTION_CEF_DATA||{},assign=assignmentMap(),track=trackMap();return (data[gradoActual]||[]).map(x=>{const k=topicKey(gradoActual,x.tema);return {...x,grado:gradoActual,lapso:assign[k]||'',estado:track[k]?.estado||'Pendiente'}})}
+  function render(){
+    const list=document.getElementById('pl-list'),sum=document.getElementById('pl-summary');if(!list||!sum)return;
+    const all=rowsForGrade(),inLapso=all.filter(x=>x.lapso===lapsoActual),shown=inLapso.filter(x=>filtroEstado==='Todos'||x.estado===filtroEstado),unassigned=all.filter(x=>!x.lapso).length;
+    const counts={Pendiente:0,Planificado:0,Trabajado:0,Evaluado:0};inLapso.forEach(x=>counts[x.estado]=(counts[x.estado]||0)+1);
+    sum.innerHTML=`<div class="pl-kpi"><small>Temas en ${esc(lapsoActual)}</small><strong>${inLapso.length}</strong></div><div class="pl-kpi"><small>Pendientes</small><strong>${counts.Pendiente||0}</strong></div><div class="pl-kpi"><small>Planificados</small><strong>${counts.Planificado||0}</strong></div><div class="pl-kpi"><small>Trabajados / Evaluados</small><strong>${(counts.Trabajado||0)+(counts.Evaluado||0)}</strong></div><div class="pl-kpi"><small>Sin asignar</small><strong>${unassigned}</strong></div>`;
+    const plan=document.getElementById('pl-plan-lapso');if(plan)plan.disabled=!inLapso.length;
+    if(!shown.length){list.innerHTML=`<div class="pl-empty"><i class="fa-solid fa-folder-open"></i><h4>${inLapso.length?'No hay temas con ese estado':'Este lapso todavía no tiene temas'}</h4><p>${inLapso.length?'Cambia el filtro de estado para ver otros contenidos.':'Usa el selector de lapso en los temas del cuadernillo o asigna temas desde aquí cambiando primero a “Todos” y usando los temas sin asignar desde el botón de administración.'}</p><button type="button" class="pl-action soft" id="pl-show-unassigned">Ver temas sin asignar</button></div>`;document.getElementById('pl-show-unassigned')?.addEventListener('click',showUnassigned);return}
+    list.innerHTML=shown.map((x,i)=>itemHtml(x,i)).join('');bindItems(list,shown);
+  }
+  function itemHtml(x,i){const desc=x.descripcion||x.tejido||x.referentes||'';return `<article class="pl-item"><div><h4>${esc(x.tema)}</h4><div class="pl-meta"><span class="pl-chip ${esc(x.estado)}">${esc(x.estado)}</span>${x.pagina?`<span class="pl-chip">p. ${esc(x.pagina)}</span>`:''}</div>${desc?`<p class="pl-desc">${esc(desc.slice(0,180))}${desc.length>180?'…':''}</p>`:''}</div><div><select class="pl-select" data-assign="${i}"><option value="">Sin asignar</option>${LAPSOS.map(l=>`<option value="${l}" ${x.lapso===l?'selected':''}>${l}</option>`).join('')}</select></div><div class="pl-item-actions"><button type="button" class="pl-small" data-open="${i}"><i class="fa-solid fa-book-open"></i> Ver tema</button><button type="button" class="pl-small" data-plan="${i}"><i class="fa-solid fa-wand-magic-sparkles"></i> Planificar</button></div></article>`}
+  function bindItems(root,arr){root.querySelectorAll('[data-assign]').forEach(s=>s.addEventListener('change',()=>{const x=arr[Number(s.dataset.assign)];setAssignment(x.grado,x.tema,s.value);render()}));root.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openTopic(arr[Number(b.dataset.open)])));root.querySelectorAll('[data-plan]').forEach(b=>b.addEventListener('click',()=>sendSingle(arr[Number(b.dataset.plan)])))}
+  function showUnassigned(){const list=document.getElementById('pl-list');if(!list)return;const arr=rowsForGrade().filter(x=>!x.lapso);if(!arr.length){list.innerHTML='<div class="pl-empty"><h4>Todos los temas ya tienen lapso asignado</h4></div>';return}list.innerHTML=`<div style="font-weight:900;color:var(--text-color,#24384c);margin-bottom:2px">Temas sin asignar · ${esc(gradoActual)}</div>`+arr.map((x,i)=>itemHtml(x,i)).join('');bindItems(list,arr)}
+  function openGrade(){document.getElementById('tab-cuadernillo-ef')?.click();setTimeout(()=>{const b=[...document.querySelectorAll('#cef-levels .cef-level')].find(x=>norm(x.dataset.nivel)===norm(gradoActual));b?.click()},120)}
+  function openTopic(x){openGrade();setTimeout(()=>{const cards=[...document.querySelectorAll('#cef-grid .cef-card')];const c=cards.find(el=>norm(el.querySelector('h4')?.textContent)===norm(x.tema));c?.querySelector('[data-ver]')?.click()},250)}
+  function sendSingle(x){const synthetic={...x,grado:gradoActual,fuente:'Cuadernillo Curricular MPPE · Educación Física',seleccionadoEn:new Date().toISOString()};writeJSON(SELECT_KEY,synthetic);document.getElementById('tab-planificacion')?.click();setTimeout(()=>fillPlanning(synthetic),180)}
+  function planLapso(){
+    const topics=rowsForGrade().filter(x=>x.lapso===lapsoActual);if(!topics.length)return;
+    const temaCompuesto=`${lapsoActual} · ${gradoActual} · ${topics.map(x=>x.tema).join(' + ')}`;
+    const block=t=>`${t.tema}${t.intencionalidad?`\nIntencionalidad: ${t.intencionalidad}`:''}${t.tejido?`\nTejido temático: ${t.tejido}`:''}${t.referentes?`\nReferentes: ${t.referentes}`:''}`;
+    const synthetic={grado:gradoActual,tema:temaCompuesto,pagina:'varias',temaIndispensable:'',intencionalidad:`Planificar el ${lapsoActual} integrando los temas curriculares seleccionados sin alterar su contenido oficial.`,tejido:topics.map(block).join('\n\n---\n\n'),referentes:'',fuente:'Cuadernillo Curricular MPPE · Educación Física',lapso:lapsoActual,seleccionadoEn:new Date().toISOString()};
+    writeJSON(SELECT_KEY,synthetic);topics.forEach(t=>addHistory(gradoActual,t.tema,t.estado,'Incluido en planificación del lapso',`Incluido en la planificación IA del ${lapsoActual}.`));document.getElementById('tab-planificacion')?.click();setTimeout(()=>fillPlanning(synthetic,true),180)
+  }
+  function fillPlanning(s,fromLapso=false){
+    const grado=document.getElementById('plan-ia-grado'),area=document.getElementById('plan-ia-area'),tema=document.getElementById('plan-ia-tema'),obj=document.getElementById('plan-ia-objetivo');if(grado){const opts=[...(grado.options||[])],m=opts.find(o=>o.value===s.grado||norm(o.textContent)===norm(s.grado));if(m)grado.value=m.value;else if(grado.tagName==='INPUT')grado.value=s.grado}if(area)area.value='Educación Física';if(tema)tema.value=s.tema;if(obj)obj.value=s.intencionalidad||'';
+    const sec=document.getElementById('section-planificacion');if(sec){let panel=document.getElementById('plan-lapso-base');if(!panel){panel=document.createElement('div');panel.id='plan-lapso-base';panel.className='card';panel.style.cssText='margin:0 0 18px;padding:18px;border:1px solid var(--border-color,#d9e2ec);border-radius:18px;background:var(--card-bg,#fff)';const form=document.getElementById('btn-planificacion-ia')?.closest('.card')||document.getElementById('btn-planificacion-ia')?.parentElement;sec.insertBefore(panel,form||sec.firstChild)}panel.innerHTML=`<div style="font-size:.78rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#1476b8"><i class="fa-solid fa-calendar-week"></i> Base curricular ${fromLapso?'del lapso':'seleccionada'}</div><h3 style="margin:6px 0 5px">${esc(s.grado)}${s.lapso?` · ${esc(s.lapso)}`:''}</h3><div style="font-weight:800;margin-bottom:8px">${esc(s.tema)}</div><div style="font-size:.86rem;color:#64748b">La IA utilizará esta selección como base curricular obligatoria del Cuadernillo de Educación Física.</div>`}
+    window.scrollTo({top:0,behavior:'smooth'});if(typeof mostrarToast==='function')mostrarToast(fromLapso?`Se cargaron ${rowsForGrade().filter(x=>x.lapso===lapsoActual).length} temas del ${lapsoActual}.`:'Tema cargado desde el panel por lapso.','success','Planificación IA')
+  }
+  function init(){try{return create()}catch(e){console.warn('EduGestión Panel por Lapso EF:',e);return false}}
+  if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>35)clearInterval(tm)},250)}
+  window.addEventListener('storage',()=>{if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))render()});
+})();
+/* EDUGESTION_CUADERNILLO_EF_FASE7_LAPSOS_END */
