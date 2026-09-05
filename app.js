@@ -9641,8 +9641,10 @@ Archivo enviado directamente desde EduGestión.`);
       tab.dataset.title='Historial de cierres';
       tab.dataset.description='Registro compartido de cierres de Control de Estudio.';
       tab.innerHTML='<i class="fa-solid fa-clock-rotate-left"></i><span>Historial de cierres</span>';
+      const cierre=document.getElementById('tab-cierre-lapso');
       const ref=document.getElementById('tab-estadisticas');
-      nav.insertBefore(tab,ref||null);
+      if(cierre && cierre.parentElement===nav) cierre.insertAdjacentElement('afterend',tab);
+      else nav.insertBefore(tab,ref||null);
       tab.addEventListener('click',()=>abrir(tab));
     }
 
@@ -9760,9 +9762,25 @@ Archivo enviado directamente desde EduGestión.`);
     },true);
   }
 
-  function init(){asegurarUI();instalarCaptura();cargar();}
+  let observer=null;
+  function vigilarMenu(){
+    if(observer)return;
+    observer=new MutationObserver(()=>{
+      if(!document.getElementById(TAB_ID) || !document.getElementById(SECTION_ID)){
+        asegurarUI();
+      }
+    });
+    observer.observe(document.body,{childList:true,subtree:true});
+  }
+
+  function init(){
+    asegurarUI();
+    instalarCaptura();
+    vigilarMenu();
+    cargar();
+  }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,350),{once:true});
   else setTimeout(init,220);
-  window.addEventListener('edugestion:session',()=>setTimeout(init,150));
+  window.addEventListener('edugestion:session',()=>setTimeout(()=>{asegurarUI();cargar();},180));
 })();
 /* EDUGESTION_HISTORIAL_CIERRES_SHARED_V2_END */
