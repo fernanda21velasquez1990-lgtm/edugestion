@@ -1,7 +1,8 @@
-/* EDUGESTION_TELEGRAM_ASISTENCIA_LABORAL_COMPLETO_V1 */
+/* EDUGESTION_TELEGRAM_NOTAS_CONTROL_ESTUDIO_FASE1_V1 */
 const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_TELEGRAM_MESSAGE = 3900;
 const pendingTextMode = new Map();
+const gradesState = new Map();
 
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -307,6 +308,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '🕒 Mi asistencia laboral', callback_data: 'teacherTime:menu' },
     ]);
     rows.push([
+      { text: '📝 Notas y Control de Estudio', callback_data: 'grades:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -553,6 +557,540 @@ function attendancePreviewKeyboard() {
   };
 }
 
+
+
+/* =========================================================
+   NOTAS Y CONTROL DE ESTUDIO · TELEGRAM FASE 1
+   ========================================================= */
+
+function gradesLapsoCode(lapso) {
+  const t = String(lapso || '').toLowerCase();
+  if (t.startsWith('2') || t.includes('seg')) return 'L2';
+  if (t.startsWith('3') || t.includes('ter')) return 'L3';
+  return 'L1';
+}
+
+function gradesLapsoFromCode(code) {
+  if (code === 'L2') return '2do Lapso';
+  if (code === 'L3') return '3er Lapso';
+  return '1er Lapso';
+}
+
+function gradesMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '1️⃣ 1er Lapso', callback_data: 'grades:lapso:L1' },
+        { text: '2️⃣ 2do Lapso', callback_data: 'grades:lapso:L2' },
+      ],
+      [{ text: '3️⃣ 3er Lapso', callback_data: 'grades:lapso:L3' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function gradesCoursesKeyboard(courses = [], lapso = '1er Lapso') {
+  const code = gradesLapsoCode(lapso);
+  const rows = courses.slice(0, 30).map((course, index) => [{
+    text: `${course.ano || 'Curso'} · Sección ${course.seccion || ''}${course.turno ? ` · ${course.turno}` : ''}`.slice(0, 60),
+    callback_data: `grades:course:${code}:${index}`,
+  }]);
+  rows.push([{ text: '↩️ Cambiar lapso', callback_data: 'grades:menu' }]);
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function gradesCourseMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📚 Ver actividades', callback_data: 'grades:activities' }],
+      [{ text: '➕ Crear actividad', callback_data: 'grades:create' }],
+      [{ text: '📊 Resumen de la sección', callback_data: 'grades:summary' }],
+      [{ text: '↩️ Cambiar curso', callback_data: 'grades:changeCourse' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function gradesActivitiesKeyboard(items = []) {
+  const rows = items.slice(0, 30).map((item, index) => [{
+    text: `${item.fecha || 'Sin fecha'} · ${item.nombre || 'Actividad'} · ${Number(item.ponderacion || 0)}%`.slice(0, 60),
+    callback_data: `grades:activity:${index}`,
+  }]);
+  rows.push([{ text: '➕ Crear actividad', callback_data: 'grades:create' }]);
+  rows.push([{ text: '📊 Resumen de la sección', callback_data: 'grades:summary' }]);
+  rows.push([{ text: '↩️ Volver', callback_data: 'grades:courseMenu' }]);
+  return { inline_keyboard: rows };
+}
+
+function gradesActivityKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '✏️ Registrar / modificar notas', callback_data: 'grades:enter' }],
+      [{ text: '📚 Volver a actividades', callback_data: 'grades:activities' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function gradesBackKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📚 Actividades', callback_data: 'grades:activities' }],
+      [{ text: '📊 Resumen de la sección', callback_data: 'grades:summary' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+async function showGradesMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botNotasContexto', { telegramId });
+  const courses = Array.isArray(result.cursos) ? result.cursos : [];
+  gradesState.set(String(chatId), {
+    courses,
+    lapso: '',
+    course: null,
+    activities: [],
+    selectedActivity: null,
+    students: [],
+  });
+  pendingTextMode.delete(String(chatId));
+
+  await sendMessage(
+    chatId,
+    `📝 <b>Notas y Control de Estudio</b>\n\nDocente: <b>${escapeHtml(result.profesor?.nombre || 'Docente')}</b>\nMateria: <b>${escapeHtml(result.profesor?.materia || 'Sin materia asignada')}</b>\n\nSelecciona el lapso que deseas trabajar:`,
+    { reply_markup: gradesMenuKeyboard() },
+  );
+}
+
+async function chooseGradesLapso(chatId, source, code) {
+  const telegramId = teacherTelegramId(source);
+  let state = gradesState.get(String(chatId));
+  if (!state || !Array.isArray(state.courses)) {
+    const result = await callEduGestion('botNotasContexto', { telegramId });
+    state = {
+      courses: Array.isArray(result.cursos) ? result.cursos : [],
+      lapso: '',
+      course: null,
+      activities: [],
+      selectedActivity: null,
+      students: [],
+    };
+  }
+
+  const lapso = gradesLapsoFromCode(code);
+  state.lapso = lapso;
+  state.course = null;
+  state.activities = [];
+  state.selectedActivity = null;
+  state.students = [];
+  gradesState.set(String(chatId), state);
+
+  if (!state.courses.length) {
+    await sendMessage(
+      chatId,
+      `⚠️ <b>${escapeHtml(lapso)}</b>\n\nNo encontré cursos con estudiantes registrados en tu cuenta docente.`,
+      { reply_markup: gradesMenuKeyboard() },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📝 <b>${escapeHtml(lapso)}</b>\n\nSelecciona el curso o sección:`,
+    { reply_markup: gradesCoursesKeyboard(state.courses, lapso) },
+  );
+}
+
+async function chooseGradesCourse(chatId, source, code, index) {
+  const state = gradesState.get(String(chatId));
+  if (!state || !Array.isArray(state.courses)) {
+    await showGradesMenu(chatId, source);
+    return;
+  }
+
+  const lapso = gradesLapsoFromCode(code);
+  const course = state.courses[Number(index)];
+  if (!course) {
+    await sendMessage(chatId, '⚠️ La lista de cursos venció. Abre nuevamente Notas y Control de Estudio.', {
+      reply_markup: gradesMenuKeyboard(),
+    });
+    return;
+  }
+
+  state.lapso = lapso;
+  state.course = course;
+  state.activities = [];
+  state.selectedActivity = null;
+  state.students = [];
+  gradesState.set(String(chatId), state);
+
+  await sendMessage(
+    chatId,
+    `📝 <b>Notas y Control de Estudio</b>\n\nLapso: <b>${escapeHtml(lapso)}</b>\nCurso: <b>${escapeHtml(course.ano || '')} · Sección ${escapeHtml(course.seccion || '')}</b>${course.turno ? `\nTurno: <b>${escapeHtml(course.turno)}</b>` : ''}\nEstudiantes: <b>${Number(course.estudiantes || 0)}</b>\n\n¿Qué deseas hacer?`,
+    { reply_markup: gradesCourseMenuKeyboard() },
+  );
+}
+
+async function showGradesCourseMenu(chatId, source) {
+  const state = gradesState.get(String(chatId));
+  if (!state?.course || !state?.lapso) {
+    await showGradesMenu(chatId, source);
+    return;
+  }
+  const course = state.course;
+  await sendMessage(
+    chatId,
+    `📝 <b>${escapeHtml(state.lapso)}</b>\nCurso: <b>${escapeHtml(course.ano || '')} · Sección ${escapeHtml(course.seccion || '')}</b>\n\nSelecciona una opción:`,
+    { reply_markup: gradesCourseMenuKeyboard() },
+  );
+}
+
+async function showGradesActivities(chatId, source) {
+  const state = gradesState.get(String(chatId));
+  if (!state?.course || !state?.lapso) {
+    await showGradesMenu(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const course = state.course;
+  const result = await callEduGestion('botNotasListarActividades', {
+    telegramId,
+    lapso: state.lapso,
+    ano: course.ano,
+    seccion: course.seccion,
+    turno: course.turno || '',
+  });
+
+  const activities = Array.isArray(result.actividades) ? result.actividades : [];
+  state.activities = activities;
+  state.selectedActivity = null;
+  gradesState.set(String(chatId), state);
+
+  if (!activities.length) {
+    await sendMessage(
+      chatId,
+      `📚 <b>Actividades · ${escapeHtml(state.lapso)}</b>\n\nCurso: <b>${escapeHtml(course.ano || '')} · Sección ${escapeHtml(course.seccion || '')}</b>\n\nTodavía no has creado actividades para este lapso.`,
+      { reply_markup: gradesActivitiesKeyboard([]) },
+    );
+    return;
+  }
+
+  const totalWeight = activities.reduce((sum, item) => sum + Number(item.ponderacion || 0), 0);
+  const body = activities.map((item, index) =>
+    `${index + 1}. <b>${escapeHtml(item.nombre || 'Actividad')}</b>\n` +
+    `Fecha: ${escapeHtml(formatPlanningDate(item.fecha || ''))} · Ponderación: <b>${Number(item.ponderacion || 0)}%</b>`
+  ).join('\n\n');
+
+  await sendMessage(
+    chatId,
+    `📚 <b>Actividades · ${escapeHtml(state.lapso)}</b>\n\nPonderación acumulada: <b>${Number(totalWeight.toFixed(2))}%</b>\n\n${body}\n\nSelecciona una actividad para registrar o modificar notas:`,
+    { reply_markup: gradesActivitiesKeyboard(activities) },
+  );
+}
+
+async function openGradesActivity(chatId, source, index) {
+  const state = gradesState.get(String(chatId));
+  const activity = state?.activities?.[Number(index)];
+  if (!state?.course || !state?.lapso || !activity) {
+    await showGradesActivities(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const course = state.course;
+  const summary = await callEduGestion('botNotasResumenSeccion', {
+    telegramId,
+    lapso: state.lapso,
+    ano: course.ano,
+    seccion: course.seccion,
+    turno: course.turno || '',
+  });
+
+  const students = Array.isArray(summary.estudiantes) ? summary.estudiantes : [];
+  state.selectedActivity = activity;
+  state.students = students;
+  gradesState.set(String(chatId), state);
+
+  const detail = students.map((student, i) => {
+    const reg = Array.isArray(student.detalle)
+      ? student.detalle.find(item => String(item.idActividad) === String(activity.id))
+      : null;
+    const status = reg?.entrego
+      ? `✅ ${reg.nota === null || reg.nota === undefined ? 'Entregó · sin nota' : `Nota ${reg.nota}/20`}`
+      : '❌ No entregó / sin registro';
+    return `${i + 1}. ${escapeHtml(student.alumno || 'Estudiante')} · ${status}`;
+  }).join('\n');
+
+  const chunks = [];
+  let current = '';
+  detail.split('\n').forEach(line => {
+    if ((current + line + '\n').length > MAX_TELEGRAM_MESSAGE && current) {
+      chunks.push(current.trim());
+      current = '';
+    }
+    current += line + '\n';
+  });
+  if (current.trim()) chunks.push(current.trim());
+
+  await sendMessage(
+    chatId,
+    `📝 <b>${escapeHtml(activity.nombre || 'Actividad')}</b>\n\nFecha: <b>${escapeHtml(formatPlanningDate(activity.fecha || ''))}</b>\nPonderación: <b>${Number(activity.ponderacion || 0)}%</b>\nCurso: <b>${escapeHtml(course.ano || '')} · Sección ${escapeHtml(course.seccion || '')}</b>\n\nEstado actual de los estudiantes:`,
+  );
+  for (const chunk of chunks) await sendMessage(chatId, chunk);
+  await sendMessage(
+    chatId,
+    'Puedes registrar o modificar las notas de esta actividad.',
+    { reply_markup: gradesActivityKeyboard() },
+  );
+}
+
+async function requestGradesEntry(chatId, source) {
+  const state = gradesState.get(String(chatId));
+  if (!state?.selectedActivity || !Array.isArray(state.students) || !state.students.length) {
+    await showGradesActivities(chatId, source);
+    return;
+  }
+
+  pendingTextMode.set(String(chatId), 'grades-entry');
+  await sendMessage(
+    chatId,
+    `✏️ <b>Registrar notas</b>\n\nActividad: <b>${escapeHtml(state.selectedActivity.nombre || 'Actividad')}</b>\n\nEscribe únicamente los estudiantes que deseas actualizar usando este formato:\n\n<code>1=18; 2=15.5; 3=NE</code>\n\n• Número = posición del estudiante en la lista.\n• Nota válida: 0 a 20.\n• <b>NE</b> = No entregó.\n• Los estudiantes que no escribas conservarán su información actual.\n\nEscribe <code>cancelar</code> para salir.`,
+    { reply_markup: gradesActivityKeyboard() },
+  );
+}
+
+function parseGradesEntry(text, students) {
+  const raw = String(text || '').trim();
+  if (!raw) throw new Error('Escribe al menos una nota.');
+  const parts = raw.split(';').map(x => x.trim()).filter(Boolean);
+  const records = [];
+  const seen = new Set();
+
+  for (const part of parts) {
+    const match = part.match(/^(\d+)\s*=\s*(.+)$/);
+    if (!match) throw new Error(`No entendí "${part}". Usa el formato 1=18; 2=15; 3=NE.`);
+    const pos = Number(match[1]);
+    if (!Number.isInteger(pos) || pos < 1 || pos > students.length) {
+      throw new Error(`El estudiante número ${pos} no existe en la lista.`);
+    }
+    if (seen.has(pos)) throw new Error(`El estudiante número ${pos} aparece más de una vez.`);
+    seen.add(pos);
+
+    const student = students[pos - 1];
+    const value = String(match[2] || '').trim().toUpperCase();
+    if (['NE', 'NO', 'N'].includes(value)) {
+      records.push({ idAlumno: student.idAlumno, entrego: 'No', nota: '', observacion: '' });
+      continue;
+    }
+
+    const note = Number(String(match[2]).replace(',', '.'));
+    if (!Number.isFinite(note) || note < 0 || note > 20) {
+      throw new Error(`La nota de ${student.alumno || `estudiante ${pos}`} debe estar entre 0 y 20, o usa NE.`);
+    }
+    records.push({ idAlumno: student.idAlumno, entrego: 'Si', nota: Math.round(note * 100) / 100, observacion: '' });
+  }
+
+  return records;
+}
+
+async function saveGradesEntry(chatId, source, text) {
+  const state = gradesState.get(String(chatId));
+  if (!state?.selectedActivity || !Array.isArray(state.students)) {
+    pendingTextMode.delete(String(chatId));
+    await showGradesMenu(chatId, source);
+    return;
+  }
+
+  let records;
+  try {
+    records = parseGradesEntry(text, state.students);
+  } catch (error) {
+    await sendMessage(
+      chatId,
+      `⚠️ ${escapeHtml(error.message)}\n\nEjemplo correcto:\n<code>1=18; 2=15.5; 3=NE</code>`,
+      { reply_markup: gradesActivityKeyboard() },
+    );
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botNotasGuardarCalificaciones', {
+    telegramId,
+    idActividad: state.selectedActivity.id,
+    registros: records,
+  });
+
+  pendingTextMode.delete(String(chatId));
+  await sendMessage(
+    chatId,
+    `✅ <b>Calificaciones guardadas</b>\n\nActividad: <b>${escapeHtml(state.selectedActivity.nombre || 'Actividad')}</b>\nRegistros actualizados: <b>${Number(result.guardados || records.length)}</b>\n\nLos cambios ya quedaron guardados en EduGestión.`,
+    { reply_markup: gradesBackKeyboard() },
+  );
+}
+
+async function startGradesActivityCreation(chatId, source) {
+  const state = gradesState.get(String(chatId));
+  if (!state?.course || !state?.lapso) {
+    await showGradesMenu(chatId, source);
+    return;
+  }
+
+  state.newActivity = { nombre: '', fecha: '', ponderacion: 0 };
+  gradesState.set(String(chatId), state);
+  pendingTextMode.set(String(chatId), 'grades-create-name');
+
+  await sendMessage(
+    chatId,
+    `➕ <b>Nueva actividad</b>\n\nLapso: <b>${escapeHtml(state.lapso)}</b>\nCurso: <b>${escapeHtml(state.course.ano || '')} · Sección ${escapeHtml(state.course.seccion || '')}</b>\n\nEscribe el <b>nombre de la actividad</b>.\n\nEjemplo:\n<code>Prueba práctica de coordinación</code>\n\nEscribe <code>cancelar</code> para salir.`,
+    { reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: 'grades:courseMenu' }]] } },
+  );
+}
+
+async function handleGradesCreateText(chatId, source, text, mode) {
+  const state = gradesState.get(String(chatId));
+  if (!state?.course || !state?.lapso) {
+    pendingTextMode.delete(String(chatId));
+    await showGradesMenu(chatId, source);
+    return;
+  }
+
+  if (String(text).trim().toLowerCase() === 'cancelar') {
+    pendingTextMode.delete(String(chatId));
+    delete state.newActivity;
+    gradesState.set(String(chatId), state);
+    await showGradesCourseMenu(chatId, source);
+    return;
+  }
+
+  state.newActivity = state.newActivity || { nombre: '', fecha: '', ponderacion: 0 };
+
+  if (mode === 'grades-create-name') {
+    const name = String(text || '').trim();
+    if (name.length < 3) {
+      await sendMessage(chatId, '⚠️ Escribe un nombre de al menos 3 caracteres.');
+      return;
+    }
+    state.newActivity.nombre = name.slice(0, 180);
+    gradesState.set(String(chatId), state);
+    pendingTextMode.set(String(chatId), 'grades-create-date');
+    await sendMessage(
+      chatId,
+      `📅 <b>Fecha de la actividad</b>\n\nEscribe la fecha como <code>AAAA-MM-DD</code>.\nEjemplo: <code>2026-09-15</code>\n\nTambién puedes escribir <code>hoy</code>.`,
+    );
+    return;
+  }
+
+  if (mode === 'grades-create-date') {
+    let date = String(text || '').trim().toLowerCase();
+    if (date === 'hoy') date = new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      await sendMessage(chatId, '⚠️ Usa una fecha válida en formato AAAA-MM-DD. Ejemplo: 2026-09-15.');
+      return;
+    }
+    state.newActivity.fecha = date;
+    gradesState.set(String(chatId), state);
+    pendingTextMode.set(String(chatId), 'grades-create-weight');
+    await sendMessage(
+      chatId,
+      `⚖️ <b>Ponderación</b>\n\nEscribe el porcentaje de esta actividad, de 1 a 100.\nEjemplo: <code>25</code>`,
+    );
+    return;
+  }
+
+  if (mode === 'grades-create-weight') {
+    const weight = Number(String(text || '').replace(',', '.').trim());
+    if (!Number.isFinite(weight) || weight <= 0 || weight > 100) {
+      await sendMessage(chatId, '⚠️ La ponderación debe ser un número mayor que 0 y no superar 100.');
+      return;
+    }
+
+    state.newActivity.ponderacion = weight;
+    const telegramId = teacherTelegramId(source);
+    const result = await callEduGestion('botNotasCrearActividad', {
+      telegramId,
+      lapso: state.lapso,
+      ano: state.course.ano,
+      seccion: state.course.seccion,
+      turno: state.course.turno || '',
+      nombre: state.newActivity.nombre,
+      fecha: state.newActivity.fecha,
+      ponderacion: state.newActivity.ponderacion,
+    });
+
+    pendingTextMode.delete(String(chatId));
+    delete state.newActivity;
+    gradesState.set(String(chatId), state);
+
+    await sendMessage(
+      chatId,
+      `✅ <b>Actividad creada</b>\n\nNombre: <b>${escapeHtml(result.actividad?.nombre || '')}</b>\nFecha: <b>${escapeHtml(formatPlanningDate(result.actividad?.fecha || ''))}</b>\nPonderación: <b>${Number(result.actividad?.ponderacion || 0)}%</b>\nPonderación acumulada del lapso: <b>${Number(result.ponderacionAcumulada || 0)}%</b>`,
+      { reply_markup: gradesBackKeyboard() },
+    );
+  }
+}
+
+async function showGradesSummary(chatId, source) {
+  const state = gradesState.get(String(chatId));
+  if (!state?.course || !state?.lapso) {
+    await showGradesMenu(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const course = state.course;
+  const result = await callEduGestion('botNotasResumenSeccion', {
+    telegramId,
+    lapso: state.lapso,
+    ano: course.ano,
+    seccion: course.seccion,
+    turno: course.turno || '',
+  });
+
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+  const header =
+    `📊 <b>Resumen de la sección</b>\n\n` +
+    `Lapso: <b>${escapeHtml(result.lapso || state.lapso)}</b>\n` +
+    `Curso: <b>${escapeHtml(result.ano || course.ano || '')} · Sección ${escapeHtml(result.seccion || course.seccion || '')}</b>\n` +
+    `Actividades: <b>${Number(result.totalActividades || 0)}</b>\n` +
+    `Estudiantes: <b>${Number(result.totalEstudiantes || students.length)}</b>\n` +
+    `Promedio de la sección: <b>${result.promedioSeccion === null || result.promedioSeccion === undefined ? 'Sin notas' : `${Number(result.promedioSeccion).toFixed(2)}/20`}</b>\n\n`;
+
+  await sendMessage(chatId, header);
+
+  if (!students.length) {
+    await sendMessage(chatId, 'No hay estudiantes para esta sección.', { reply_markup: gradesBackKeyboard() });
+    return;
+  }
+
+  let current = '';
+  const chunks = [];
+  students.forEach((student, index) => {
+    const attendance = student.asistencia || {};
+    const note = student.notaFinal === null || student.notaFinal === undefined
+      ? 'Sin nota'
+      : `${Number(student.notaFinal).toFixed(2)}/20`;
+    const line =
+      `${index + 1}. <b>${escapeHtml(student.alumno || 'Estudiante')}</b>\n` +
+      `Nota: <b>${note}</b> · Entregadas: ${Number(student.entregadas || 0)}/${Number(student.totalActividades || 0)}\n` +
+      `Asistencia: P ${Number(attendance.presentes || 0)} · A ${Number(attendance.ausentes || 0)} · T ${Number(attendance.tardanzas || 0)}\n\n`;
+    if ((current + line).length > MAX_TELEGRAM_MESSAGE && current) {
+      chunks.push(current.trim());
+      current = '';
+    }
+    current += line;
+  });
+  if (current.trim()) chunks.push(current.trim());
+
+  for (const chunk of chunks) await sendMessage(chatId, chunk);
+  await sendMessage(chatId, 'Resumen actualizado de EduGestión.', { reply_markup: gradesBackKeyboard() });
+}
+
+/* =========================================================
+   FIN NOTAS Y CONTROL DE ESTUDIO · TELEGRAM FASE 1
+   ========================================================= */
 
 function teacherTimeKeyboard() {
   return {
@@ -1837,6 +2375,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/notas(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showGradesMenu(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -1897,6 +2440,21 @@ async function handleMessage(message) {
       return;
     }
 
+    if (mode === 'grades-entry') {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        pendingTextMode.delete(String(chatId));
+        await showGradesActivities(chatId, message);
+      } else {
+        await saveGradesEntry(chatId, message, text);
+      }
+      return;
+    }
+
+    if (['grades-create-name', 'grades-create-date', 'grades-create-weight'].includes(mode)) {
+      await handleGradesCreateText(chatId, message, text, mode);
+      return;
+    }
+
     try {
       await previewAttendance(chatId, message, text);
     } catch (error) {
@@ -1929,7 +2487,55 @@ async function handleCallbackQuery(callbackQuery) {
   await answerCallbackQuery(callbackId);
 
   if (data === 'menu') {
+    pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'grades:menu') {
+    await showGradesMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('grades:lapso:')) {
+    await chooseGradesLapso(chatId, callbackQuery, data.split(':')[2]);
+    return;
+  }
+  if (data.startsWith('grades:course:')) {
+    const parts = data.split(':');
+    await chooseGradesCourse(chatId, callbackQuery, parts[2], Number(parts[3]));
+    return;
+  }
+  if (data === 'grades:changeCourse') {
+    const state = gradesState.get(String(chatId));
+    if (state?.lapso) await chooseGradesLapso(chatId, callbackQuery, gradesLapsoCode(state.lapso));
+    else await showGradesMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'grades:courseMenu') {
+    pendingTextMode.delete(String(chatId));
+    await showGradesCourseMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'grades:activities') {
+    pendingTextMode.delete(String(chatId));
+    await showGradesActivities(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('grades:activity:')) {
+    await openGradesActivity(chatId, callbackQuery, Number(data.split(':')[2]));
+    return;
+  }
+  if (data === 'grades:enter') {
+    await requestGradesEntry(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'grades:create') {
+    await startGradesActivityCreation(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'grades:summary') {
+    pendingTextMode.delete(String(chatId));
+    await showGradesSummary(chatId, callbackQuery);
     return;
   }
 
@@ -2165,7 +2771,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase4.0B-security-backup-ready',
+        status: 'phase5.0A-notas-control-estudio-ready',
       });
     }
 
