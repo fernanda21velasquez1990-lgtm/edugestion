@@ -311,6 +311,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '📝 Notas y Control de Estudio', callback_data: 'grades:menu' },
     ]);
     rows.push([
+      { text: '📘 Ficha académica', callback_data: 'academic:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -370,10 +373,44 @@ function studentsListKeyboard(students = []) {
   return { inline_keyboard: rows };
 }
 
-function studentDetailKeyboard() {
+function studentDetailKeyboard(index = 0) {
   return {
     inline_keyboard: [
+      [{ text: '📘 Ver ficha académica', callback_data: `academic:student:${Number(index)}` }],
       [{ text: '📚 Volver a estudiantes', callback_data: 'students:menu' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function academicStudentsKeyboard(students = []) {
+  const rows = students.slice(0, 30).map((student, index) => [{
+    text: `${index + 1}. ${student.nombre || 'Estudiante'} · ${student.ano || ''}${student.seccion ? ` ${student.seccion}` : ''}`.slice(0, 60),
+    callback_data: `academic:student:${index}`,
+  }]);
+  rows.push([{ text: '🏠 Menú principal', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function academicLapsoKeyboard(index) {
+  return {
+    inline_keyboard: [
+      [
+        { text: '1️⃣ 1er Lapso', callback_data: `academic:lapso:${Number(index)}:L1` },
+        { text: '2️⃣ 2do Lapso', callback_data: `academic:lapso:${Number(index)}:L2` },
+      ],
+      [{ text: '3️⃣ 3er Lapso', callback_data: `academic:lapso:${Number(index)}:L3` }],
+      [{ text: '👨‍🎓 Elegir otro estudiante', callback_data: 'academic:menu' }],
+      [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function academicDetailKeyboard(index, lapsoCode) {
+  return {
+    inline_keyboard: [
+      [{ text: '🔄 Ver otro lapso', callback_data: `academic:student:${Number(index)}` }],
+      [{ text: '👨‍🎓 Elegir otro estudiante', callback_data: 'academic:menu' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
     ],
   };
@@ -1667,9 +1704,150 @@ Registros: <b>${Number(attendance.total || 0)}</b>
 🟠 Tardanzas: <b>${Number(attendance.tardanzas || 0)}</b>
 🟣 Justificadas: <b>${Number(attendance.justificadas || 0)}</b>
 Asistencia efectiva: <b>${Number(attendance.porcentajeAsistencia || 0).toFixed(2)}%</b>`,
-    { reply_markup: studentDetailKeyboard() },
+    { reply_markup: studentDetailKeyboard(Number(index)) },
   );
 }
+
+
+async function showAcademicStudents(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  pendingTextMode.delete(String(chatId));
+
+  const result = await callEduGestion('botListarEstudiantes', {
+    telegramId,
+    limite: 30,
+  });
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+
+  if (!students.length) {
+    await sendMessage(
+      chatId,
+      '📘 <b>Ficha académica</b>\n\nTodavía no tienes estudiantes registrados.',
+      { reply_markup: mainMenuKeyboard(true) },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📘 <b>Ficha académica</b>
+
+Selecciona el estudiante cuya ficha deseas consultar.
+
+La ficha reúne:
+• Datos académicos y representante
+• Asistencia acumulada
+• Actividades del lapso
+• Entregadas y no entregadas
+• Calificaciones
+• Promedio del lapso`,
+    { reply_markup: academicStudentsKeyboard(students) },
+  );
+}
+
+async function chooseAcademicStudent(chatId, source, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetalleEstudiante', {
+    telegramId,
+    indice: Number(index),
+  });
+  const student = result.estudiante || {};
+
+  await sendMessage(
+    chatId,
+    `📘 <b>Ficha académica</b>
+
+Estudiante: <b>${escapeHtml(student.nombre || 'Estudiante')}</b>
+Curso: <b>${escapeHtml(student.ano || 'No registrado')} · Sección ${escapeHtml(student.seccion || '—')}</b>
+
+Selecciona el lapso que deseas consultar:`,
+    { reply_markup: academicLapsoKeyboard(Number(index)) },
+  );
+}
+
+function academicLapsoLabel(code) {
+  if (code === 'L2') return '2do Lapso';
+  if (code === 'L3') return '3er Lapso';
+  return '1er Lapso';
+}
+
+async function showAcademicRecord(chatId, source, index, lapsoCode) {
+  const telegramId = teacherTelegramId(source);
+  const lapso = academicLapsoLabel(lapsoCode);
+
+  const result = await callEduGestion('botFichaAcademicaEstudiante', {
+    telegramId,
+    indice: Number(index),
+    lapso,
+  });
+
+  const student = result.estudiante || {};
+  const attendance = result.asistencia || {};
+  const academic = result.resumenAcademico || {};
+  const activities = Array.isArray(result.actividades) ? result.actividades : [];
+
+  const representativePhone = student.telefonoRepresentante
+    ? `<code>${escapeHtml(student.telefonoRepresentante)}</code>`
+    : 'No registrado';
+  const representativeEmail = student.emailRepresentante
+    ? escapeHtml(student.emailRepresentante)
+    : 'No registrado';
+
+  const activitiesText = activities.length
+    ? activities.map((item, i) => {
+        const grade = item.nota === null || item.nota === undefined
+          ? 'Sin nota'
+          : `${Number(item.nota).toFixed(2)}/20`;
+        return `${i + 1}. ${item.entrego ? '✅' : '❌'} <b>${escapeHtml(item.actividad || 'Actividad')}</b>\n` +
+          `   Ponderación: ${Number(item.ponderacion || 0)}% · Nota: <b>${grade}</b>`;
+      }).join('\n\n')
+    : 'No hay actividades registradas en este lapso.';
+
+  const average = academic.promedioLapso === null || academic.promedioLapso === undefined
+    ? 'Sin promedio'
+    : `${Number(academic.promedioLapso).toFixed(2)}/20`;
+
+  await sendMessage(
+    chatId,
+    `📘 <b>FICHA ACADÉMICA</b>
+
+👨‍🎓 <b>${escapeHtml(student.nombre || 'Estudiante')}</b>
+Cédula: ${escapeHtml(student.cedula || 'No registrada')}
+Curso: ${escapeHtml(student.ano || 'No registrado')} · Sección ${escapeHtml(student.seccion || '—')}
+Turno: ${escapeHtml(student.turno || 'No registrado')}
+Lapso: <b>${escapeHtml(result.lapso || lapso)}</b>
+
+👪 <b>Representante</b>
+Nombre: ${escapeHtml(student.representante || 'No registrado')}
+Teléfono: ${representativePhone}
+Correo: ${representativeEmail}
+
+📋 <b>Asistencia acumulada</b>
+Registros: <b>${Number(attendance.total || 0)}</b>
+🟢 Presentes: <b>${Number(attendance.presentes || 0)}</b>
+🔴 Ausentes: <b>${Number(attendance.ausentes || 0)}</b>
+🟠 Tardanzas: <b>${Number(attendance.tardanzas || 0)}</b>
+🟣 Justificadas: <b>${Number(attendance.justificadas || 0)}</b>
+Asistencia efectiva: <b>${Number(attendance.porcentajeAsistencia || 0).toFixed(2)}%</b>
+
+📝 <b>Resumen académico</b>
+Actividades: <b>${Number(academic.totalActividades || 0)}</b>
+✅ Entregadas: <b>${Number(academic.entregadas || 0)}</b>
+❌ No entregadas: <b>${Number(academic.noEntregadas || 0)}</b>
+⭐ Promedio del lapso: <b>${average}</b>
+
+📚 <b>Detalle de actividades</b>
+${activitiesText}`,
+    { reply_markup: academicDetailKeyboard(Number(index), lapsoCode) },
+  );
+}
+
 
 function formatPlanningDate(value) {
   const parts = String(value || '').split('-');
@@ -2298,7 +2476,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -2377,6 +2555,11 @@ async function handleMessage(message) {
 
   if (/^\/notas(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showGradesMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/ficha(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showAcademicStudents(chatId, message);
     return;
   }
 
@@ -2489,6 +2672,23 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'academic:menu') {
+    await showAcademicStudents(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('academic:student:')) {
+    const index = Number(data.split(':')[2]);
+    await chooseAcademicStudent(chatId, callbackQuery, index);
+    return;
+  }
+  if (data.startsWith('academic:lapso:')) {
+    const parts = data.split(':');
+    const index = Number(parts[2]);
+    const lapsoCode = parts[3] || 'L1';
+    await showAcademicRecord(chatId, callbackQuery, index, lapsoCode);
     return;
   }
 
@@ -2771,7 +2971,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.0A-notas-control-estudio-ready',
+        status: 'phase5.1-ficha-academica-ready',
       });
     }
 
