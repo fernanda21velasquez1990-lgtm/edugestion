@@ -485,6 +485,7 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '🗓️ Calendario docente', callback_data: 'teacherCalendar:menu' },
+      { text: '📚 Biblioteca digital', callback_data: 'digitalLibrary:menu' },
     ]);
     rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
@@ -895,6 +896,399 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const digitalLibraryDraft = new Map();
+
+function digitalLibraryMainKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '➕ Guardar recurso', callback_data: 'digitalLibrary:create' }],
+      [{ text: '🔎 Buscar recurso', callback_data: 'digitalLibrary:search' }],
+      [{ text: '📋 Ver biblioteca', callback_data: 'digitalLibrary:list' }],
+      [{ text: '📊 Resumen', callback_data: 'digitalLibrary:summary' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function digitalLibraryTypesKeyboard() {
+  const items = [
+    ['📄 Documento', 'Documento'],
+    ['🔗 Enlace', 'Enlace'],
+    ['🎬 Video', 'Video'],
+    ['🖼️ Imagen', 'Imagen'],
+    ['🎧 Audio', 'Audio'],
+    ['📝 Otro', 'Otro'],
+  ];
+  return {
+    inline_keyboard: [
+      ...items.map(([label, value]) => [{
+        text: label,
+        callback_data: `digitalLibrary:type:${encodeURIComponent(value)}`,
+      }]),
+      [{ text: '⬅️ Volver', callback_data: 'digitalLibrary:menu' }],
+    ],
+  };
+}
+
+function digitalLibraryCategoriesKeyboard() {
+  const items = [
+    ['🗂️ Planificación', 'Planificación'],
+    ['🧠 Evaluación', 'Evaluación'],
+    ['🎯 Actividad', 'Actividad'],
+    ['🧰 Recurso didáctico', 'Recurso didáctico'],
+    ['📜 Normativa', 'Normativa'],
+    ['📝 Otro', 'Otro'],
+  ];
+  return {
+    inline_keyboard: [
+      ...items.map(([label, value]) => [{
+        text: label,
+        callback_data: `digitalLibrary:category:${encodeURIComponent(value)}`,
+      }]),
+      [{ text: '⬅️ Volver', callback_data: 'digitalLibrary:menu' }],
+    ],
+  };
+}
+
+function digitalLibraryListKeyboard(items = []) {
+  const rows = items.slice(0, 30).map((item) => [{
+    text: `${digitalLibraryTypeIcon(item.tipo)} ${item.titulo || 'Recurso'}`.slice(0, 60),
+    callback_data: `digitalLibrary:item:${item.id}`,
+  }]);
+  rows.push([{ text: '➕ Guardar recurso', callback_data: 'digitalLibrary:create' }]);
+  rows.push([{ text: '🔎 Buscar', callback_data: 'digitalLibrary:search' }]);
+  rows.push([{ text: '📊 Resumen', callback_data: 'digitalLibrary:summary' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function digitalLibraryDetailKeyboard(id, url) {
+  const rows = [];
+  if (url) rows.push([{ text: '🔗 Abrir enlace', url }]);
+  rows.push([{ text: '🗑️ Eliminar recurso', callback_data: `digitalLibrary:deleteAsk:${id}` }]);
+  rows.push([{ text: '⬅️ Ver biblioteca', callback_data: 'digitalLibrary:list' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function digitalLibraryTypeIcon(tipo) {
+  return ({
+    Documento: '📄',
+    Enlace: '🔗',
+    Video: '🎬',
+    Imagen: '🖼️',
+    Audio: '🎧',
+    Otro: '📝',
+  })[tipo] || '📝';
+}
+
+async function showDigitalLibraryMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  await callEduGestion('botBibliotecaContexto', { telegramId });
+
+  await sendMessage(
+    chatId,
+    `📚 <b>BIBLIOTECA DIGITAL DOCENTE</b>
+━━━━━━━━━━━━━━━━━━
+
+Guarda, organiza y consulta tus materiales, documentos, enlaces y recursos docentes desde Telegram.`,
+    { reply_markup: digitalLibraryMainKeyboard() },
+  );
+}
+
+async function startDigitalLibraryCreate(chatId) {
+  digitalLibraryDraft.set(String(chatId), {});
+  pendingTextMode.delete(String(chatId));
+
+  await sendMessage(
+    chatId,
+    `➕ <b>GUARDAR RECURSO</b>
+
+Selecciona el tipo de recurso:`,
+    { reply_markup: digitalLibraryTypesKeyboard() },
+  );
+}
+
+async function chooseDigitalLibraryType(chatId, type) {
+  const draft = digitalLibraryDraft.get(String(chatId)) || {};
+  draft.tipo = type;
+  digitalLibraryDraft.set(String(chatId), draft);
+
+  await sendMessage(
+    chatId,
+    `${digitalLibraryTypeIcon(type)} Tipo seleccionado: <b>${escapeHtml(type)}</b>
+
+Ahora selecciona la categoría:`,
+    { reply_markup: digitalLibraryCategoriesKeyboard() },
+  );
+}
+
+async function chooseDigitalLibraryCategory(chatId, category) {
+  const draft = digitalLibraryDraft.get(String(chatId)) || {};
+  draft.categoria = category;
+  digitalLibraryDraft.set(String(chatId), draft);
+  pendingTextMode.set(String(chatId), 'library-title');
+
+  await sendMessage(
+    chatId,
+    `🗂️ Categoría: <b>${escapeHtml(category)}</b>
+
+Escribe el <b>título</b> del recurso.
+
+Para cancelar escribe <code>cancelar</code>.`,
+  );
+}
+
+async function handleDigitalLibraryText(chatId, source, text, mode) {
+  const draft = digitalLibraryDraft.get(String(chatId)) || {};
+  const raw = String(text || '').trim();
+
+  if (raw.toLowerCase() === 'cancelar') {
+    pendingTextMode.delete(String(chatId));
+    digitalLibraryDraft.delete(String(chatId));
+    await showDigitalLibraryMenu(chatId, source);
+    return true;
+  }
+
+  if (mode === 'library-title') {
+    if (!raw) {
+      await sendMessage(chatId, '⚠️ El título no puede quedar vacío.');
+      return true;
+    }
+    draft.titulo = raw;
+    digitalLibraryDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'library-url');
+    await sendMessage(
+      chatId,
+      `Escribe el <b>enlace URL</b> del recurso.
+
+Debe comenzar por <code>http://</code> o <code>https://</code>.
+
+Si no tiene enlace, escribe <code>sin enlace</code>.`,
+    );
+    return true;
+  }
+
+  if (mode === 'library-url') {
+    if (!/^sin enlace$/i.test(raw) && !/^https?:\/\/\S+$/i.test(raw)) {
+      await sendMessage(chatId, '⚠️ El enlace debe comenzar por <code>http://</code> o <code>https://</code>, o escribe <code>sin enlace</code>.');
+      return true;
+    }
+    draft.url = /^sin enlace$/i.test(raw) ? '' : raw;
+    digitalLibraryDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'library-description');
+    await sendMessage(chatId, 'Escribe una <b>descripción</b> o escribe <code>sin descripción</code>.');
+    return true;
+  }
+
+  if (mode === 'library-description') {
+    draft.descripcion = /^sin descripci[oó]n$/i.test(raw) ? '' : raw;
+    digitalLibraryDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'library-grade');
+    await sendMessage(chatId, 'Escribe el <b>grado/año</b> o escribe <code>sin grado</code>.');
+    return true;
+  }
+
+  if (mode === 'library-grade') {
+    draft.grado = /^sin grado$/i.test(raw) ? '' : raw;
+    digitalLibraryDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'library-matter');
+    await sendMessage(chatId, 'Escribe la <b>materia</b> o escribe <code>usar mi materia</code>.');
+    return true;
+  }
+
+  if (mode === 'library-matter') {
+    draft.materia = /^usar mi materia$/i.test(raw) ? '' : raw;
+    digitalLibraryDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'library-tags');
+    await sendMessage(
+      chatId,
+      `Escribe algunas <b>etiquetas</b> separadas por comas.
+
+Ejemplo:
+<code>coordinación, equilibrio, 1ero</code>
+
+Si no deseas etiquetas, escribe <code>sin etiquetas</code>.`,
+    );
+    return true;
+  }
+
+  if (mode === 'library-tags') {
+    draft.etiquetas = /^sin etiquetas$/i.test(raw) ? '' : raw;
+
+    const telegramId = teacherTelegramId(source);
+    const result = await callEduGestion('botBibliotecaGuardar', {
+      telegramId,
+      ...draft,
+    });
+
+    pendingTextMode.delete(String(chatId));
+    digitalLibraryDraft.delete(String(chatId));
+
+    const r = result.recurso || {};
+
+    await sendMessage(
+      chatId,
+      `✅ <b>RECURSO GUARDADO</b>
+━━━━━━━━━━━━━━━━━━
+
+${digitalLibraryTypeIcon(r.tipo)} <b>${escapeHtml(r.titulo || '')}</b>
+
+Tipo: <b>${escapeHtml(r.tipo || '')}</b>
+Categoría: <b>${escapeHtml(r.categoria || '')}</b>
+${r.grado ? `Grado/Año: <b>${escapeHtml(r.grado)}</b>\n` : ''}${r.materia ? `Materia: <b>${escapeHtml(r.materia)}</b>\n` : ''}${r.url ? `Enlace: ${escapeHtml(r.url)}\n` : ''}${r.etiquetas ? `Etiquetas: <b>${escapeHtml(r.etiquetas)}</b>\n` : ''}${r.descripcion ? `\n📝 ${escapeHtml(r.descripcion)}` : ''}`,
+      { reply_markup: digitalLibraryMainKeyboard() },
+    );
+    return true;
+  }
+
+  if (mode === 'library-search') {
+    const telegramId = teacherTelegramId(source);
+    const result = await callEduGestion('botBibliotecaBuscar', {
+      telegramId,
+      busqueda: raw,
+    });
+
+    pendingTextMode.delete(String(chatId));
+
+    const items = Array.isArray(result.recursos) ? result.recursos : [];
+
+    if (!items.length) {
+      await sendMessage(
+        chatId,
+        `🔎 No encontré recursos para <b>${escapeHtml(raw)}</b>.`,
+        { reply_markup: digitalLibraryMainKeyboard() },
+      );
+      return true;
+    }
+
+    await sendMessage(
+      chatId,
+      `🔎 <b>RESULTADOS DE BÚSQUEDA</b>
+
+Búsqueda: <b>${escapeHtml(raw)}</b>
+Resultados: <b>${Number(result.total || items.length)}</b>`,
+      { reply_markup: digitalLibraryListKeyboard(items) },
+    );
+    return true;
+  }
+
+  return false;
+}
+
+async function startDigitalLibrarySearch(chatId) {
+  pendingTextMode.set(String(chatId), 'library-search');
+
+  await sendMessage(
+    chatId,
+    `🔎 <b>BUSCAR RECURSO</b>
+
+Escribe una palabra o frase.
+
+Puedes buscar por título, descripción, grado, materia o etiquetas.
+
+Para cancelar escribe <code>cancelar</code>.`,
+  );
+}
+
+async function showDigitalLibraryList(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botBibliotecaListar', { telegramId });
+  const items = Array.isArray(result.recursos) ? result.recursos : [];
+
+  if (!items.length) {
+    await sendMessage(
+      chatId,
+      `📋 <b>BIBLIOTECA DIGITAL</b>
+
+Todavía no tienes recursos guardados.`,
+      { reply_markup: digitalLibraryMainKeyboard() },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📋 <b>BIBLIOTECA DIGITAL</b>
+━━━━━━━━━━━━━━━━━━
+
+Total de recursos: <b>${Number(result.total || items.length)}</b>
+
+Selecciona un recurso para ver el detalle:`,
+    { reply_markup: digitalLibraryListKeyboard(items) },
+  );
+}
+
+async function showDigitalLibraryItem(chatId, source, id) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botBibliotecaDetalle', { telegramId, id });
+  const r = result.recurso || {};
+
+  await sendMessage(
+    chatId,
+    `${digitalLibraryTypeIcon(r.tipo)} <b>${escapeHtml(r.titulo || '')}</b>
+━━━━━━━━━━━━━━━━━━
+
+Tipo: <b>${escapeHtml(r.tipo || '')}</b>
+Categoría: <b>${escapeHtml(r.categoria || '')}</b>
+${r.grado ? `Grado/Año: <b>${escapeHtml(r.grado)}</b>\n` : ''}${r.materia ? `Materia: <b>${escapeHtml(r.materia)}</b>\n` : ''}${r.etiquetas ? `Etiquetas: <b>${escapeHtml(r.etiquetas)}</b>\n` : ''}${r.descripcion ? `\n📝 ${escapeHtml(r.descripcion)}\n` : ''}${r.url ? `\n🔗 ${escapeHtml(r.url)}` : ''}`,
+    { reply_markup: digitalLibraryDetailKeyboard(r.id, r.url) },
+  );
+}
+
+async function deleteDigitalLibraryItem(chatId, source, id) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botBibliotecaEliminar', { telegramId, id });
+
+  await sendMessage(
+    chatId,
+    `🗑️ <b>RECURSO ELIMINADO</b>
+
+${escapeHtml(result.titulo || '')}`,
+    { reply_markup: digitalLibraryMainKeyboard() },
+  );
+}
+
+async function showDigitalLibrarySummary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botBibliotecaResumen', { telegramId });
+
+  const tipos = result.porTipo || {};
+  const cats = result.porCategoria || {};
+
+  await sendMessage(
+    chatId,
+    `📊 <b>RESUMEN DE LA BIBLIOTECA</b>
+━━━━━━━━━━━━━━━━━━
+
+Total de recursos: <b>${Number(result.total || 0)}</b>
+
+<b>Por tipo</b>
+📄 Documentos: <b>${Number(tipos.Documento || 0)}</b>
+🔗 Enlaces: <b>${Number(tipos.Enlace || 0)}</b>
+🎬 Videos: <b>${Number(tipos.Video || 0)}</b>
+🖼️ Imágenes: <b>${Number(tipos.Imagen || 0)}</b>
+🎧 Audios: <b>${Number(tipos.Audio || 0)}</b>
+📝 Otros: <b>${Number(tipos.Otro || 0)}</b>
+
+<b>Por categoría</b>
+🗂️ Planificación: <b>${Number(cats['Planificación'] || 0)}</b>
+🧠 Evaluación: <b>${Number(cats['Evaluación'] || 0)}</b>
+🎯 Actividad: <b>${Number(cats.Actividad || 0)}</b>
+🧰 Recurso didáctico: <b>${Number(cats['Recurso didáctico'] || 0)}</b>
+📜 Normativa: <b>${Number(cats.Normativa || 0)}</b>
+📝 Otros: <b>${Number(cats.Otro || 0)}</b>`,
+    { reply_markup: digitalLibraryMainKeyboard() },
+  );
+}
 
 const teacherCalendarDraft = new Map();
 
@@ -5033,7 +5427,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• /biblioteca abre la Biblioteca digital.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -5190,6 +5584,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/(biblioteca|bibliotecadigital|recursos)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showDigitalLibraryMenu(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -5215,6 +5614,11 @@ async function handleMessage(message) {
 
     if (String(mode || '').startsWith('calendar-')) {
       await handleTeacherCalendarText(chatId, message, text, mode);
+      return;
+    }
+
+    if (String(mode || '').startsWith('library-')) {
+      await handleDigitalLibraryText(chatId, message, text, mode);
       return;
     }
 
@@ -5337,6 +5741,55 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'digitalLibrary:menu') {
+    await showDigitalLibraryMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'digitalLibrary:create') {
+    await startDigitalLibraryCreate(chatId);
+    return;
+  }
+  if (data === 'digitalLibrary:search') {
+    await startDigitalLibrarySearch(chatId);
+    return;
+  }
+  if (data === 'digitalLibrary:list') {
+    await showDigitalLibraryList(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'digitalLibrary:summary') {
+    await showDigitalLibrarySummary(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('digitalLibrary:type:')) {
+    await chooseDigitalLibraryType(chatId, decodeURIComponent(data.slice('digitalLibrary:type:'.length)));
+    return;
+  }
+  if (data.startsWith('digitalLibrary:category:')) {
+    await chooseDigitalLibraryCategory(chatId, decodeURIComponent(data.slice('digitalLibrary:category:'.length)));
+    return;
+  }
+  if (data.startsWith('digitalLibrary:item:')) {
+    await showDigitalLibraryItem(chatId, callbackQuery, data.slice('digitalLibrary:item:'.length));
+    return;
+  }
+  if (data.startsWith('digitalLibrary:deleteAsk:')) {
+    const id = data.slice('digitalLibrary:deleteAsk:'.length);
+    await sendMessage(
+      chatId,
+      '⚠️ ¿Seguro que deseas eliminar este recurso?',
+      { reply_markup: { inline_keyboard: [
+        [{ text: '🗑️ Sí, eliminar', callback_data: `digitalLibrary:delete:${id}` }],
+        [{ text: '❌ No eliminar', callback_data: `digitalLibrary:item:${id}` }],
+      ] } },
+    );
+    return;
+  }
+  if (data.startsWith('digitalLibrary:delete:')) {
+    await deleteDigitalLibraryItem(chatId, callbackQuery, data.slice('digitalLibrary:delete:'.length));
     return;
   }
 
@@ -5934,7 +6387,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase6.2-calendario-docente-ready',
+        status: 'phase6.3-biblioteca-digital-ready',
       });
     }
 
