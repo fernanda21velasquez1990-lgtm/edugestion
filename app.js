@@ -9891,7 +9891,13 @@ Archivo enviado directamente desde EduGestión.`);
     if (typeof window.EDUGESTION_API_REQUEST !== 'function') {
       throw new Error('La conexión con EduGestión todavía no está disponible.');
     }
-    return window.EDUGESTION_API_REQUEST(accion,payload);
+    const timeout = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('La Agenda tardó demasiado en responder. Actualiza la página e intenta nuevamente.')), 30000);
+    });
+    return Promise.race([
+      window.EDUGESTION_API_REQUEST(accion,payload),
+      timeout
+    ]);
   };
 
   function estilos() {
@@ -10005,23 +10011,36 @@ Archivo enviado directamente desde EduGestión.`);
   async function cargarBase() {
     renderLoading();
     try {
+      // Carga inicial liviana: evita lanzar muchas peticiones a Apps Script al mismo tiempo.
       contexto = await api('obtenerAgendaContexto');
       resumen = await api('obtenerAgendaResumen');
-      await Promise.all([
-        cargarEventos(),
-        cargarNotas(),
-        cargarBitacora(),
-        cargarInventario(),
-        cargarPrestamos(),
-        cargarJuegos()
-      ]);
       render();
     } catch(err) {
       renderError(err);
     }
   }
 
-  async function cargarEventos(){ const r=await api('listarAgendaEventos'); eventos=Array.isArray(r.eventos)?r.eventos:[]; }
+  async function cargarVistaActual() {
+    try {
+      if (vista === 'calendario') await cargarEventos();
+      else if (vista === 'mensual' || vista === 'notas') await cargarNotas();
+      else if (vista === 'bitacora') await cargarBitacora();
+      else if (vista === 'inventario') await cargarInventario();
+      else if (vista === 'prestamos') await cargarPrestamos();
+      else if (vista === 'juegos') await cargarJuegos();
+      render();
+    } catch (err) {
+      renderError(err);
+    }
+  }
+
+  async function cambiarVista(nuevaVista) {
+    vista = nuevaVista;
+    render();
+    await cargarVistaActual();
+  }
+
+  async function cargarEventos(){ const r=await api('listarAgendaEventos',{limite:300}); eventos=Array.isArray(r.eventos)?r.eventos:[]; }
   async function cargarNotas(){ const r=await api('listarAgendaNotas'); notas=Array.isArray(r.notas)?r.notas:[]; }
   async function cargarBitacora(){ const r=await api('listarAgendaBitacora'); bitacora=Array.isArray(r.registros)?r.registros:[]; }
   async function cargarInventario(){ const r=await api('listarInventarioDeportivo'); inventario=Array.isArray(r.inventario)?r.inventario:[]; }
@@ -10232,7 +10251,7 @@ Archivo enviado directamente desde EduGestión.`);
 
   function enlazar(){
     document.querySelectorAll('[data-ag-view]').forEach(btn=>btn.addEventListener('click',()=>{
-      vista=btn.dataset.agView; render();
+      cambiarVista(btn.dataset.agView);
     }));
     document.getElementById('ag-month')?.addEventListener('change',e=>{mesActual=e.target.value;render();});
     document.getElementById('ag-new-event')?.addEventListener('click',mostrarFormEvento);
@@ -10346,4 +10365,276 @@ Archivo enviado directamente desde EduGestión.`);
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
 })();
+/* EDUGESTION_AGENDA_DIGITAL_V1_FIX_CARGA */
 /* EDUGESTION_AGENDA_DIGITAL_V1_END */
+
+
+
+/* =========================================================
+   EduGestión · FASE 20B
+   BIBLIOTECA DIGITAL REORGANIZADA
+   ========================================================= */
+(() => {
+  const MARK = 'EDUGESTION_BIBLIOTECA_REORGANIZADA_V1';
+  if (window[MARK]) return;
+  window[MARK] = true;
+
+  const cats = [
+    ['todos','fa-layer-group','Todos'],
+    ['libros','fa-book','Libros'],
+    ['cuadernillos','fa-book-open','Cuadernillos'],
+    ['cursos','fa-graduation-cap','Cursos'],
+    ['normativas','fa-landmark','Normativas'],
+    ['enlaces','fa-link','Enlaces'],
+    ['apuntes','fa-note-sticky','Apuntes'],
+    ['favoritos','fa-star','Favoritos']
+  ];
+
+  function addStyles(){
+    if(document.getElementById('eg-lib-reorg-style')) return;
+    const s=document.createElement('style');
+    s.id='eg-lib-reorg-style';
+    s.textContent=`
+      body.eg-lib-active #section-biblioteca,
+      body.eg-lib-active [data-section="biblioteca"]{font-size:16px!important}
+      body.eg-lib-active #section-biblioteca h1,
+      body.eg-lib-active [data-section="biblioteca"] h1{font-size:2rem!important;line-height:1.2!important}
+      body.eg-lib-active #section-biblioteca h2,
+      body.eg-lib-active [data-section="biblioteca"] h2{font-size:1.4rem!important}
+      body.eg-lib-active #section-biblioteca h3,
+      body.eg-lib-active [data-section="biblioteca"] h3{font-size:1.08rem!important;line-height:1.35!important}
+      body.eg-lib-active #section-biblioteca p,
+      body.eg-lib-active #section-biblioteca small,
+      body.eg-lib-active [data-section="biblioteca"] p,
+      body.eg-lib-active [data-section="biblioteca"] small{font-size:.94rem!important;line-height:1.55!important}
+
+      .eglib-organizer{display:flex;flex-direction:column;gap:16px;margin:8px 0 20px}
+      .eglib-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;background:#fff;border:1px solid #dce6f2;border-radius:18px;padding:15px;box-shadow:0 8px 22px rgba(36,94,168,.07)}
+      .eglib-search-wrap{position:relative}
+      .eglib-search-wrap i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#6781a8}
+      .eglib-search{width:100%;min-height:46px;border:1px solid #cfdaea;border-radius:13px;padding:0 14px 0 42px;font-size:1rem;outline:none}
+      .eglib-search:focus{border-color:#245ea8;box-shadow:0 0 0 3px rgba(36,94,168,.12)}
+      .eglib-refresh{min-height:46px;border:0;border-radius:13px;background:#245ea8;color:#fff;padding:0 16px;font-weight:800;cursor:pointer;font-size:.95rem}
+      .eglib-cats{display:flex;flex-wrap:wrap;gap:9px}
+      .eglib-cat{border:1px solid #d7e3f1;background:#fff;color:#2f4e78;border-radius:13px;padding:11px 14px;font-weight:800;font-size:.94rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+      .eglib-cat.active{background:#245ea8;color:#fff;border-color:#245ea8}
+      .eglib-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+      .eglib-stat{background:#fff;border:1px solid #dce6f2;border-radius:17px;padding:15px;display:flex;align-items:center;gap:12px;box-shadow:0 7px 18px rgba(36,94,168,.05)}
+      .eglib-stat .ico{width:42px;height:42px;border-radius:12px;background:#eaf2fb;color:#245ea8;display:grid;place-items:center}
+      .eglib-stat strong{display:block;font-size:1.22rem;color:#173b6e}
+      .eglib-stat span{font-size:.85rem;color:#738198}
+      .eglib-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+      .eglib-head h2{margin:0;color:#183c6a}
+      .eglib-head span{font-size:.9rem;color:#748198}
+
+      body.eg-lib-active #section-biblioteca .library-grid,
+      body.eg-lib-active #section-biblioteca .resources-grid,
+      body.eg-lib-active #section-biblioteca #biblioteca-recursos,
+      body.eg-lib-active #section-biblioteca #library-resources,
+      body.eg-lib-active [data-section="biblioteca"] .library-grid,
+      body.eg-lib-active [data-section="biblioteca"] .resources-grid,
+      body.eg-lib-active [data-section="biblioteca"] #biblioteca-recursos,
+      body.eg-lib-active [data-section="biblioteca"] #library-resources{
+        display:grid!important;
+        grid-template-columns:repeat(3,minmax(0,1fr))!important;
+        gap:16px!important;
+        align-items:stretch!important
+      }
+
+      body.eg-lib-active #section-biblioteca .library-card,
+      body.eg-lib-active #section-biblioteca .resource-card,
+      body.eg-lib-active #section-biblioteca .biblioteca-card,
+      body.eg-lib-active [data-section="biblioteca"] .library-card,
+      body.eg-lib-active [data-section="biblioteca"] .resource-card,
+      body.eg-lib-active [data-section="biblioteca"] .biblioteca-card{
+        min-width:0!important;height:100%!important;padding:17px!important;border-radius:18px!important;
+        border:1px solid #dce6f2!important;background:#fff!important;box-shadow:0 7px 18px rgba(36,94,168,.06)!important
+      }
+
+      body.eg-lib-active #section-biblioteca button,
+      body.eg-lib-active [data-section="biblioteca"] button{font-size:.92rem!important;min-height:42px}
+      body.eg-lib-active #section-biblioteca input,
+      body.eg-lib-active #section-biblioteca select,
+      body.eg-lib-active #section-biblioteca textarea,
+      body.eg-lib-active [data-section="biblioteca"] input,
+      body.eg-lib-active [data-section="biblioteca"] select,
+      body.eg-lib-active [data-section="biblioteca"] textarea{font-size:.95rem!important}
+
+      .eglib-hide{display:none!important}
+      .eglib-gemini{margin-top:24px!important;padding-top:22px!important;border-top:4px solid #d7e6f7!important}
+
+      @media(max-width:1000px){
+        .eglib-summary{grid-template-columns:repeat(2,1fr)}
+        body.eg-lib-active #section-biblioteca .library-grid,
+        body.eg-lib-active #section-biblioteca .resources-grid,
+        body.eg-lib-active #section-biblioteca #biblioteca-recursos,
+        body.eg-lib-active #section-biblioteca #library-resources,
+        body.eg-lib-active [data-section="biblioteca"] .library-grid,
+        body.eg-lib-active [data-section="biblioteca"] .resources-grid,
+        body.eg-lib-active [data-section="biblioteca"] #biblioteca-recursos,
+        body.eg-lib-active [data-section="biblioteca"] #library-resources{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      }
+      @media(max-width:680px){
+        .eglib-toolbar{grid-template-columns:1fr}
+        .eglib-summary{grid-template-columns:1fr}
+        .eglib-cats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+        .eglib-cat{justify-content:center}
+        body.eg-lib-active #section-biblioteca .library-grid,
+        body.eg-lib-active #section-biblioteca .resources-grid,
+        body.eg-lib-active #section-biblioteca #biblioteca-recursos,
+        body.eg-lib-active #section-biblioteca #library-resources,
+        body.eg-lib-active [data-section="biblioteca"] .library-grid,
+        body.eg-lib-active [data-section="biblioteca"] .resources-grid,
+        body.eg-lib-active [data-section="biblioteca"] #biblioteca-recursos,
+        body.eg-lib-active [data-section="biblioteca"] #library-resources{grid-template-columns:1fr!important}
+      }
+    `;
+    document.head.appendChild(s);
+  }
+
+  function root(){
+    return document.getElementById('section-biblioteca') || document.querySelector('[data-section="biblioteca"]');
+  }
+
+  function visible(){
+    const r=root();
+    const title=String(document.getElementById('page-title')?.textContent||'').toLowerCase();
+    return !!r && (!r.classList.contains('hidden') || title.includes('biblioteca'));
+  }
+
+  function cards(r){
+    const arr=[];
+    ['.library-card','.resource-card','.biblioteca-card','[data-library-card]'].forEach(sel=>{
+      r.querySelectorAll(sel).forEach(x=>{if(!arr.includes(x))arr.push(x)});
+    });
+    if(arr.length) return arr;
+    const grid=r.querySelector('.library-grid,.resources-grid,#biblioteca-recursos,#library-resources');
+    return grid?Array.from(grid.children):[];
+  }
+
+  function catOf(card){
+    const t=String(card.innerText||'').toLowerCase();
+    const c=String(card.dataset.categoria||card.dataset.category||'').toLowerCase();
+    if(c.includes('cuadern')||t.includes('cuadernillo')) return 'cuadernillos';
+    if(c.includes('curso')||t.includes('curso')) return 'cursos';
+    if(c.includes('normat')||t.includes('normativa')||t.includes('constitución')||t.includes('lopnna')) return 'normativas';
+    if(c.includes('apunte')||t.includes('apunte')) return 'apuntes';
+    if(c.includes('enlace')||t.includes('enlace')) return 'enlaces';
+    if(c.includes('libro')||t.includes('libro')||t.includes('.pdf')||t.includes('google drive')) return 'libros';
+    return 'otros';
+  }
+
+  function favorite(card){
+    const t=String(card.innerText||'').toLowerCase();
+    return !!card.querySelector('.fa-star,.is-favorite,.favorite.active,[data-favorite="true"]') || t.includes('favorito');
+  }
+
+  function stats(cs){
+    let libros=0,enlaces=0,favoritos=0;
+    cs.forEach(c=>{
+      const k=catOf(c);
+      if(k==='libros'||k==='cuadernillos')libros++;
+      if(k==='enlaces')enlaces++;
+      if(favorite(c))favoritos++;
+    });
+    return {total:cs.length,libros,enlaces,favoritos};
+  }
+
+  function build(r){
+    if(r.querySelector('#eglib-organizer')) return;
+    const st=stats(cards(r));
+    const box=document.createElement('div');
+    box.id='eglib-organizer';
+    box.className='eglib-organizer';
+    box.innerHTML=`
+      <div class="eglib-toolbar">
+        <div class="eglib-search-wrap"><i class="fa-solid fa-magnifying-glass"></i><input id="eglib-search" class="eglib-search" placeholder="Buscar por título, categoría, área o etiqueta"></div>
+        <button id="eglib-refresh" class="eglib-refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+      </div>
+      <div class="eglib-cats">
+        ${cats.map((c,i)=>`<button class="eglib-cat ${i===0?'active':''}" data-cat="${c[0]}"><i class="fa-solid ${c[1]}"></i>${c[2]}</button>`).join('')}
+      </div>
+      <div class="eglib-summary">
+        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-layer-group"></i></div><div><strong data-count="total">${st.total}</strong><span>Recursos</span></div></div>
+        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-book"></i></div><div><strong data-count="libros">${st.libros}</strong><span>Libros y cuadernillos</span></div></div>
+        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-link"></i></div><div><strong data-count="enlaces">${st.enlaces}</strong><span>Enlaces</span></div></div>
+        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-star"></i></div><div><strong data-count="favoritos">${st.favoritos}</strong><span>Favoritos</span></div></div>
+      </div>
+      <div class="eglib-head"><h2 id="eglib-title">Todos los recursos</h2><span id="eglib-visible">${st.total} elementos disponibles</span></div>
+    `;
+
+    const grid=r.querySelector('.library-grid,.resources-grid,#biblioteca-recursos,#library-resources');
+    if(grid?.parentNode) grid.parentNode.insertBefore(box,grid); else r.prepend(box);
+
+    box.querySelector('#eglib-search')?.addEventListener('input',()=>filter(r));
+    box.querySelectorAll('[data-cat]').forEach(b=>b.addEventListener('click',()=>{
+      box.querySelectorAll('[data-cat]').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      filter(r);
+    }));
+    box.querySelector('#eglib-refresh')?.addEventListener('click',()=>{
+      const existing=r.querySelector('button[title*="Actualizar"],button[aria-label*="Actualizar"],.library-refresh,[data-library-refresh]');
+      if(existing) existing.click();
+      setTimeout(enhance,600);
+    });
+  }
+
+  function filter(r){
+    const box=r.querySelector('#eglib-organizer'); if(!box)return;
+    const active=box.querySelector('[data-cat].active')?.dataset.cat||'todos';
+    const q=String(box.querySelector('#eglib-search')?.value||'').trim().toLowerCase();
+    let n=0;
+    const cs=cards(r);
+    cs.forEach(c=>{
+      const k=catOf(c);
+      const txt=String(c.innerText||'').toLowerCase();
+      const okcat=active==='todos'||k===active||(active==='favoritos'&&favorite(c));
+      const okq=!q||txt.includes(q);
+      const show=okcat&&okq;
+      c.classList.toggle('eglib-hide',!show);
+      if(show)n++;
+    });
+    const label=(cats.find(x=>x[0]===active)||['','','Todos'])[2];
+    const title=box.querySelector('#eglib-title');
+    const count=box.querySelector('#eglib-visible');
+    if(title)title.textContent=active==='todos'?'Todos los recursos':label;
+    if(count)count.textContent=`${n} elemento${n===1?'':'s'} disponible${n===1?'':'s'}`;
+    const st=stats(cs);
+    ['total','libros','enlaces','favoritos'].forEach(k=>{
+      const el=box.querySelector(`[data-count="${k}"]`); if(el)el.textContent=st[k];
+    });
+  }
+
+  function separateGemini(r){
+    if(!r)return;
+    const els=Array.from(r.querySelectorAll('section,.card,.panel,div'));
+    const g=els.find(el=>{
+      const t=String(el.textContent||'').toLowerCase();
+      return t.includes('trabajar un recurso con gemini')||t.includes('enviar a gemini');
+    });
+    if(g)g.classList.add('eglib-gemini');
+  }
+
+  function enhance(){
+    addStyles();
+    const r=root();
+    if(!visible()||!r){document.body.classList.remove('eg-lib-active');return;}
+    document.body.classList.add('eg-lib-active');
+    build(r);
+    separateGemini(r);
+    filter(r);
+  }
+
+  const obs=new MutationObserver(()=>{clearTimeout(window.__eglibtimer);window.__eglibtimer=setTimeout(enhance,120)});
+  function init(){
+    addStyles();enhance();
+    obs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+  }
+
+  window.addEventListener('edugestion:session',()=>setTimeout(enhance,150));
+  document.addEventListener('click',()=>setTimeout(enhance,180),true);
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+/* EDUGESTION_BIBLIOTECA_REORGANIZADA_V1_END */
+
