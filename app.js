@@ -3625,23 +3625,25 @@ const SESSION_KEY = 'edugestion_session_v2';
 
           <section class="library-panel">
             <header><span><i class="fa-solid fa-filter"></i></span><div><h3>Organizar</h3><p>Filtra tu colección.</p></div></header>
-            <div class="library-filter-list">
+            <div class="library-filter-list library-filter-list--categories">
               <button class="is-active" data-library-filter="Todos"><i class="fa-solid fa-layer-group"></i><span>Todos</span></button>
-              <button data-library-filter="Favoritos"><i class="fa-solid fa-star"></i><span>Favoritos</span></button>
-              <button data-library-filter="Archivo"><i class="fa-solid fa-file-pdf"></i><span>Archivos</span></button>
+              <button data-library-filter="Libros"><i class="fa-solid fa-book"></i><span>Libros</span></button>
+              <button data-library-filter="Cuadernillos"><i class="fa-solid fa-book-open"></i><span>Cuadernillos</span></button>
+              <button data-library-filter="Cursos"><i class="fa-solid fa-graduation-cap"></i><span>Cursos</span></button>
+              <button data-library-filter="Normativas"><i class="fa-solid fa-landmark"></i><span>Normativas</span></button>
               <button data-library-filter="Enlace"><i class="fa-solid fa-link"></i><span>Enlaces</span></button>
-              <button data-library-filter="Apunte"><i class="fa-solid fa-pen-to-square"></i><span>Apuntes</span></button>
-              <button data-library-filter="Predeterminados"><i class="fa-solid fa-landmark"></i><span>Material oficial</span></button>
+              <button data-library-filter="Apunte"><i class="fa-solid fa-note-sticky"></i><span>Apuntes</span></button>
+              <button data-library-filter="Favoritos"><i class="fa-solid fa-star"></i><span>Favoritos</span></button>
             </div>
           </section>
         </aside>
 
         <div class="library-main">
-          <section class="library-collection-header">
-            <div><span><i class="fa-solid fa-folder-open"></i></span><div><h3>Mi colección docente</h3><p>Material disponible para preparar tus clases.</p></div></div>
+          <section class="library-collection-header library-collection-header--clean">
+            <div><span><i class="fa-solid fa-folder-open"></i></span><div><small id="library-current-category">TODOS</small><h3>Mi colección docente</h3><p id="library-current-description">Todos los recursos disponibles para preparar tus clases.</p></div></div>
             <div class="library-collection-actions">
-              <label><i class="fa-solid fa-magnifying-glass"></i><input id="library-local-search" type="search" placeholder="Buscar por título, área o etiqueta"></label>
-              <button id="library-refresh" type="button"><i class="fa-solid fa-rotate"></i></button>
+              <label><i class="fa-solid fa-magnifying-glass"></i><input id="library-local-search" type="search" placeholder="Buscar dentro de esta categoría"></label>
+              <button id="library-refresh" type="button" title="Actualizar biblioteca"><i class="fa-solid fa-rotate"></i></button>
             </div>
           </section>
           <div id="library-content" class="library-grid">
@@ -3765,9 +3767,33 @@ const SESSION_KEY = 'edugestion_session_v2';
     const defaults = (bibliotecaDatos.predeterminados || []).map(x => ({...x, predeterminado:true}));
     let items = [...defaults, ...propios];
 
-    if (bibliotecaFiltro === 'Favoritos') items = items.filter(x => x.favorito);
-    else if (bibliotecaFiltro === 'Predeterminados') items = items.filter(x => x.predeterminado);
-    else if (bibliotecaFiltro !== 'Todos') items = items.filter(x => x.tipo === bibliotecaFiltro);
+    if (bibliotecaFiltro === 'Favoritos') {
+      items = items.filter(x => x.favorito);
+    } else if (bibliotecaFiltro === 'Libros') {
+      items = items.filter(x => {
+        const cat = String(x.categoria || '').toLowerCase();
+        const titulo = String(x.titulo || '').toLowerCase();
+        return cat.includes('libro') || cat.includes('documento') ||
+          (x.tipo === 'Archivo' && !cat.includes('cuadern')) ||
+          titulo.endsWith('.pdf');
+      });
+    } else if (bibliotecaFiltro === 'Cuadernillos') {
+      items = items.filter(x => {
+        const bolsa = [x.categoria,x.titulo,x.descripcion,x.etiquetas].join(' ').toLowerCase();
+        return bolsa.includes('cuadernill');
+      });
+    } else if (bibliotecaFiltro === 'Cursos') {
+      items = items.filter(x => String(x.categoria || '').toLowerCase().includes('curso'));
+    } else if (bibliotecaFiltro === 'Normativas') {
+      items = items.filter(x => {
+        const bolsa = [x.categoria,x.titulo,x.descripcion,x.fuente].join(' ').toLowerCase();
+        return x.predeterminado || bolsa.includes('normativ') || bolsa.includes('constitución') || bolsa.includes('lopnna');
+      });
+    } else if (bibliotecaFiltro === 'Enlace') {
+      items = items.filter(x => x.tipo === 'Enlace');
+    } else if (bibliotecaFiltro === 'Apunte') {
+      items = items.filter(x => x.tipo === 'Apunte');
+    }
 
     if (bibliotecaBusqueda) {
       items = items.filter(x => [x.titulo,x.categoria,x.area,x.descripcion,x.etiquetas,x.apunte,x.fuente]
@@ -3786,6 +3812,24 @@ const SESSION_KEY = 'edugestion_session_v2';
 
   function renderBiblioteca() {
     renderResumen();
+
+    const currentCategory = document.getElementById('library-current-category');
+    const currentDescription = document.getElementById('library-current-description');
+    if (currentCategory) currentCategory.textContent = String(bibliotecaFiltro || 'Todos').toUpperCase();
+
+    const descriptions = {
+      Todos: 'Todos los recursos disponibles para preparar tus clases.',
+      Libros: 'Libros y documentos organizados en un solo lugar.',
+      Cuadernillos: 'Cuadernillos pedagógicos y materiales de trabajo.',
+      Cursos: 'Cursos y recursos formativos guardados.',
+      Normativas: 'Normativas, leyes y material oficial para consulta.',
+      Enlace: 'Enlaces educativos guardados en tu biblioteca.',
+      Apunte: 'Tus apuntes digitales y notas de trabajo.',
+      Favoritos: 'Los recursos que marcaste como favoritos.'
+    };
+    if (currentDescription) currentDescription.textContent =
+      descriptions[bibliotecaFiltro] || descriptions.Todos;
+
     const content = document.getElementById('library-content');
     if (!content || !bibliotecaDatos) return;
     const items = recursosFiltrados();
@@ -10371,270 +10415,257 @@ Archivo enviado directamente desde EduGestión.`);
 
 
 /* =========================================================
-   EduGestión · FASE 20B
-   BIBLIOTECA DIGITAL REORGANIZADA
+   EduGestión · FASE 20C
+   BIBLIOTECA DIGITAL · DISEÑO LIMPIO POR CATEGORÍAS
    ========================================================= */
 (() => {
-  const MARK = 'EDUGESTION_BIBLIOTECA_REORGANIZADA_V1';
-  if (window[MARK]) return;
-  window[MARK] = true;
+  if (window.EDUGESTION_BIBLIOTECA_LIMPIA_V2) return;
+  window.EDUGESTION_BIBLIOTECA_LIMPIA_V2 = true;
 
-  const cats = [
-    ['todos','fa-layer-group','Todos'],
-    ['libros','fa-book','Libros'],
-    ['cuadernillos','fa-book-open','Cuadernillos'],
-    ['cursos','fa-graduation-cap','Cursos'],
-    ['normativas','fa-landmark','Normativas'],
-    ['enlaces','fa-link','Enlaces'],
-    ['apuntes','fa-note-sticky','Apuntes'],
-    ['favoritos','fa-star','Favoritos']
-  ];
+  const s = document.createElement('style');
+  s.id = 'edugestion-biblioteca-limpia-v2';
+  s.textContent = `
+    #section-biblioteca.digital-library {
+      font-size: 17px;
+    }
 
-  function addStyles(){
-    if(document.getElementById('eg-lib-reorg-style')) return;
-    const s=document.createElement('style');
-    s.id='eg-lib-reorg-style';
-    s.textContent=`
-      body.eg-lib-active #section-biblioteca,
-      body.eg-lib-active [data-section="biblioteca"]{font-size:16px!important}
-      body.eg-lib-active #section-biblioteca h1,
-      body.eg-lib-active [data-section="biblioteca"] h1{font-size:2rem!important;line-height:1.2!important}
-      body.eg-lib-active #section-biblioteca h2,
-      body.eg-lib-active [data-section="biblioteca"] h2{font-size:1.4rem!important}
-      body.eg-lib-active #section-biblioteca h3,
-      body.eg-lib-active [data-section="biblioteca"] h3{font-size:1.08rem!important;line-height:1.35!important}
-      body.eg-lib-active #section-biblioteca p,
-      body.eg-lib-active #section-biblioteca small,
-      body.eg-lib-active [data-section="biblioteca"] p,
-      body.eg-lib-active [data-section="biblioteca"] small{font-size:.94rem!important;line-height:1.55!important}
+    #section-biblioteca .library-hero {
+      margin-bottom: 20px;
+    }
 
-      .eglib-organizer{display:flex;flex-direction:column;gap:16px;margin:8px 0 20px}
-      .eglib-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;background:#fff;border:1px solid #dce6f2;border-radius:18px;padding:15px;box-shadow:0 8px 22px rgba(36,94,168,.07)}
-      .eglib-search-wrap{position:relative}
-      .eglib-search-wrap i{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#6781a8}
-      .eglib-search{width:100%;min-height:46px;border:1px solid #cfdaea;border-radius:13px;padding:0 14px 0 42px;font-size:1rem;outline:none}
-      .eglib-search:focus{border-color:#245ea8;box-shadow:0 0 0 3px rgba(36,94,168,.12)}
-      .eglib-refresh{min-height:46px;border:0;border-radius:13px;background:#245ea8;color:#fff;padding:0 16px;font-weight:800;cursor:pointer;font-size:.95rem}
-      .eglib-cats{display:flex;flex-wrap:wrap;gap:9px}
-      .eglib-cat{border:1px solid #d7e3f1;background:#fff;color:#2f4e78;border-radius:13px;padding:11px 14px;font-weight:800;font-size:.94rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
-      .eglib-cat.active{background:#245ea8;color:#fff;border-color:#245ea8}
-      .eglib-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-      .eglib-stat{background:#fff;border:1px solid #dce6f2;border-radius:17px;padding:15px;display:flex;align-items:center;gap:12px;box-shadow:0 7px 18px rgba(36,94,168,.05)}
-      .eglib-stat .ico{width:42px;height:42px;border-radius:12px;background:#eaf2fb;color:#245ea8;display:grid;place-items:center}
-      .eglib-stat strong{display:block;font-size:1.22rem;color:#173b6e}
-      .eglib-stat span{font-size:.85rem;color:#738198}
-      .eglib-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
-      .eglib-head h2{margin:0;color:#183c6a}
-      .eglib-head span{font-size:.9rem;color:#748198}
+    #section-biblioteca .library-search-hub {
+      margin-top: 18px;
+      gap: 16px;
+    }
 
-      body.eg-lib-active #section-biblioteca .library-grid,
-      body.eg-lib-active #section-biblioteca .resources-grid,
-      body.eg-lib-active #section-biblioteca #biblioteca-recursos,
-      body.eg-lib-active #section-biblioteca #library-resources,
-      body.eg-lib-active [data-section="biblioteca"] .library-grid,
-      body.eg-lib-active [data-section="biblioteca"] .resources-grid,
-      body.eg-lib-active [data-section="biblioteca"] #biblioteca-recursos,
-      body.eg-lib-active [data-section="biblioteca"] #library-resources{
-        display:grid!important;
-        grid-template-columns:repeat(3,minmax(0,1fr))!important;
-        gap:16px!important;
-        align-items:stretch!important
+    #section-biblioteca #library-ai-tools {
+      margin-top: 22px !important;
+    }
+
+    #section-biblioteca .library-summary {
+      margin: 22px 0 !important;
+      gap: 14px !important;
+    }
+
+    #section-biblioteca .library-summary article {
+      min-height: 92px;
+      padding: 18px !important;
+      border-radius: 18px !important;
+    }
+
+    #section-biblioteca .library-summary strong {
+      font-size: 1.55rem !important;
+    }
+
+    #section-biblioteca .library-summary small {
+      font-size: .93rem !important;
+    }
+
+    #section-biblioteca .library-workspace {
+      display: grid !important;
+      grid-template-columns: 220px minmax(0, 1fr) !important;
+      gap: 22px !important;
+      align-items: start !important;
+    }
+
+    #section-biblioteca .library-tools {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 16px !important;
+      position: sticky;
+      top: 18px;
+    }
+
+    #section-biblioteca .library-panel {
+      border-radius: 19px !important;
+      padding: 17px !important;
+    }
+
+    #section-biblioteca .library-panel h3 {
+      font-size: 1.12rem !important;
+    }
+
+    #section-biblioteca .library-panel p,
+    #section-biblioteca .library-panel small {
+      font-size: .92rem !important;
+      line-height: 1.5 !important;
+    }
+
+    #section-biblioteca .library-filter-list--categories {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+    }
+
+    #section-biblioteca .library-filter-list--categories button {
+      min-height: 45px !important;
+      justify-content: flex-start !important;
+      padding: 10px 13px !important;
+      border-radius: 12px !important;
+      font-size: .96rem !important;
+    }
+
+    #section-biblioteca .library-filter-list--categories button.is-active {
+      background: #245ea8 !important;
+      color: #fff !important;
+      box-shadow: 0 6px 14px rgba(36,94,168,.18);
+    }
+
+    #section-biblioteca .library-main {
+      min-width: 0 !important;
+    }
+
+    #section-biblioteca .library-collection-header--clean {
+      margin-bottom: 16px !important;
+      padding: 18px !important;
+      border-radius: 18px !important;
+    }
+
+    #section-biblioteca .library-collection-header--clean small {
+      display: block;
+      color: #245ea8 !important;
+      font-size: .76rem !important;
+      font-weight: 900 !important;
+      letter-spacing: .06em;
+      margin-bottom: 3px;
+    }
+
+    #section-biblioteca .library-collection-header--clean h3 {
+      font-size: 1.3rem !important;
+      margin: 0 !important;
+    }
+
+    #section-biblioteca .library-collection-header--clean p {
+      font-size: .94rem !important;
+      margin-top: 3px !important;
+    }
+
+    #section-biblioteca .library-collection-actions input {
+      min-height: 44px !important;
+      font-size: .96rem !important;
+    }
+
+    #section-biblioteca #library-content.library-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+      gap: 18px !important;
+      align-items: stretch !important;
+    }
+
+    #section-biblioteca .library-resource {
+      padding: 20px !important;
+      border-radius: 20px !important;
+      min-width: 0 !important;
+      min-height: 290px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 13px !important;
+      background: #fff !important;
+      border: 1px solid #dbe6f2 !important;
+      box-shadow: 0 8px 22px rgba(36,94,168,.07) !important;
+    }
+
+    #section-biblioteca .library-resource > header {
+      display: grid !important;
+      grid-template-columns: 48px minmax(0,1fr) auto !important;
+      gap: 12px !important;
+      align-items: start !important;
+    }
+
+    #section-biblioteca .library-resource > header > span {
+      width: 48px !important;
+      height: 48px !important;
+      border-radius: 14px !important;
+    }
+
+    #section-biblioteca .library-resource header small {
+      font-size: .78rem !important;
+      font-weight: 900 !important;
+      color: #6c7f9b !important;
+      letter-spacing: .035em;
+      text-transform: uppercase;
+    }
+
+    #section-biblioteca .library-resource h4 {
+      font-size: 1.08rem !important;
+      line-height: 1.35 !important;
+      color: #193d6c !important;
+      margin: 4px 0 0 !important;
+      overflow-wrap: anywhere;
+    }
+
+    #section-biblioteca .library-resource > p {
+      font-size: .96rem !important;
+      line-height: 1.55 !important;
+      color: #5d708d !important;
+      margin: 0 !important;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    #section-biblioteca .library-resource__meta {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 7px !important;
+    }
+
+    #section-biblioteca .library-resource__meta span {
+      max-width: 100%;
+      font-size: .78rem !important;
+      padding: 6px 9px !important;
+      border-radius: 999px !important;
+      white-space: normal !important;
+      overflow-wrap: anywhere;
+    }
+
+    #section-biblioteca .library-resource footer {
+      margin-top: auto !important;
+      padding-top: 14px !important;
+      display: flex !important;
+      gap: 9px !important;
+      align-items: center !important;
+      border-top: 1px solid #e6edf5;
+    }
+
+    #section-biblioteca .library-resource footer a {
+      min-height: 43px !important;
+      padding: 10px 14px !important;
+      font-size: .9rem !important;
+      border-radius: 12px !important;
+    }
+
+    #section-biblioteca .library-resource footer button {
+      width: 43px !important;
+      height: 43px !important;
+      min-height: 43px !important;
+      border-radius: 12px !important;
+    }
+
+    @media (max-width: 1100px) {
+      #section-biblioteca .library-workspace {
+        grid-template-columns: 190px minmax(0,1fr) !important;
       }
+    }
 
-      body.eg-lib-active #section-biblioteca .library-card,
-      body.eg-lib-active #section-biblioteca .resource-card,
-      body.eg-lib-active #section-biblioteca .biblioteca-card,
-      body.eg-lib-active [data-section="biblioteca"] .library-card,
-      body.eg-lib-active [data-section="biblioteca"] .resource-card,
-      body.eg-lib-active [data-section="biblioteca"] .biblioteca-card{
-        min-width:0!important;height:100%!important;padding:17px!important;border-radius:18px!important;
-        border:1px solid #dce6f2!important;background:#fff!important;box-shadow:0 7px 18px rgba(36,94,168,.06)!important
+    @media (max-width: 900px) {
+      #section-biblioteca .library-workspace {
+        grid-template-columns: 1fr !important;
       }
-
-      body.eg-lib-active #section-biblioteca button,
-      body.eg-lib-active [data-section="biblioteca"] button{font-size:.92rem!important;min-height:42px}
-      body.eg-lib-active #section-biblioteca input,
-      body.eg-lib-active #section-biblioteca select,
-      body.eg-lib-active #section-biblioteca textarea,
-      body.eg-lib-active [data-section="biblioteca"] input,
-      body.eg-lib-active [data-section="biblioteca"] select,
-      body.eg-lib-active [data-section="biblioteca"] textarea{font-size:.95rem!important}
-
-      .eglib-hide{display:none!important}
-      .eglib-gemini{margin-top:24px!important;padding-top:22px!important;border-top:4px solid #d7e6f7!important}
-
-      @media(max-width:1000px){
-        .eglib-summary{grid-template-columns:repeat(2,1fr)}
-        body.eg-lib-active #section-biblioteca .library-grid,
-        body.eg-lib-active #section-biblioteca .resources-grid,
-        body.eg-lib-active #section-biblioteca #biblioteca-recursos,
-        body.eg-lib-active #section-biblioteca #library-resources,
-        body.eg-lib-active [data-section="biblioteca"] .library-grid,
-        body.eg-lib-active [data-section="biblioteca"] .resources-grid,
-        body.eg-lib-active [data-section="biblioteca"] #biblioteca-recursos,
-        body.eg-lib-active [data-section="biblioteca"] #library-resources{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      #section-biblioteca .library-tools {
+        position: static !important;
       }
-      @media(max-width:680px){
-        .eglib-toolbar{grid-template-columns:1fr}
-        .eglib-summary{grid-template-columns:1fr}
-        .eglib-cats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
-        .eglib-cat{justify-content:center}
-        body.eg-lib-active #section-biblioteca .library-grid,
-        body.eg-lib-active #section-biblioteca .resources-grid,
-        body.eg-lib-active #section-biblioteca #biblioteca-recursos,
-        body.eg-lib-active #section-biblioteca #library-resources,
-        body.eg-lib-active [data-section="biblioteca"] .library-grid,
-        body.eg-lib-active [data-section="biblioteca"] .resources-grid,
-        body.eg-lib-active [data-section="biblioteca"] #biblioteca-recursos,
-        body.eg-lib-active [data-section="biblioteca"] #library-resources{grid-template-columns:1fr!important}
+      #section-biblioteca .library-filter-list--categories {
+        display: grid !important;
+        grid-template-columns: repeat(2,minmax(0,1fr)) !important;
       }
-    `;
-    document.head.appendChild(s);
-  }
-
-  function root(){
-    return document.getElementById('section-biblioteca') || document.querySelector('[data-section="biblioteca"]');
-  }
-
-  function visible(){
-    const r=root();
-    const title=String(document.getElementById('page-title')?.textContent||'').toLowerCase();
-    return !!r && (!r.classList.contains('hidden') || title.includes('biblioteca'));
-  }
-
-  function cards(r){
-    const arr=[];
-    ['.library-card','.resource-card','.biblioteca-card','[data-library-card]'].forEach(sel=>{
-      r.querySelectorAll(sel).forEach(x=>{if(!arr.includes(x))arr.push(x)});
-    });
-    if(arr.length) return arr;
-    const grid=r.querySelector('.library-grid,.resources-grid,#biblioteca-recursos,#library-resources');
-    return grid?Array.from(grid.children):[];
-  }
-
-  function catOf(card){
-    const t=String(card.innerText||'').toLowerCase();
-    const c=String(card.dataset.categoria||card.dataset.category||'').toLowerCase();
-    if(c.includes('cuadern')||t.includes('cuadernillo')) return 'cuadernillos';
-    if(c.includes('curso')||t.includes('curso')) return 'cursos';
-    if(c.includes('normat')||t.includes('normativa')||t.includes('constitución')||t.includes('lopnna')) return 'normativas';
-    if(c.includes('apunte')||t.includes('apunte')) return 'apuntes';
-    if(c.includes('enlace')||t.includes('enlace')) return 'enlaces';
-    if(c.includes('libro')||t.includes('libro')||t.includes('.pdf')||t.includes('google drive')) return 'libros';
-    return 'otros';
-  }
-
-  function favorite(card){
-    const t=String(card.innerText||'').toLowerCase();
-    return !!card.querySelector('.fa-star,.is-favorite,.favorite.active,[data-favorite="true"]') || t.includes('favorito');
-  }
-
-  function stats(cs){
-    let libros=0,enlaces=0,favoritos=0;
-    cs.forEach(c=>{
-      const k=catOf(c);
-      if(k==='libros'||k==='cuadernillos')libros++;
-      if(k==='enlaces')enlaces++;
-      if(favorite(c))favoritos++;
-    });
-    return {total:cs.length,libros,enlaces,favoritos};
-  }
-
-  function build(r){
-    if(r.querySelector('#eglib-organizer')) return;
-    const st=stats(cards(r));
-    const box=document.createElement('div');
-    box.id='eglib-organizer';
-    box.className='eglib-organizer';
-    box.innerHTML=`
-      <div class="eglib-toolbar">
-        <div class="eglib-search-wrap"><i class="fa-solid fa-magnifying-glass"></i><input id="eglib-search" class="eglib-search" placeholder="Buscar por título, categoría, área o etiqueta"></div>
-        <button id="eglib-refresh" class="eglib-refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button>
-      </div>
-      <div class="eglib-cats">
-        ${cats.map((c,i)=>`<button class="eglib-cat ${i===0?'active':''}" data-cat="${c[0]}"><i class="fa-solid ${c[1]}"></i>${c[2]}</button>`).join('')}
-      </div>
-      <div class="eglib-summary">
-        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-layer-group"></i></div><div><strong data-count="total">${st.total}</strong><span>Recursos</span></div></div>
-        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-book"></i></div><div><strong data-count="libros">${st.libros}</strong><span>Libros y cuadernillos</span></div></div>
-        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-link"></i></div><div><strong data-count="enlaces">${st.enlaces}</strong><span>Enlaces</span></div></div>
-        <div class="eglib-stat"><div class="ico"><i class="fa-solid fa-star"></i></div><div><strong data-count="favoritos">${st.favoritos}</strong><span>Favoritos</span></div></div>
-      </div>
-      <div class="eglib-head"><h2 id="eglib-title">Todos los recursos</h2><span id="eglib-visible">${st.total} elementos disponibles</span></div>
-    `;
-
-    const grid=r.querySelector('.library-grid,.resources-grid,#biblioteca-recursos,#library-resources');
-    if(grid?.parentNode) grid.parentNode.insertBefore(box,grid); else r.prepend(box);
-
-    box.querySelector('#eglib-search')?.addEventListener('input',()=>filter(r));
-    box.querySelectorAll('[data-cat]').forEach(b=>b.addEventListener('click',()=>{
-      box.querySelectorAll('[data-cat]').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
-      filter(r);
-    }));
-    box.querySelector('#eglib-refresh')?.addEventListener('click',()=>{
-      const existing=r.querySelector('button[title*="Actualizar"],button[aria-label*="Actualizar"],.library-refresh,[data-library-refresh]');
-      if(existing) existing.click();
-      setTimeout(enhance,600);
-    });
-  }
-
-  function filter(r){
-    const box=r.querySelector('#eglib-organizer'); if(!box)return;
-    const active=box.querySelector('[data-cat].active')?.dataset.cat||'todos';
-    const q=String(box.querySelector('#eglib-search')?.value||'').trim().toLowerCase();
-    let n=0;
-    const cs=cards(r);
-    cs.forEach(c=>{
-      const k=catOf(c);
-      const txt=String(c.innerText||'').toLowerCase();
-      const okcat=active==='todos'||k===active||(active==='favoritos'&&favorite(c));
-      const okq=!q||txt.includes(q);
-      const show=okcat&&okq;
-      c.classList.toggle('eglib-hide',!show);
-      if(show)n++;
-    });
-    const label=(cats.find(x=>x[0]===active)||['','','Todos'])[2];
-    const title=box.querySelector('#eglib-title');
-    const count=box.querySelector('#eglib-visible');
-    if(title)title.textContent=active==='todos'?'Todos los recursos':label;
-    if(count)count.textContent=`${n} elemento${n===1?'':'s'} disponible${n===1?'':'s'}`;
-    const st=stats(cs);
-    ['total','libros','enlaces','favoritos'].forEach(k=>{
-      const el=box.querySelector(`[data-count="${k}"]`); if(el)el.textContent=st[k];
-    });
-  }
-
-  function separateGemini(r){
-    if(!r)return;
-    const els=Array.from(r.querySelectorAll('section,.card,.panel,div'));
-    const g=els.find(el=>{
-      const t=String(el.textContent||'').toLowerCase();
-      return t.includes('trabajar un recurso con gemini')||t.includes('enviar a gemini');
-    });
-    if(g)g.classList.add('eglib-gemini');
-  }
-
-  function enhance(){
-    addStyles();
-    const r=root();
-    if(!visible()||!r){document.body.classList.remove('eg-lib-active');return;}
-    document.body.classList.add('eg-lib-active');
-    build(r);
-    separateGemini(r);
-    filter(r);
-  }
-
-  const obs=new MutationObserver(()=>{clearTimeout(window.__eglibtimer);window.__eglibtimer=setTimeout(enhance,120)});
-  function init(){
-    addStyles();enhance();
-    obs.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
-  }
-
-  window.addEventListener('edugestion:session',()=>setTimeout(enhance,150));
-  document.addEventListener('click',()=>setTimeout(enhance,180),true);
-
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+      #section-biblioteca #library-content.library-grid {
+        grid-template-columns: 1fr !important;
+      }
+    }
+  `;
+  document.head.appendChild(s);
 })();
-/* EDUGESTION_BIBLIOTECA_REORGANIZADA_V1_END */
+/* EDUGESTION_BIBLIOTECA_LIMPIA_V2_END */
 
