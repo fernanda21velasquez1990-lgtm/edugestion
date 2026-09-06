@@ -488,6 +488,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '📚 Biblioteca digital', callback_data: 'digitalLibrary:menu' },
     ]);
     rows.push([
+      { text: '💾 Respuestas IA guardadas', callback_data: 'savedAI:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -897,6 +900,388 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const savedAIState = new Map();
+
+function savedAIMainKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📚 Ver respuestas guardadas', callback_data: 'savedAI:list' }],
+      [{ text: '🔎 Buscar respuestas', callback_data: 'savedAI:search' }],
+      [{ text: '📊 Resumen', callback_data: 'savedAI:summary' }],
+      [{ text: '🤖 Abrir Asistente IA', callback_data: 'teacherAI:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function savedAIListKeyboard(items = []) {
+  const rows = items.slice(0, 30).map((item) => [{
+    text: `${savedAITypeIcon(item.tipo)} ${item.titulo || 'Respuesta IA'}`.slice(0, 60),
+    callback_data: `savedAI:item:${item.id}`,
+  }]);
+  rows.push([{ text: '🔎 Buscar', callback_data: 'savedAI:search' }]);
+  rows.push([{ text: '📊 Resumen', callback_data: 'savedAI:summary' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function savedAIDetailKeyboard(id) {
+  return {
+    inline_keyboard: [
+      [{ text: '♻️ Reutilizar con IA', callback_data: `savedAI:reuse:${id}` }],
+      [{ text: '🗑️ Eliminar', callback_data: `savedAI:deleteAsk:${id}` }],
+      [{ text: '⬅️ Volver a respuestas', callback_data: 'savedAI:list' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function savedAITypeIcon(tipo) {
+  return ({
+    'Consulta libre': '💬',
+    'Planificación': '📋',
+    'Actividad': '🎯',
+    'Observación pedagógica': '📝',
+    'Evaluación': '🧠',
+    'Cuadernillo': '📘',
+    'Otro': '✨',
+  })[tipo] || '✨';
+}
+
+function savedAIInferTypeFromTitle(title = '') {
+  const t = String(title || '').toLowerCase();
+  if (t.includes('planific')) return 'Planificación';
+  if (t.includes('actividad')) return 'Actividad';
+  if (t.includes('observ')) return 'Observación pedagógica';
+  if (t.includes('evalu')) return 'Evaluación';
+  if (t.includes('cuadernillo') || t.includes('curricular')) return 'Cuadernillo';
+  return 'Consulta libre';
+}
+
+function savedAIMakeTitle(text = '', fallback = 'Respuesta IA guardada') {
+  const clean = String(text || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[*_`#]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return (clean || fallback).slice(0, 110);
+}
+
+async function saveAIResponseToBackend(chatId, source, data = {}) {
+  const telegramId = teacherTelegramId(source);
+
+  const payload = {
+    telegramId,
+    titulo: String(data.titulo || '').trim() || savedAIMakeTitle(data.consulta || data.tema || data.respuesta),
+    tipo: data.tipo || savedAIInferTypeFromTitle(data.titulo || data.origen || ''),
+    consulta: String(data.consulta || '').trim(),
+    respuesta: String(data.respuesta || '').trim(),
+    materia: String(data.materia || '').trim(),
+    grado: String(data.grado || '').trim(),
+    tema: String(data.tema || '').trim(),
+    origen: String(data.origen || 'Telegram').trim(),
+  };
+
+  if (!payload.respuesta) {
+    await sendMessage(chatId, '⚠️ No hay una respuesta de IA disponible para guardar.');
+    return null;
+  }
+
+  const result = await callEduGestion('botRespuestasIAGuardar', payload);
+  const r = result.registro || {};
+
+  await sendMessage(
+    chatId,
+    `💾 <b>RESPUESTA IA GUARDADA</b>
+━━━━━━━━━━━━━━━━━━
+
+${savedAITypeIcon(r.tipo)} <b>${escapeHtml(r.titulo || payload.titulo)}</b>
+
+Tipo: <b>${escapeHtml(r.tipo || payload.tipo)}</b>
+${r.materia ? `Materia: <b>${escapeHtml(r.materia)}</b>\n` : ''}${r.grado ? `Grado/Año: <b>${escapeHtml(r.grado)}</b>\n` : ''}${r.tema ? `Tema: <b>${escapeHtml(r.tema)}</b>\n` : ''}`,
+    { reply_markup: savedAIMainKeyboard() },
+  );
+
+  return r;
+}
+
+async function showSavedAIMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  await callEduGestion('botRespuestasIAContexto', { telegramId });
+
+  await sendMessage(
+    chatId,
+    `💾 <b>RESPUESTAS IA GUARDADAS</b>
+━━━━━━━━━━━━━━━━━━
+
+Consulta, busca y reutiliza las respuestas que has guardado desde el Asistente IA de EduGestión.`,
+    { reply_markup: savedAIMainKeyboard() },
+  );
+}
+
+async function showSavedAIList(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botRespuestasIAListar', { telegramId });
+  const items = Array.isArray(result.registros) ? result.registros : [];
+
+  if (!items.length) {
+    await sendMessage(
+      chatId,
+      `📚 <b>RESPUESTAS IA GUARDADAS</b>
+
+Todavía no tienes respuestas guardadas.`,
+      { reply_markup: savedAIMainKeyboard() },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📚 <b>RESPUESTAS IA GUARDADAS</b>
+━━━━━━━━━━━━━━━━━━
+
+Total: <b>${Number(result.total || items.length)}</b>
+
+Selecciona una respuesta para ver el detalle:`,
+    { reply_markup: savedAIListKeyboard(items) },
+  );
+}
+
+async function showSavedAIItem(chatId, source, id) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botRespuestasIADetalle', { telegramId, id });
+  const r = result.registro || {};
+
+  savedAIState.set(String(chatId), { id, registro: r });
+
+  const head = `${savedAITypeIcon(r.tipo)} <b>${escapeHtml(r.titulo || 'Respuesta IA')}</b>
+━━━━━━━━━━━━━━━━━━
+
+Tipo: <b>${escapeHtml(r.tipo || 'Otro')}</b>
+${r.materia ? `Materia: <b>${escapeHtml(r.materia)}</b>\n` : ''}${r.grado ? `Grado/Año: <b>${escapeHtml(r.grado)}</b>\n` : ''}${r.tema ? `Tema: <b>${escapeHtml(r.tema)}</b>\n` : ''}${r.consulta ? `\n<b>Consulta original</b>\n${escapeHtml(r.consulta)}\n` : ''}
+
+<b>Respuesta</b>`;
+
+  await sendLongTelegramText(
+    chatId,
+    head,
+    r.respuesta || 'Sin contenido.',
+    savedAIDetailKeyboard(r.id),
+  );
+}
+
+async function startSavedAISearch(chatId) {
+  pendingTextMode.set(String(chatId), 'saved-ai-search');
+
+  await sendMessage(
+    chatId,
+    `🔎 <b>BUSCAR RESPUESTAS IA</b>
+
+Escribe una palabra o frase.
+
+Puedes buscar por título, consulta, respuesta, materia, grado o tema.
+
+Para cancelar escribe <code>cancelar</code>.`,
+  );
+}
+
+async function handleSavedAIText(chatId, source, text, mode) {
+  const raw = String(text || '').trim();
+
+  if (mode === 'saved-ai-search') {
+    if (raw.toLowerCase() === 'cancelar') {
+      pendingTextMode.delete(String(chatId));
+      await showSavedAIMenu(chatId, source);
+      return true;
+    }
+
+    if (!raw) {
+      await sendMessage(chatId, '⚠️ Escribe una palabra o frase para buscar.');
+      return true;
+    }
+
+    const telegramId = teacherTelegramId(source);
+    const result = await callEduGestion('botRespuestasIABuscar', {
+      telegramId,
+      busqueda: raw,
+    });
+
+    pendingTextMode.delete(String(chatId));
+
+    const items = Array.isArray(result.registros) ? result.registros : [];
+
+    if (!items.length) {
+      await sendMessage(
+        chatId,
+        `🔎 No encontré respuestas para <b>${escapeHtml(raw)}</b>.`,
+        { reply_markup: savedAIMainKeyboard() },
+      );
+      return true;
+    }
+
+    await sendMessage(
+      chatId,
+      `🔎 <b>RESULTADOS DE BÚSQUEDA</b>
+
+Búsqueda: <b>${escapeHtml(raw)}</b>
+Resultados: <b>${Number(result.total || items.length)}</b>`,
+      { reply_markup: savedAIListKeyboard(items) },
+    );
+    return true;
+  }
+
+  if (mode === 'saved-ai-reuse') {
+    const state = savedAIState.get(String(chatId)) || {};
+    const registro = state.registro || {};
+
+    if (!registro.respuesta) {
+      pendingTextMode.delete(String(chatId));
+      await sendMessage(chatId, '⚠️ No pude recuperar la respuesta guardada.');
+      return true;
+    }
+
+    if (raw.toLowerCase() === 'cancelar') {
+      pendingTextMode.delete(String(chatId));
+      await showSavedAIItem(chatId, source, registro.id);
+      return true;
+    }
+
+    const prompt = [
+      'Actúa como asistente docente.',
+      'Reutiliza y adapta la siguiente respuesta previamente guardada por el docente.',
+      'No realices búsqueda web.',
+      '',
+      registro.consulta ? `Consulta original: ${registro.consulta}` : '',
+      registro.materia ? `Materia: ${registro.materia}` : '',
+      registro.grado ? `Grado/Año: ${registro.grado}` : '',
+      registro.tema ? `Tema: ${registro.tema}` : '',
+      '',
+      'RESPUESTA GUARDADA:',
+      registro.respuesta,
+      '',
+      'NUEVA INDICACIÓN DEL DOCENTE:',
+      raw || 'Mejora y adapta esta respuesta manteniendo su propósito.',
+      '',
+      'Entrega una versión completa y lista para usar.'
+    ].filter(Boolean).join('\n');
+
+    await sendMessage(chatId, '⏳ <b>Reutilizando respuesta con IA…</b>');
+
+    const answer = await callTeacherGemini(prompt);
+    pendingTextMode.delete(String(chatId));
+
+    savedAIState.set(String(chatId), {
+      ...state,
+      reusedAnswer: answer,
+      reuseInstruction: raw,
+    });
+
+    await sendLongTelegramText(
+      chatId,
+      '♻️ <b>RESPUESTA REUTILIZADA CON IA</b>',
+      answer,
+      {
+        inline_keyboard: [
+          [{ text: '💾 Guardar nueva respuesta', callback_data: 'savedAI:saveReuse' }],
+          [{ text: '📚 Ver guardadas', callback_data: 'savedAI:list' }],
+          [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+        ],
+      },
+    );
+    return true;
+  }
+
+  return false;
+}
+
+async function reuseSavedAIItem(chatId, source, id) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botRespuestasIADetalle', { telegramId, id });
+  const registro = result.registro || {};
+
+  savedAIState.set(String(chatId), { id, registro });
+  pendingTextMode.set(String(chatId), 'saved-ai-reuse');
+
+  await sendMessage(
+    chatId,
+    `♻️ <b>REUTILIZAR CON IA</b>
+
+Escribe cómo deseas modificar o adaptar esta respuesta.
+
+Ejemplos:
+<code>Hazla más corta</code>
+<code>Adáptala para 1ero A</code>
+<code>Conviértela en una actividad práctica</code>
+
+Para cancelar escribe <code>cancelar</code>.`,
+  );
+}
+
+async function saveReusedAIItem(chatId, source) {
+  const state = savedAIState.get(String(chatId)) || {};
+  const registro = state.registro || {};
+  const answer = state.reusedAnswer || '';
+
+  if (!answer) {
+    await sendMessage(chatId, '⚠️ No hay una respuesta reutilizada para guardar.');
+    return;
+  }
+
+  await saveAIResponseToBackend(chatId, source, {
+    titulo: `${registro.titulo || 'Respuesta IA'} · reutilizada`,
+    tipo: registro.tipo || 'Otro',
+    consulta: state.reuseInstruction || registro.consulta || '',
+    respuesta: answer,
+    materia: registro.materia || '',
+    grado: registro.grado || '',
+    tema: registro.tema || '',
+    origen: 'Telegram · Reutilizada',
+  });
+}
+
+async function deleteSavedAIItem(chatId, source, id) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botRespuestasIAEliminar', { telegramId, id });
+
+  await sendMessage(
+    chatId,
+    `🗑️ <b>RESPUESTA ELIMINADA</b>
+
+${escapeHtml(result.titulo || '')}`,
+    { reply_markup: savedAIMainKeyboard() },
+  );
+}
+
+async function showSavedAISummary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botRespuestasIAResumen', { telegramId });
+  const t = result.porTipo || {};
+
+  await sendMessage(
+    chatId,
+    `📊 <b>RESUMEN · RESPUESTAS IA</b>
+━━━━━━━━━━━━━━━━━━
+
+Total guardadas: <b>${Number(result.total || 0)}</b>
+
+💬 Consulta libre: <b>${Number(t['Consulta libre'] || 0)}</b>
+📋 Planificación: <b>${Number(t['Planificación'] || 0)}</b>
+🎯 Actividad: <b>${Number(t['Actividad'] || 0)}</b>
+📝 Observación pedagógica: <b>${Number(t['Observación pedagógica'] || 0)}</b>
+🧠 Evaluación: <b>${Number(t['Evaluación'] || 0)}</b>
+📘 Cuadernillo: <b>${Number(t['Cuadernillo'] || 0)}</b>
+✨ Otro: <b>${Number(t['Otro'] || 0)}</b>`,
+    { reply_markup: savedAIMainKeyboard() },
+  );
+}
 
 const digitalLibraryDraft = new Map();
 
@@ -5427,7 +5812,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• /biblioteca abre la Biblioteca digital.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• /biblioteca abre la Biblioteca digital.\n• /respuestasia abre las Respuestas IA guardadas.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -5589,6 +5974,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/(respuestasia|ia_guardada|respuestasguardadas)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showSavedAIMenu(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -5619,6 +6009,11 @@ async function handleMessage(message) {
 
     if (String(mode || '').startsWith('library-')) {
       await handleDigitalLibraryText(chatId, message, text, mode);
+      return;
+    }
+
+    if (String(mode || '').startsWith('saved-ai-')) {
+      await handleSavedAIText(chatId, message, text, mode);
       return;
     }
 
@@ -5741,6 +6136,66 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'savedAI:menu') {
+    await showSavedAIMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'savedAI:list') {
+    await showSavedAIList(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'savedAI:search') {
+    await startSavedAISearch(chatId);
+    return;
+  }
+  if (data === 'savedAI:summary') {
+    await showSavedAISummary(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'savedAI:saveReuse') {
+    await saveReusedAIItem(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'savedAI:saveEvalCurrent') {
+    const state = evalAIState.get(String(chatId)) || {};
+    const answer = state.generated || '';
+    await saveAIResponseToBackend(chatId, callbackQuery, {
+      titulo: state.title || `Evaluación IA · ${state.topic || 'Tema'}`,
+      tipo: 'Evaluación',
+      consulta: state.topic || '',
+      respuesta: answer,
+      materia: state.matter || '',
+      grado: state.grade || '',
+      tema: state.topic || '',
+      origen: 'Telegram · Evaluaciones IA',
+    });
+    return;
+  }
+  if (data.startsWith('savedAI:item:')) {
+    await showSavedAIItem(chatId, callbackQuery, data.slice('savedAI:item:'.length));
+    return;
+  }
+  if (data.startsWith('savedAI:reuse:')) {
+    await reuseSavedAIItem(chatId, callbackQuery, data.slice('savedAI:reuse:'.length));
+    return;
+  }
+  if (data.startsWith('savedAI:deleteAsk:')) {
+    const id = data.slice('savedAI:deleteAsk:'.length);
+    await sendMessage(
+      chatId,
+      '⚠️ ¿Seguro que deseas eliminar esta respuesta IA?',
+      { reply_markup: { inline_keyboard: [
+        [{ text: '🗑️ Sí, eliminar', callback_data: `savedAI:delete:${id}` }],
+        [{ text: '❌ No eliminar', callback_data: `savedAI:item:${id}` }],
+      ] } },
+    );
+    return;
+  }
+  if (data.startsWith('savedAI:delete:')) {
+    await deleteSavedAIItem(chatId, callbackQuery, data.slice('savedAI:delete:'.length));
     return;
   }
 
@@ -6387,7 +6842,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase6.3-biblioteca-digital-ready',
+        status: 'phase6.4-respuestas-ia-guardadas-ready',
       });
     }
 
