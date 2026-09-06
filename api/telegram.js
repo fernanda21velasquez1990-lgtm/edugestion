@@ -480,6 +480,10 @@ function mainMenuKeyboard(linked = true) {
       { text: '📈 Seguimiento curricular', callback_data: 'currTrack:menu' },
     ]);
     rows.push([
+      { text: '📅 Panel por lapso', callback_data: 'currPanel:menu' },
+      { text: '📊 Panel anual', callback_data: 'currPanel:annualMenu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -886,6 +890,307 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const currPanelState = new Map();
+
+function currPanelLevelsKeyboard(levels = [], mode = 'lapso') {
+  const prefix = mode === 'annual' ? 'currPanel:annualLevel:' : 'currPanel:level:';
+  const rows = levels.map((item) => [{
+    text: `📚 ${item.nivel} · ${Number(item.totalTemas || 0)} temas`,
+    callback_data: `${prefix}${encodeURIComponent(item.nivel)}`,
+  }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function currPanelLapsosKeyboard(level) {
+  return {
+    inline_keyboard: [
+      [{ text: '1️⃣ 1er Lapso', callback_data: `currPanel:lapso:${encodeURIComponent(level)}:1er%20Lapso` }],
+      [{ text: '2️⃣ 2do Lapso', callback_data: `currPanel:lapso:${encodeURIComponent(level)}:2do%20Lapso` }],
+      [{ text: '3️⃣ 3er Lapso', callback_data: `currPanel:lapso:${encodeURIComponent(level)}:3er%20Lapso` }],
+      [{ text: '⬅️ Cambiar grado/año', callback_data: 'currPanel:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function currPanelTopicsKeyboard(items = [], level = '', lapso = '') {
+  const rows = items.slice(0, 40).map((item) => [{
+    text: `${currTrackStatusIcon(item.estado)} ${item.tema || 'Tema curricular'}`.slice(0, 60),
+    callback_data: `currPanel:topic:${encodeURIComponent(level)}:${encodeURIComponent(lapso)}:${Number(item.indice)}`,
+  }]);
+  rows.push([{ text: '➕ Asignar tema al lapso', callback_data: `currPanel:assignMenu:${encodeURIComponent(level)}:${encodeURIComponent(lapso)}` }]);
+  rows.push([{ text: '⬅️ Cambiar lapso', callback_data: `currPanel:level:${encodeURIComponent(level)}` }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function currPanelAssignTopicsKeyboard(items = [], level = '', lapso = '') {
+  const rows = items.slice(0, 40).map((item) => [{
+    text: `➕ ${item.tema || 'Tema curricular'}`.slice(0, 60),
+    callback_data: `currPanel:assign:${encodeURIComponent(level)}:${encodeURIComponent(lapso)}:${Number(item.indice)}`,
+  }]);
+  rows.push([{ text: '⬅️ Volver al lapso', callback_data: `currPanel:lapso:${encodeURIComponent(level)}:${encodeURIComponent(lapso)}` }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+async function showCurrPanelMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botPanelCurricularContexto', { telegramId });
+  const levels = Array.isArray(result.niveles) ? result.niveles : [];
+
+  currPanelState.set(String(chatId), {
+    levels,
+    level: '',
+    lapso: '',
+  });
+
+  await sendMessage(
+    chatId,
+    `📅 <b>PANEL CURRICULAR POR LAPSO</b>
+━━━━━━━━━━━━━━━━━━
+
+Organiza los temas del Cuadernillo de Educación Física por período escolar.
+
+Año escolar: <b>${escapeHtml(result.anoEscolar || 'No registrado')}</b>
+
+Selecciona un grado o año:`,
+    { reply_markup: currPanelLevelsKeyboard(levels, 'lapso') },
+  );
+}
+
+async function showCurrPanelLevel(chatId, source, level) {
+  currPanelState.set(String(chatId), {
+    ...(currPanelState.get(String(chatId)) || {}),
+    level,
+    lapso: '',
+  });
+
+  await sendMessage(
+    chatId,
+    `📅 <b>${escapeHtml(level)}</b>
+
+Selecciona el lapso que deseas consultar o planificar:`,
+    { reply_markup: currPanelLapsosKeyboard(level) },
+  );
+}
+
+async function showCurrPanelLapso(chatId, source, level, lapso) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botPanelCurricularLapso', {
+    telegramId,
+    nivel: level,
+    lapso,
+  });
+
+  const topics = Array.isArray(result.temas) ? result.temas : [];
+  const summary = result.resumen || {};
+
+  currPanelState.set(String(chatId), {
+    ...(currPanelState.get(String(chatId)) || {}),
+    level: result.nivel || level,
+    lapso: result.lapso || lapso,
+  });
+
+  const noTopicsText = topics.length
+    ? 'Selecciona un tema para ver su estado curricular.'
+    : 'Todavía no hay temas asignados a este lapso.';
+
+  await sendMessage(
+    chatId,
+    `📅 <b>${escapeHtml(result.lapso || lapso)} · ${escapeHtml(result.nivel || level)}</b>
+━━━━━━━━━━━━━━━━━━
+
+⚪ Pendientes: <b>${Number(summary.Pendiente || 0)}</b>
+🔵 Planificados: <b>${Number(summary.Planificado || 0)}</b>
+🟠 Trabajados: <b>${Number(summary.Trabajado || 0)}</b>
+🟢 Evaluados: <b>${Number(summary.Evaluado || 0)}</b>
+
+Temas asignados: <b>${Number(result.total || topics.length)}</b>
+Avance del lapso: <b>${Number(result.avance || 0)}%</b>
+
+${noTopicsText}`,
+    { reply_markup: currPanelTopicsKeyboard(topics, result.nivel || level, result.lapso || lapso) },
+  );
+}
+
+async function showCurrPanelAssignMenu(chatId, source, level, lapso) {
+  const telegramId = teacherTelegramId(source);
+
+  const all = await callEduGestion('botSeguimientoCurricularNivel', {
+    telegramId,
+    nivel: level,
+  });
+
+  const current = await callEduGestion('botPanelCurricularLapso', {
+    telegramId,
+    nivel: level,
+    lapso,
+  });
+
+  const assignedNames = new Set((current.temas || []).map((x) => String(x.tema || '').trim().toLowerCase()));
+  const available = (all.temas || []).filter((x) => !assignedNames.has(String(x.tema || '').trim().toLowerCase()));
+
+  if (!available.length) {
+    await sendMessage(
+      chatId,
+      `✅ Todos los temas disponibles de <b>${escapeHtml(level)}</b> ya están asignados a este lapso.`,
+      { reply_markup: currPanelTopicsKeyboard(current.temas || [], level, lapso) },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `➕ <b>ASIGNAR TEMA AL ${escapeHtml(lapso.toUpperCase())}</b>
+
+Grado/Año: <b>${escapeHtml(level)}</b>
+
+Selecciona un tema del cuadernillo:`,
+    { reply_markup: currPanelAssignTopicsKeyboard(available, level, lapso) },
+  );
+}
+
+async function assignCurrPanelTopic(chatId, source, level, lapso, index) {
+  const telegramId = teacherTelegramId(source);
+
+  const result = await callEduGestion('botPanelCurricularAsignarLapso', {
+    telegramId,
+    nivel: level,
+    lapso,
+    indice: Number(index),
+  });
+
+  await sendMessage(
+    chatId,
+    `✅ <b>TEMA ASIGNADO AL LAPSO</b>
+
+Tema: <b>${escapeHtml(result.tema || '')}</b>
+Lapso: <b>${escapeHtml(result.lapso || lapso)}</b>
+Grado/Año: <b>${escapeHtml(result.nivel || level)}</b>`,
+  );
+
+  await showCurrPanelLapso(chatId, source, result.nivel || level, result.lapso || lapso);
+}
+
+async function showCurrPanelTopic(chatId, source, level, lapso, index) {
+  const telegramId = teacherTelegramId(source);
+
+  const tracking = await callEduGestion('botSeguimientoCurricularNivel', {
+    telegramId,
+    nivel: level,
+  });
+
+  const item = (tracking.temas || []).find((x) => Number(x.indice) === Number(index));
+  if (!item) {
+    await sendMessage(chatId, 'No encontré ese tema curricular.');
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📅 <b>TEMA DEL ${escapeHtml(lapso.toUpperCase())}</b>
+━━━━━━━━━━━━━━━━━━
+
+<b>${escapeHtml(item.tema || '')}</b>
+
+Grado/Año: <b>${escapeHtml(level)}</b>
+Estado curricular: <b>${currTrackStatusIcon(item.estado)} ${escapeHtml(item.estado || 'Pendiente')}</b>
+${item.pagina ? `Página del cuadernillo: <b>${escapeHtml(item.pagina)}</b>\n` : ''}
+
+Puedes cambiar su estado desde Seguimiento curricular.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📈 Abrir seguimiento curricular', callback_data: `currTrack:topic:${encodeURIComponent(level)}:${Number(index)}` }],
+          [{ text: '⬅️ Volver al lapso', callback_data: `currPanel:lapso:${encodeURIComponent(level)}:${encodeURIComponent(lapso)}` }],
+          [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+        ],
+      },
+    },
+  );
+}
+
+async function showCurrPanelAnnualMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botPanelCurricularContexto', { telegramId });
+  const levels = Array.isArray(result.niveles) ? result.niveles : [];
+
+  await sendMessage(
+    chatId,
+    `📊 <b>PANEL CURRICULAR ANUAL</b>
+━━━━━━━━━━━━━━━━━━
+
+Año escolar: <b>${escapeHtml(result.anoEscolar || 'No registrado')}</b>
+
+Selecciona un grado o año para ver el resumen anual:`,
+    { reply_markup: currPanelLevelsKeyboard(levels, 'annual') },
+  );
+}
+
+async function showCurrPanelAnnual(chatId, source, level) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botPanelCurricularAnual', {
+    telegramId,
+    nivel: level,
+  });
+
+  const lapsos = Array.isArray(result.lapsos) ? result.lapsos : [];
+  const lapsoLines = lapsos.map((item) => (
+    `📅 <b>${escapeHtml(item.lapso || '')}</b>
+Temas: <b>${Number(item.total || 0)}</b> · Avance: <b>${Number(item.avance || 0)}%</b>
+⚪ ${Number(item.pendiente || 0)} · 🔵 ${Number(item.planificado || 0)} · 🟠 ${Number(item.trabajado || 0)} · 🟢 ${Number(item.evaluado || 0)}`
+  )).join('\n\n');
+
+  const general = result.seguimientoGeneral || {};
+
+  await sendMessage(
+    chatId,
+    `📊 <b>PANEL ANUAL · ${escapeHtml(result.nivel || level)}</b>
+━━━━━━━━━━━━━━━━━━
+
+Año escolar: <b>${escapeHtml(result.anoEscolar || 'No registrado')}</b>
+
+Total de temas: <b>${Number(result.totalTemas || 0)}</b>
+Asignados a lapsos: <b>${Number(result.temasAsignados || 0)}</b>
+Sin asignar: <b>${Number(result.temasSinAsignar || 0)}</b>
+Avance anual: <b>${Number(result.avanceAnual || 0)}%</b>
+
+<b>Seguimiento general</b>
+⚪ Pendiente: ${Number(general.Pendiente || 0)}
+🔵 Planificado: ${Number(general.Planificado || 0)}
+🟠 Trabajado: ${Number(general.Trabajado || 0)}
+🟢 Evaluado: ${Number(general.Evaluado || 0)}
+
+${lapsoLines || 'No hay información por lapso todavía.'}
+
+Fuente: <b>${escapeHtml(result.fuente || 'Cuadernillo Curricular MPPE · Educación Física')}</b>`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📅 Abrir panel por lapso', callback_data: `currPanel:level:${encodeURIComponent(result.nivel || level)}` }],
+          [{ text: '⬅️ Cambiar grado/año', callback_data: 'currPanel:annualMenu' }],
+          [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+        ],
+      },
+    },
+  );
+}
 
 const currTrackState = new Map();
 
@@ -4421,7 +4726,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -4560,6 +4865,16 @@ async function handleMessage(message) {
 
   if (/^\/(seguimiento|seguimientocurricular|curricular)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showCurrTrackMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/(panelcurricular|panellapso|lapso)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showCurrPanelMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/(panelanual|anual)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showCurrPanelAnnualMenu(chatId, message);
     return;
   }
 
@@ -4704,6 +5019,55 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'currPanel:menu') {
+    await showCurrPanelMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'currPanel:annualMenu') {
+    await showCurrPanelAnnualMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('currPanel:annualLevel:')) {
+    const level = decodeURIComponent(data.slice('currPanel:annualLevel:'.length));
+    await showCurrPanelAnnual(chatId, callbackQuery, level);
+    return;
+  }
+  if (data.startsWith('currPanel:level:')) {
+    const level = decodeURIComponent(data.slice('currPanel:level:'.length));
+    await showCurrPanelLevel(chatId, callbackQuery, level);
+    return;
+  }
+  if (data.startsWith('currPanel:lapso:')) {
+    const parts = data.split(':');
+    const level = decodeURIComponent(parts[2] || '');
+    const lapso = decodeURIComponent(parts[3] || '');
+    await showCurrPanelLapso(chatId, callbackQuery, level, lapso);
+    return;
+  }
+  if (data.startsWith('currPanel:assignMenu:')) {
+    const parts = data.split(':');
+    const level = decodeURIComponent(parts[2] || '');
+    const lapso = decodeURIComponent(parts[3] || '');
+    await showCurrPanelAssignMenu(chatId, callbackQuery, level, lapso);
+    return;
+  }
+  if (data.startsWith('currPanel:assign:')) {
+    const parts = data.split(':');
+    const level = decodeURIComponent(parts[2] || '');
+    const lapso = decodeURIComponent(parts[3] || '');
+    const index = Number(parts[4]);
+    await assignCurrPanelTopic(chatId, callbackQuery, level, lapso, index);
+    return;
+  }
+  if (data.startsWith('currPanel:topic:')) {
+    const parts = data.split(':');
+    const level = decodeURIComponent(parts[2] || '');
+    const lapso = decodeURIComponent(parts[3] || '');
+    const index = Number(parts[4]);
+    await showCurrPanelTopic(chatId, callbackQuery, level, lapso, index);
     return;
   }
 
@@ -5206,7 +5570,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase6.0-seguimiento-curricular-ready',
+        status: 'phase6.1-panel-anual-lapso-ready',
       });
     }
 
