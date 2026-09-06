@@ -466,6 +466,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '📊 Control de Estudio', callback_data: 'studyControl:menu' },
     ]);
     rows.push([
+      { text: '👤 Mi perfil docente', callback_data: 'teacherProfile:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -867,6 +870,74 @@ function gradesBackKeyboard() {
 
 
 
+
+
+function teacherProfileKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '🔄 Actualizar perfil', callback_data: 'teacherProfile:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+async function showTeacherProfile(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botPerfilDocente', { telegramId });
+  const data = result.perfil || {};
+  const tg = result.telegram || {};
+  const sections = Array.isArray(data.secciones) ? data.secciones : [];
+  const grades = Array.isArray(data.grados) ? data.grados : [];
+
+  const sectionsText = sections.length
+    ? sections.map((item, i) =>
+        `${i + 1}. ${escapeHtml(item.ano || 'Curso')} · Sección ${escapeHtml(item.seccion || '—')}${item.turno ? ` · ${escapeHtml(item.turno)}` : ''}`
+      ).join('\n')
+    : 'Sin cursos o secciones asignadas.';
+
+  const gradesText = grades.length
+    ? grades.map((g) => escapeHtml(g)).join(', ')
+    : 'No registrados';
+
+  const telegramUser = tg.usuarioTelegram
+    ? `@${escapeHtml(String(tg.usuarioTelegram).replace(/^@/, ''))}`
+    : 'No registrado';
+
+  await sendMessage(
+    chatId,
+    `👤 <b>MI PERFIL DOCENTE</b>
+━━━━━━━━━━━━━━━━━━
+
+<b>Nombre:</b> ${escapeHtml(data.nombre || 'No registrado')}
+<b>Usuario:</b> ${escapeHtml(data.usuario || 'No registrado')}
+<b>Correo:</b> ${escapeHtml(data.email || 'No registrado')}
+<b>Materia:</b> ${escapeHtml(data.materia || 'No registrada')}
+<b>Año escolar:</b> ${escapeHtml(data.anoEscolar || 'No registrado')}
+<b>Estado:</b> ${data.activo ? '✅ ACTIVO' : '⛔ INACTIVO'}
+
+🎓 <b>GRADOS / AÑOS</b>
+${gradesText}
+
+🏫 <b>CURSOS Y SECCIONES</b>
+${sectionsText}
+
+📚 <b>Total de cursos:</b> ${Number(data.totalCursos || sections.length)}
+
+📲 <b>TELEGRAM</b>
+Vinculado: ${tg.vinculado ? '✅ Sí' : '❌ No'}
+Usuario Telegram: ${telegramUser}
+
+━━━━━━━━━━━━━━━━━━
+Este perfil se toma directamente de tu cuenta vinculada de EduGestión.`,
+    { reply_markup: teacherProfileKeyboard() },
+  );
+}
 
 async function showStudyControlMenu(chatId, source) {
   const telegramId = teacherTelegramId(source);
@@ -3322,7 +3393,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -3431,6 +3502,11 @@ async function handleMessage(message) {
 
   if (/^\/(controlestudio|control)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showStudyControlMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/(perfil|miperfil)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showTeacherProfile(chatId, message);
     return;
   }
 
@@ -3543,6 +3619,11 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'teacherProfile:menu') {
+    await showTeacherProfile(chatId, callbackQuery);
     return;
   }
 
@@ -3938,7 +4019,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.5-control-estudio-ready',
+        status: 'phase5.6-perfil-docente-ready',
       });
     }
 
