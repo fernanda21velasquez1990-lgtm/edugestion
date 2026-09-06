@@ -484,6 +484,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '📊 Panel anual', callback_data: 'currPanel:annualMenu' },
     ]);
     rows.push([
+      { text: '🗓️ Calendario docente', callback_data: 'teacherCalendar:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -891,6 +894,310 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const teacherCalendarDraft = new Map();
+
+function teacherCalendarMainKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '➕ Crear evento', callback_data: 'teacherCalendar:create' }],
+      [{ text: '📋 Ver eventos', callback_data: 'teacherCalendar:list' }],
+      [{ text: '📊 Resumen', callback_data: 'teacherCalendar:summary' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function teacherCalendarTypesKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📚 Actividad', callback_data: 'teacherCalendar:type:Actividad' }],
+      [{ text: '🧠 Evaluación', callback_data: 'teacherCalendar:type:Evaluaci%C3%B3n' }],
+      [{ text: '👥 Reunión', callback_data: 'teacherCalendar:type:Reuni%C3%B3n' }],
+      [{ text: '⏰ Recordatorio', callback_data: 'teacherCalendar:type:Recordatorio' }],
+      [{ text: '📝 Otro', callback_data: 'teacherCalendar:type:Otro' }],
+      [{ text: '⬅️ Volver', callback_data: 'teacherCalendar:menu' }],
+    ],
+  };
+}
+
+function teacherCalendarEventKeyboard(id, estado) {
+  const rows = [];
+  if (estado !== 'Completado') rows.push([{ text: '✅ Marcar completado', callback_data: `teacherCalendar:status:${id}:Completado` }]);
+  if (estado !== 'Cancelado') rows.push([{ text: '🚫 Cancelar', callback_data: `teacherCalendar:status:${id}:Cancelado` }]);
+  if (estado !== 'Pendiente') rows.push([{ text: '⏳ Volver a pendiente', callback_data: `teacherCalendar:status:${id}:Pendiente` }]);
+  rows.push([{ text: '🗑️ Eliminar', callback_data: `teacherCalendar:deleteAsk:${id}` }]);
+  rows.push([{ text: '⬅️ Ver eventos', callback_data: 'teacherCalendar:list' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function teacherCalendarListKeyboard(eventos = []) {
+  const rows = eventos.slice(0, 30).map((e) => [{
+    text: `${e.fecha || ''}${e.hora ? ` ${e.hora}` : ''} · ${e.titulo || 'Evento'}`.slice(0, 60),
+    callback_data: `teacherCalendar:event:${e.id}`,
+  }]);
+  rows.push([{ text: '➕ Crear evento', callback_data: 'teacherCalendar:create' }]);
+  rows.push([{ text: '📊 Resumen', callback_data: 'teacherCalendar:summary' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function teacherCalendarStatusIcon(estado) {
+  return ({ Pendiente:'⏳', Completado:'✅', Cancelado:'🚫' })[estado] || '⏳';
+}
+
+function teacherCalendarTypeIcon(tipo) {
+  return ({ Actividad:'📚', Evaluación:'🧠', Reunión:'👥', Recordatorio:'⏰', Otro:'📝' })[tipo] || '📝';
+}
+
+async function showTeacherCalendarMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  await callEduGestion('botCalendarioContexto', { telegramId });
+
+  await sendMessage(
+    chatId,
+    `🗓️ <b>CALENDARIO DOCENTE</b>
+━━━━━━━━━━━━━━━━━━
+
+Organiza actividades, evaluaciones, reuniones y recordatorios directamente desde Telegram.`,
+    { reply_markup: teacherCalendarMainKeyboard() },
+  );
+}
+
+async function startTeacherCalendarCreate(chatId) {
+  teacherCalendarDraft.set(String(chatId), {});
+  pendingTextMode.delete(String(chatId));
+
+  await sendMessage(
+    chatId,
+    `➕ <b>CREAR EVENTO</b>
+
+Selecciona el tipo de evento:`,
+    { reply_markup: teacherCalendarTypesKeyboard() },
+  );
+}
+
+async function chooseTeacherCalendarType(chatId, type) {
+  const draft = teacherCalendarDraft.get(String(chatId)) || {};
+  draft.tipo = type;
+  teacherCalendarDraft.set(String(chatId), draft);
+  pendingTextMode.set(String(chatId), 'calendar-date');
+
+  await sendMessage(
+    chatId,
+    `${teacherCalendarTypeIcon(type)} Tipo: <b>${escapeHtml(type)}</b>
+
+Escribe la fecha en formato:
+
+<code>AAAA-MM-DD</code>
+
+Ejemplo: <code>2026-09-15</code>
+
+Para cancelar escribe <code>cancelar</code>.`,
+  );
+}
+
+async function handleTeacherCalendarText(chatId, source, text, mode) {
+  const draft = teacherCalendarDraft.get(String(chatId)) || {};
+  const raw = String(text || '').trim();
+
+  if (raw.toLowerCase() === 'cancelar') {
+    pendingTextMode.delete(String(chatId));
+    teacherCalendarDraft.delete(String(chatId));
+    await showTeacherCalendarMenu(chatId, source);
+    return true;
+  }
+
+  if (mode === 'calendar-date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      await sendMessage(chatId, '⚠️ Usa el formato <code>AAAA-MM-DD</code>. Ejemplo: <code>2026-09-15</code>.');
+      return true;
+    }
+    draft.fecha = raw;
+    teacherCalendarDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'calendar-time');
+    await sendMessage(chatId, 'Escribe la hora en formato <code>HH:MM</code> o escribe <code>sin hora</code>.');
+    return true;
+  }
+
+  if (mode === 'calendar-time') {
+    if (!/^sin hora$/i.test(raw) && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
+      await sendMessage(chatId, '⚠️ Hora inválida. Usa <code>HH:MM</code> o escribe <code>sin hora</code>.');
+      return true;
+    }
+    draft.hora = /^sin hora$/i.test(raw) ? '' : raw;
+    teacherCalendarDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'calendar-title');
+    await sendMessage(chatId, 'Escribe el <b>título</b> del evento.');
+    return true;
+  }
+
+  if (mode === 'calendar-title') {
+    if (!raw) {
+      await sendMessage(chatId, '⚠️ El título no puede quedar vacío.');
+      return true;
+    }
+    draft.titulo = raw;
+    teacherCalendarDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'calendar-description');
+    await sendMessage(chatId, 'Escribe una <b>descripción</b> o escribe <code>sin descripción</code>.');
+    return true;
+  }
+
+  if (mode === 'calendar-description') {
+    draft.descripcion = /^sin descripci[oó]n$/i.test(raw) ? '' : raw;
+    teacherCalendarDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'calendar-grade');
+    await sendMessage(chatId, 'Escribe el <b>grado/año</b> o escribe <code>sin grado</code>.');
+    return true;
+  }
+
+  if (mode === 'calendar-grade') {
+    draft.grado = /^sin grado$/i.test(raw) ? '' : raw;
+    teacherCalendarDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'calendar-section');
+    await sendMessage(chatId, 'Escribe la <b>sección</b> o escribe <code>sin sección</code>.');
+    return true;
+  }
+
+  if (mode === 'calendar-section') {
+    draft.seccion = /^sin secci[oó]n$/i.test(raw) ? '' : raw;
+    teacherCalendarDraft.set(String(chatId), draft);
+    pendingTextMode.set(String(chatId), 'calendar-lapso');
+    await sendMessage(chatId, 'Escribe el <b>lapso</b> o escribe <code>sin lapso</code>.');
+    return true;
+  }
+
+  if (mode === 'calendar-lapso') {
+    draft.lapso = /^sin lapso$/i.test(raw) ? '' : raw;
+
+    const telegramId = teacherTelegramId(source);
+    const result = await callEduGestion('botCalendarioCrear', {
+      telegramId,
+      ...draft,
+    });
+
+    pendingTextMode.delete(String(chatId));
+    teacherCalendarDraft.delete(String(chatId));
+
+    const e = result.evento || {};
+
+    await sendMessage(
+      chatId,
+      `✅ <b>EVENTO CREADO</b>
+━━━━━━━━━━━━━━━━━━
+
+${teacherCalendarTypeIcon(e.tipo)} <b>${escapeHtml(e.titulo || '')}</b>
+
+Fecha: <b>${escapeHtml(e.fecha || '')}</b>
+${e.hora ? `Hora: <b>${escapeHtml(e.hora)}</b>\n` : ''}Tipo: <b>${escapeHtml(e.tipo || '')}</b>
+Estado: <b>${teacherCalendarStatusIcon(e.estado)} ${escapeHtml(e.estado || 'Pendiente')}</b>
+${e.grado ? `Grado/Año: <b>${escapeHtml(e.grado)}</b>\n` : ''}${e.seccion ? `Sección: <b>${escapeHtml(e.seccion)}</b>\n` : ''}${e.lapso ? `Lapso: <b>${escapeHtml(e.lapso)}</b>\n` : ''}${e.descripcion ? `\n📝 ${escapeHtml(e.descripcion)}` : ''}`,
+      { reply_markup: teacherCalendarMainKeyboard() },
+    );
+    return true;
+  }
+
+  return false;
+}
+
+async function showTeacherCalendarList(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botCalendarioListar', { telegramId });
+  const eventos = Array.isArray(result.eventos) ? result.eventos : [];
+
+  if (!eventos.length) {
+    await sendMessage(
+      chatId,
+      `📋 <b>EVENTOS DEL CALENDARIO</b>
+
+Todavía no tienes eventos registrados.`,
+      { reply_markup: teacherCalendarMainKeyboard() },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📋 <b>EVENTOS DEL CALENDARIO</b>
+━━━━━━━━━━━━━━━━━━
+
+Total: <b>${Number(result.total || eventos.length)}</b>
+
+Selecciona un evento para ver el detalle:`,
+    { reply_markup: teacherCalendarListKeyboard(eventos) },
+  );
+}
+
+async function showTeacherCalendarEvent(chatId, source, id) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botCalendarioDetalle', { telegramId, id });
+  const e = result.evento || {};
+
+  await sendMessage(
+    chatId,
+    `${teacherCalendarTypeIcon(e.tipo)} <b>${escapeHtml(e.titulo || '')}</b>
+━━━━━━━━━━━━━━━━━━
+
+Fecha: <b>${escapeHtml(e.fecha || '')}</b>
+${e.hora ? `Hora: <b>${escapeHtml(e.hora)}</b>\n` : ''}Tipo: <b>${escapeHtml(e.tipo || '')}</b>
+Estado: <b>${teacherCalendarStatusIcon(e.estado)} ${escapeHtml(e.estado || 'Pendiente')}</b>
+${e.grado ? `Grado/Año: <b>${escapeHtml(e.grado)}</b>\n` : ''}${e.seccion ? `Sección: <b>${escapeHtml(e.seccion)}</b>\n` : ''}${e.lapso ? `Lapso: <b>${escapeHtml(e.lapso)}</b>\n` : ''}${e.descripcion ? `\n📝 ${escapeHtml(e.descripcion)}` : ''}`,
+    { reply_markup: teacherCalendarEventKeyboard(e.id, e.estado) },
+  );
+}
+
+async function updateTeacherCalendarStatus(chatId, source, id, estado) {
+  const telegramId = teacherTelegramId(source);
+  await callEduGestion('botCalendarioActualizarEstado', { telegramId, id, estado });
+  await showTeacherCalendarEvent(chatId, source, id);
+}
+
+async function deleteTeacherCalendarEvent(chatId, source, id) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botCalendarioEliminar', { telegramId, id });
+
+  await sendMessage(
+    chatId,
+    `🗑️ <b>EVENTO ELIMINADO</b>
+
+${escapeHtml(result.titulo || '')}`,
+    { reply_markup: teacherCalendarMainKeyboard() },
+  );
+}
+
+async function showTeacherCalendarSummary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botCalendarioResumen', { telegramId });
+  const s = result.resumen || {};
+
+  await sendMessage(
+    chatId,
+    `📊 <b>RESUMEN DEL CALENDARIO</b>
+━━━━━━━━━━━━━━━━━━
+
+Total: <b>${Number(s.total || 0)}</b>
+
+⏳ Pendientes: <b>${Number(s.pendientes || 0)}</b>
+✅ Completados: <b>${Number(s.completados || 0)}</b>
+🚫 Cancelados: <b>${Number(s.cancelados || 0)}</b>
+
+📚 Actividades: <b>${Number(s.actividades || 0)}</b>
+🧠 Evaluaciones: <b>${Number(s.evaluaciones || 0)}</b>
+👥 Reuniones: <b>${Number(s.reuniones || 0)}</b>
+⏰ Recordatorios: <b>${Number(s.recordatorios || 0)}</b>
+📝 Otros: <b>${Number(s.otros || 0)}</b>`,
+    { reply_markup: teacherCalendarMainKeyboard() },
+  );
+}
 
 const currPanelState = new Map();
 
@@ -4726,7 +5033,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -4878,6 +5185,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/(calendario|calendar)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showTeacherCalendarMenu(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -4900,6 +5212,12 @@ async function handleMessage(message) {
 
   if (text && !text.startsWith('/')) {
     const mode = pendingTextMode.get(String(chatId));
+
+    if (String(mode || '').startsWith('calendar-')) {
+      await handleTeacherCalendarText(chatId, message, text, mode);
+      return;
+    }
+
     if (mode === 'student-search') {
       if (String(text).trim().toLowerCase() === 'cancelar') {
         pendingTextMode.delete(String(chatId));
@@ -5019,6 +5337,52 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'teacherCalendar:menu') {
+    await showTeacherCalendarMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'teacherCalendar:create') {
+    await startTeacherCalendarCreate(chatId);
+    return;
+  }
+  if (data === 'teacherCalendar:list') {
+    await showTeacherCalendarList(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'teacherCalendar:summary') {
+    await showTeacherCalendarSummary(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('teacherCalendar:type:')) {
+    await chooseTeacherCalendarType(chatId, decodeURIComponent(data.slice('teacherCalendar:type:'.length)));
+    return;
+  }
+  if (data.startsWith('teacherCalendar:event:')) {
+    await showTeacherCalendarEvent(chatId, callbackQuery, data.slice('teacherCalendar:event:'.length));
+    return;
+  }
+  if (data.startsWith('teacherCalendar:status:')) {
+    const parts = data.split(':');
+    await updateTeacherCalendarStatus(chatId, callbackQuery, parts[2] || '', parts[3] || 'Pendiente');
+    return;
+  }
+  if (data.startsWith('teacherCalendar:deleteAsk:')) {
+    const id = data.slice('teacherCalendar:deleteAsk:'.length);
+    await sendMessage(
+      chatId,
+      '⚠️ ¿Seguro que deseas eliminar este evento?',
+      { reply_markup: { inline_keyboard: [
+        [{ text: '🗑️ Sí, eliminar', callback_data: `teacherCalendar:delete:${id}` }],
+        [{ text: '❌ No eliminar', callback_data: `teacherCalendar:event:${id}` }],
+      ] } },
+    );
+    return;
+  }
+  if (data.startsWith('teacherCalendar:delete:')) {
+    await deleteTeacherCalendarEvent(chatId, callbackQuery, data.slice('teacherCalendar:delete:'.length));
     return;
   }
 
@@ -5570,7 +5934,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase6.1-panel-anual-lapso-ready',
+        status: 'phase6.2-calendario-docente-ready',
       });
     }
 
