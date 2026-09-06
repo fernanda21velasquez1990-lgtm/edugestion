@@ -477,6 +477,7 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '📘 Cuadernillo EF', callback_data: 'curriculumEF:menu' },
+      { text: '📈 Seguimiento curricular', callback_data: 'currTrack:menu' },
     ]);
     rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
@@ -884,6 +885,218 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const currTrackState = new Map();
+
+function currTrackLevelsKeyboard(levels = []) {
+  const rows = levels.map((item) => [{
+    text: `📚 ${item.nivel} · ${Number(item.totalTemas || 0)} temas`,
+    callback_data: `currTrack:level:${encodeURIComponent(item.nivel)}`,
+  }]);
+  rows.push([{ text: '📊 Resumen general', callback_data: 'currTrack:summary' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function currTrackStatusIcon(status) {
+  const map = {
+    Pendiente: '⚪',
+    Planificado: '🔵',
+    Trabajado: '🟠',
+    Evaluado: '🟢',
+  };
+  return map[status] || '⚪';
+}
+
+function currTrackTopicsKeyboard(items = [], level = '') {
+  const rows = items.slice(0, 40).map((item) => [{
+    text: `${currTrackStatusIcon(item.estado)} ${item.tema || 'Tema curricular'}`.slice(0, 60),
+    callback_data: `currTrack:topic:${encodeURIComponent(level)}:${Number(item.indice)}`,
+  }]);
+
+  rows.push([{ text: '⬅️ Cambiar grado/año', callback_data: 'currTrack:menu' }]);
+  rows.push([{ text: '📊 Resumen general', callback_data: 'currTrack:summary' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function currTrackStatusKeyboard(level, index, current) {
+  const statuses = [
+    ['⚪ Pendiente', 'Pendiente'],
+    ['🔵 Planificado', 'Planificado'],
+    ['🟠 Trabajado', 'Trabajado'],
+    ['🟢 Evaluado', 'Evaluado'],
+  ];
+
+  const rows = statuses.map(([label, value]) => [{
+    text: `${current === value ? '✅ ' : ''}${label}`,
+    callback_data: `currTrack:set:${encodeURIComponent(level)}:${Number(index)}:${value}`,
+  }]);
+
+  rows.push([{ text: '⬅️ Volver a los temas', callback_data: `currTrack:back:${encodeURIComponent(level)}` }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+
+  return { inline_keyboard: rows };
+}
+
+async function showCurrTrackMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botSeguimientoCurricularContexto', { telegramId });
+  const levels = Array.isArray(result.niveles) ? result.niveles : [];
+
+  currTrackState.set(String(chatId), {
+    levels,
+    level: '',
+    topics: [],
+    selected: null,
+  });
+
+  await sendMessage(
+    chatId,
+    `📈 <b>SEGUIMIENTO CURRICULAR</b>
+━━━━━━━━━━━━━━━━━━
+
+Controla el avance de los temas del Cuadernillo Curricular de Educación Física.
+
+Estados disponibles:
+⚪ Pendiente
+🔵 Planificado
+🟠 Trabajado
+🟢 Evaluado
+
+Selecciona un grado o año:`,
+    { reply_markup: currTrackLevelsKeyboard(levels) },
+  );
+}
+
+async function showCurrTrackLevel(chatId, source, level) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botSeguimientoCurricularNivel', {
+    telegramId,
+    nivel: level,
+  });
+
+  const topics = Array.isArray(result.temas) ? result.temas : [];
+  const summary = result.resumen || {};
+
+  currTrackState.set(String(chatId), {
+    ...(currTrackState.get(String(chatId)) || {}),
+    level: result.nivel || level,
+    topics,
+  });
+
+  await sendMessage(
+    chatId,
+    `📈 <b>${escapeHtml(result.nivel || level)}</b>
+━━━━━━━━━━━━━━━━━━
+
+⚪ Pendientes: <b>${Number(summary.Pendiente || 0)}</b>
+🔵 Planificados: <b>${Number(summary.Planificado || 0)}</b>
+🟠 Trabajados: <b>${Number(summary.Trabajado || 0)}</b>
+🟢 Evaluados: <b>${Number(summary.Evaluado || 0)}</b>
+
+Total de temas: <b>${Number(result.total || topics.length)}</b>
+
+Selecciona un tema para cambiar su estado:`,
+    { reply_markup: currTrackTopicsKeyboard(topics, result.nivel || level) },
+  );
+}
+
+async function showCurrTrackTopic(chatId, source, level, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botSeguimientoCurricularNivel', {
+    telegramId,
+    nivel: level,
+  });
+
+  const topics = Array.isArray(result.temas) ? result.temas : [];
+  const item = topics.find((x) => Number(x.indice) === Number(index));
+
+  if (!item) {
+    await sendMessage(chatId, 'No encontré ese tema curricular.');
+    return;
+  }
+
+  currTrackState.set(String(chatId), {
+    ...(currTrackState.get(String(chatId)) || {}),
+    level: result.nivel || level,
+    topics,
+    selected: item,
+  });
+
+  await sendMessage(
+    chatId,
+    `📈 <b>ESTADO CURRICULAR</b>
+━━━━━━━━━━━━━━━━━━
+
+<b>${escapeHtml(item.tema || 'Tema curricular')}</b>
+
+Grado/Año: <b>${escapeHtml(item.grado || result.nivel || level)}</b>
+Estado actual: <b>${currTrackStatusIcon(item.estado)} ${escapeHtml(item.estado || 'Pendiente')}</b>
+${item.pagina ? `Página del cuadernillo: <b>${escapeHtml(item.pagina)}</b>\n` : ''}
+
+Selecciona el nuevo estado:`,
+    { reply_markup: currTrackStatusKeyboard(result.nivel || level, Number(index), item.estado || 'Pendiente') },
+  );
+}
+
+async function setCurrTrackStatus(chatId, source, level, index, status) {
+  const telegramId = teacherTelegramId(source);
+
+  const result = await callEduGestion('botSeguimientoCurricularActualizar', {
+    telegramId,
+    nivel: level,
+    indice: Number(index),
+    estado: status,
+  });
+
+  await sendMessage(
+    chatId,
+    `✅ <b>SEGUIMIENTO ACTUALIZADO</b>
+
+Tema: <b>${escapeHtml(result.tema || '')}</b>
+Estado: <b>${currTrackStatusIcon(result.estado)} ${escapeHtml(result.estado || '')}</b>`,
+  );
+
+  await showCurrTrackLevel(chatId, source, result.nivel || level);
+}
+
+async function showCurrTrackSummary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botSeguimientoCurricularResumen', { telegramId });
+  const levels = Array.isArray(result.niveles) ? result.niveles : [];
+
+  const lines = levels.map((item) => {
+    return `📚 <b>${escapeHtml(item.nivel || '')}</b>
+⚪ ${Number(item.pendiente || 0)} · 🔵 ${Number(item.planificado || 0)} · 🟠 ${Number(item.trabajado || 0)} · 🟢 ${Number(item.evaluado || 0)}
+Avance: <b>${Number(item.avance || 0)}%</b>`;
+  });
+
+  await sendMessage(
+    chatId,
+    `📊 <b>RESUMEN GENERAL · SEGUIMIENTO CURRICULAR</b>
+━━━━━━━━━━━━━━━━━━
+
+${lines.join('\n\n')}
+
+Fuente: <b>${escapeHtml(result.fuente || 'Cuadernillo Curricular MPPE · Educación Física')}</b>`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📈 Ver por grado/año', callback_data: 'currTrack:menu' }],
+          [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+        ],
+      },
+    },
+  );
+}
 
 const curriculumEFState = new Map();
 
@@ -4208,7 +4421,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -4342,6 +4555,11 @@ async function handleMessage(message) {
 
   if (/^\/(cuadernillo|curriculo|curriculum)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showCurriculumEFMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/(seguimiento|seguimientocurricular|curricular)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showCurrTrackMenu(chatId, message);
     return;
   }
 
@@ -4486,6 +4704,40 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'currTrack:menu') {
+    await showCurrTrackMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'currTrack:summary') {
+    await showCurrTrackSummary(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('currTrack:level:')) {
+    const level = decodeURIComponent(data.slice('currTrack:level:'.length));
+    await showCurrTrackLevel(chatId, callbackQuery, level);
+    return;
+  }
+  if (data.startsWith('currTrack:topic:')) {
+    const parts = data.split(':');
+    const level = decodeURIComponent(parts[2] || '');
+    const index = Number(parts[3]);
+    await showCurrTrackTopic(chatId, callbackQuery, level, index);
+    return;
+  }
+  if (data.startsWith('currTrack:back:')) {
+    const level = decodeURIComponent(data.slice('currTrack:back:'.length));
+    await showCurrTrackLevel(chatId, callbackQuery, level);
+    return;
+  }
+  if (data.startsWith('currTrack:set:')) {
+    const parts = data.split(':');
+    const level = decodeURIComponent(parts[2] || '');
+    const index = Number(parts[3]);
+    const status = parts[4] || 'Pendiente';
+    await setCurrTrackStatus(chatId, callbackQuery, level, index, status);
     return;
   }
 
@@ -4954,7 +5206,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.9-cuadernillo-ef-ready',
+        status: 'phase6.0-seguimiento-curricular-ready',
       });
     }
 
