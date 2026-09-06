@@ -2,6 +2,51 @@
 const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_TELEGRAM_MESSAGE = 3900;
 const pendingTextMode = new Map();
+
+const closureState = new Map();
+
+function closureLapsoKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '1️⃣ 1er Lapso', callback_data: 'closure:lapso:L1' },
+        { text: '2️⃣ 2do Lapso', callback_data: 'closure:lapso:L2' },
+      ],
+      [{ text: '3️⃣ 3er Lapso', callback_data: 'closure:lapso:L3' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function closureCoursesKeyboard(courses = [], lapsoCode = 'L1') {
+  const rows = courses.slice(0, 30).map((course, index) => [{
+    text: `${course.ano || ''} · Sección ${course.seccion || ''}${course.turno ? ` · ${course.turno}` : ''}`.slice(0, 60),
+    callback_data: `closure:course:${lapsoCode}:${index}`,
+  }]);
+  rows.push([{ text: '🔄 Cambiar lapso', callback_data: 'closure:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function closurePreviewKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '✅ Registrar cierre', callback_data: 'closure:register' }],
+      [{ text: '🔄 Elegir otro curso', callback_data: 'closure:changeCourse' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function closureDoneKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📦 Hacer otro cierre', callback_data: 'closure:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
 const gradesState = new Map();
 
 function jsonResponse(payload, status = 200) {
@@ -341,6 +386,9 @@ function mainMenuKeyboard(linked = true) {
     rows.push([
       { text: '📘 Ficha académica', callback_data: 'academic:menu' },
       { text: '📄 Boletines', callback_data: 'bulletin:menu' },
+    ]);
+    rows.push([
+      { text: '📦 Cierre de lapso', callback_data: 'closure:menu' },
     ]);
     rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
@@ -740,6 +788,197 @@ function gradesBackKeyboard() {
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
     ],
   };
+}
+
+
+async function showClosureMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botNotasContexto', { telegramId });
+  const courses = Array.isArray(result.cursos) ? result.cursos : [];
+  closureState.set(String(chatId), {
+    courses,
+    lapso: '',
+    lapsoCode: '',
+    course: null,
+    preview: null,
+  });
+
+  await sendMessage(
+    chatId,
+    `📦 <b>CIERRE DE LAPSO</b>
+
+Docente: <b>${escapeHtml(result.profesor?.nombre || 'Docente')}</b>
+Materia: <b>${escapeHtml(result.profesor?.materia || 'Sin materia asignada')}</b>
+
+Desde aquí puedes revisar el resumen final de una sección y registrar el cierre del lapso en EduGestión.
+
+Selecciona el lapso:`,
+    { reply_markup: closureLapsoKeyboard() },
+  );
+}
+
+async function chooseClosureLapso(chatId, source, lapsoCode) {
+  const telegramId = teacherTelegramId(source);
+  let state = closureState.get(String(chatId));
+
+  if (!state || !Array.isArray(state.courses)) {
+    const result = await callEduGestion('botNotasContexto', { telegramId });
+    state = {
+      courses: Array.isArray(result.cursos) ? result.cursos : [],
+      lapso: '',
+      lapsoCode: '',
+      course: null,
+      preview: null,
+    };
+  }
+
+  const lapso = gradesLapsoFromCode(lapsoCode);
+  state.lapso = lapso;
+  state.lapsoCode = lapsoCode;
+  state.course = null;
+  state.preview = null;
+  closureState.set(String(chatId), state);
+
+  if (!state.courses.length) {
+    await sendMessage(
+      chatId,
+      `⚠️ No encontré cursos con estudiantes registrados para <b>${escapeHtml(lapso)}</b>.`,
+      { reply_markup: closureLapsoKeyboard() },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📦 <b>${escapeHtml(lapso)}</b>
+
+Selecciona el curso o sección que deseas cerrar:`,
+    { reply_markup: closureCoursesKeyboard(state.courses, lapsoCode) },
+  );
+}
+
+async function previewClosure(chatId, source, lapsoCode, index) {
+  const state = closureState.get(String(chatId));
+  if (!state || !Array.isArray(state.courses)) {
+    await showClosureMenu(chatId, source);
+    return;
+  }
+
+  const course = state.courses[Number(index)];
+  if (!course) {
+    await sendMessage(chatId, '⚠️ La lista de cursos venció. Abre nuevamente Cierre de lapso.', {
+      reply_markup: closureLapsoKeyboard(),
+    });
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const lapso = gradesLapsoFromCode(lapsoCode);
+  const result = await callEduGestion('botCierreLapsoPreview', {
+    telegramId,
+    lapso,
+    ano: course.ano,
+    seccion: course.seccion,
+    turno: course.turno || '',
+  });
+
+  state.lapso = result.lapso || lapso;
+  state.lapsoCode = lapsoCode;
+  state.course = course;
+  state.preview = result;
+  closureState.set(String(chatId), state);
+
+  const avg = result.promedioSeccion === null || result.promedioSeccion === undefined
+    ? 'Sin promedio'
+    : `${Number(result.promedioSeccion).toFixed(2)}/20`;
+
+  const attendance = result.asistencia || {};
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+
+  const detail = students.length
+    ? students.map((student, i) => {
+        const grade = student.notaFinal === null || student.notaFinal === undefined
+          ? 'Sin nota'
+          : `${Number(student.notaFinal).toFixed(2)}/20`;
+        return `${i + 1}. ${escapeHtml(student.alumno || 'Estudiante')} · <b>${grade}</b>`;
+      }).join('\n')
+    : 'Sin estudiantes registrados.';
+
+  await sendMessage(
+    chatId,
+    `📦 <b>VISTA PREVIA DEL CIERRE</b>
+━━━━━━━━━━━━━━━━━━
+
+Lapso: <b>${escapeHtml(result.lapso || lapso)}</b>
+Curso: <b>${escapeHtml(result.ano || course.ano || '')} · Sección ${escapeHtml(result.seccion || course.seccion || '')}</b>
+Turno: <b>${escapeHtml(result.turno || course.turno || 'No registrado')}</b>
+
+👨‍🎓 <b>RESUMEN ACADÉMICO</b>
+Estudiantes: <b>${Number(result.totalEstudiantes || 0)}</b>
+Actividades: <b>${Number(result.totalActividades || 0)}</b>
+Con nota final: <b>${Number(result.estudiantesConNota || 0)}</b>
+Aprobados: <b>${Number(result.aprobados || 0)}</b>
+Reprobados: <b>${Number(result.reprobados || 0)}</b>
+Promedio de la sección: <b>${avg}</b>
+
+📋 <b>ASISTENCIA ACUMULADA</b>
+Presentes: <b>${Number(attendance.presentes || 0)}</b>
+Ausentes: <b>${Number(attendance.ausentes || 0)}</b>
+Tardanzas: <b>${Number(attendance.tardanzas || 0)}</b>
+Justificadas: <b>${Number(attendance.justificadas || 0)}</b>
+
+📝 <b>NOTAS FINALES</b>
+${detail}
+
+━━━━━━━━━━━━━━━━━━
+Revisa la información antes de registrar el cierre.`,
+    { reply_markup: closurePreviewKeyboard() },
+  );
+}
+
+async function registerClosure(chatId, source) {
+  const state = closureState.get(String(chatId));
+  if (!state?.course || !state?.lapso) {
+    await showClosureMenu(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botRegistrarCierreLapso', {
+    telegramId,
+    lapso: state.lapso,
+    ano: state.course.ano,
+    seccion: state.course.seccion,
+    turno: state.course.turno || '',
+    accion: 'Cierre generado desde Telegram',
+    medio: 'Telegram',
+  });
+
+  const summary = result.resumen || state.preview || {};
+  const avg = summary.promedioSeccion === null || summary.promedioSeccion === undefined
+    ? 'Sin promedio'
+    : `${Number(summary.promedioSeccion).toFixed(2)}/20`;
+
+  await sendMessage(
+    chatId,
+    `✅ <b>CIERRE REGISTRADO</b>
+
+Lapso: <b>${escapeHtml(summary.lapso || state.lapso)}</b>
+Curso: <b>${escapeHtml(summary.ano || state.course.ano || '')} · Sección ${escapeHtml(summary.seccion || state.course.seccion || '')}</b>
+Estudiantes: <b>${Number(summary.totalEstudiantes || 0)}</b>
+Promedio de la sección: <b>${avg}</b>
+Aprobados: <b>${Number(summary.aprobados || 0)}</b>
+Reprobados: <b>${Number(summary.reprobados || 0)}</b>
+
+📚 El cierre quedó registrado en el historial compartido de EduGestión.`,
+    { reply_markup: closureDoneKeyboard() },
+  );
 }
 
 async function showGradesMenu(chatId, source) {
@@ -2676,7 +2915,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -2770,6 +3009,11 @@ async function handleMessage(message) {
 
   if (/^\/boletin(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showBulletinStudents(chatId, message);
+    return;
+  }
+
+  if (/^\/cierre(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showClosureMenu(chatId, message);
     return;
   }
 
@@ -2882,6 +3126,30 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'closure:menu') {
+    await showClosureMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('closure:lapso:')) {
+    await chooseClosureLapso(chatId, callbackQuery, data.split(':')[2]);
+    return;
+  }
+  if (data.startsWith('closure:course:')) {
+    const parts = data.split(':');
+    await previewClosure(chatId, callbackQuery, parts[2], Number(parts[3]));
+    return;
+  }
+  if (data === 'closure:register') {
+    await registerClosure(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'closure:changeCourse') {
+    const state = closureState.get(String(chatId));
+    if (state?.lapsoCode) await chooseClosureLapso(chatId, callbackQuery, state.lapsoCode);
+    else await showClosureMenu(chatId, callbackQuery);
     return;
   }
 
@@ -3198,7 +3466,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.2-boletines-menu-rapido-ready',
+        status: 'phase5.3-cierre-lapso-ready',
       });
     }
 
