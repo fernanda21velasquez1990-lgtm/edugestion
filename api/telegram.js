@@ -491,6 +491,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '💾 Respuestas IA guardadas', callback_data: 'savedAI:menu' },
     ]);
     rows.push([
+      { text: '🏫 Dirección', callback_data: 'director:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -901,6 +904,218 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const directorState = new Map();
+
+function directorMainKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '👩‍🏫 Profesores', callback_data: 'director:teachers' }],
+      [{ text: '📊 Resumen institucional', callback_data: 'director:summary' }],
+      [{ text: '🔎 Buscar profesor', callback_data: 'director:search' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function directorTeachersKeyboard(docentes = []) {
+  const rows = docentes.slice(0, 40).map((d) => [{
+    text: `${d.activo ? '🟢' : '🔴'} ${d.nombre || d.usuario || 'Docente'}`.slice(0, 60),
+    callback_data: `director:teacher:${d.id}`,
+  }]);
+  rows.push([{ text: '🔎 Buscar profesor', callback_data: 'director:search' }]);
+  rows.push([{ text: '📊 Resumen institucional', callback_data: 'director:summary' }]);
+  rows.push([{ text: '⬅️ Dirección', callback_data: 'director:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function directorTeacherDetailKeyboard(id) {
+  return {
+    inline_keyboard: [
+      [{ text: '⬅️ Volver a profesores', callback_data: 'director:teachers' }],
+      [{ text: '📊 Resumen institucional', callback_data: 'director:summary' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+async function showDirectorMenu(chatId, source) {
+  try {
+    const telegramId = teacherTelegramId(source);
+    const result = await callEduGestion('botDirectorContexto', { telegramId });
+
+    await sendMessage(
+      chatId,
+      `🏫 <b>DIRECCIÓN · EDUGESTIÓN</b>
+━━━━━━━━━━━━━━━━━━
+
+👤 Director: <b>${escapeHtml(result.director?.nombre || result.director?.usuario || 'Dirección')}</b>
+
+👩‍🏫 Profesores registrados: <b>${Number(result.totalDocentes || 0)}</b>
+🟢 Activos: <b>${Number(result.docentesActivos || 0)}</b>
+🔴 Inactivos: <b>${Number(result.docentesInactivos || 0)}</b>
+
+🔒 Modo institucional de <b>solo lectura</b>.`,
+      { reply_markup: directorMainKeyboard() },
+    );
+  } catch (err) {
+    await sendMessage(
+      chatId,
+      `⛔ <b>ACCESO RESTRINGIDO</b>
+
+Esta sección es exclusiva de una cuenta con rol <b>director</b> vinculada a Telegram.`,
+      { reply_markup: { inline_keyboard: [[{ text: '☰ Todas las opciones', callback_data: 'menu' }]] } },
+    );
+  }
+}
+
+async function showDirectorTeachers(chatId, source, extra = {}) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDirectorProfesores', {
+    telegramId,
+    busqueda: extra.busqueda || '',
+    estado: extra.estado || '',
+    materia: extra.materia || '',
+  });
+
+  const docentes = Array.isArray(result.docentes) ? result.docentes : [];
+  directorState.set(String(chatId), { ...(directorState.get(String(chatId)) || {}), docentes });
+
+  if (!docentes.length) {
+    await sendMessage(
+      chatId,
+      `👩‍🏫 <b>PROFESORES</b>
+
+No encontré profesores con esos criterios.`,
+      { reply_markup: directorMainKeyboard() },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `👩‍🏫 <b>PROFESORES · DIRECCIÓN</b>
+━━━━━━━━━━━━━━━━━━
+
+Resultados: <b>${Number(result.total || docentes.length)}</b>
+
+🟢 Activo · 🔴 Inactivo
+
+Selecciona un profesor para abrir su detalle institucional.`,
+    { reply_markup: directorTeachersKeyboard(docentes) },
+  );
+}
+
+async function showDirectorTeacherDetail(chatId, source, idProfesor) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDirectorDetalleProfesor', { telegramId, idProfesor });
+
+  const d = result.docente || {};
+  const estudiantes = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+  const asistencia = Array.isArray(result.asistencia) ? result.asistencia : [];
+  const evaluaciones = Array.isArray(result.evaluaciones) ? result.evaluaciones : [];
+  const horarios = Array.isArray(result.horarios) ? result.horarios : [];
+  const actas = Array.isArray(result.actas) ? result.actas : [];
+  const auditoria = Array.isArray(result.auditoria) ? result.auditoria : [];
+
+  directorState.set(String(chatId), { ...(directorState.get(String(chatId)) || {}), profesor: d });
+
+  const assignment = [d.seccion, d.turno].filter(Boolean).join(' · ') || 'Sin asignar';
+
+  const msg = `👤 <b>DETALLE DEL PROFESOR</b>
+━━━━━━━━━━━━━━━━━━
+
+<b>${escapeHtml(d.nombre || d.usuario || 'Docente')}</b>
+${d.usuario ? `Usuario: <code>${escapeHtml(d.usuario)}</code>\n` : ''}${d.email ? `Correo: ${escapeHtml(d.email)}\n` : ''}
+Materia: <b>${escapeHtml(d.materia || 'Sin asignar')}</b>
+Asignación: <b>${escapeHtml(assignment)}</b>
+Estado: <b>${d.activo ? '🟢 Activo' : '🔴 Inactivo'}</b>
+
+📚 Estudiantes: <b>${Number(d.estudiantes ?? estudiantes.length)}</b>
+✅ Asistencia: <b>${Number(d.porcentajeAsistencia || 0)}%</b>
+🟢 Presentes: <b>${Number(d.presentes || 0)}</b>
+🔴 Ausentes: <b>${Number(d.ausentes || 0)}</b>
+🟠 Tardanzas: <b>${Number(d.tardanzas || 0)}</b>
+🔵 Justificados: <b>${Number(d.justificados || 0)}</b>
+
+📝 Evaluaciones: <b>${Number(d.evaluaciones ?? evaluaciones.length)}</b>
+🗓️ Bloques de horario: <b>${Number(d.bloquesHorario ?? horarios.length)}</b>
+📄 Actas: <b>${Number(d.actas ?? actas.length)}</b>
+🕘 Movimientos de auditoría: <b>${Number(d.movimientosAuditoria ?? auditoria.length)}</b>
+
+🔒 Consulta de solo lectura.`;
+
+  await sendMessage(chatId, msg, { reply_markup: directorTeacherDetailKeyboard(d.id || idProfesor) });
+}
+
+async function showDirectorSummary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDirectorResumenInstitucional', { telegramId });
+  const r = result.resumen || {};
+
+  await sendMessage(
+    chatId,
+    `📊 <b>RESUMEN INSTITUCIONAL</b>
+━━━━━━━━━━━━━━━━━━
+
+👩‍🏫 Profesores: <b>${Number(r.docentes || 0)}</b>
+🟢 Activos: <b>${Number(r.docentesActivos || 0)}</b>
+🔴 Inactivos: <b>${Number(r.docentesInactivos || 0)}</b>
+
+👨‍🎓 Estudiantes: <b>${Number(r.estudiantes || 0)}</b>
+
+📋 Registros de asistencia: <b>${Number(r.registrosAsistencia || 0)}</b>
+✅ Asistencia general: <b>${Number(r.porcentajeAsistencia || 0)}%</b>
+🟢 Presentes: <b>${Number(r.presentes || 0)}</b>
+🔴 Ausentes: <b>${Number(r.ausentes || 0)}</b>
+🟠 Tardanzas: <b>${Number(r.tardanzas || 0)}</b>
+🔵 Justificados: <b>${Number(r.justificados || 0)}</b>
+
+📝 Evaluaciones: <b>${Number(r.evaluaciones || 0)}</b>
+🗓️ Bloques de horario: <b>${Number(r.bloquesHorario || 0)}</b>
+📄 Actas: <b>${Number(r.actas || 0)}</b>
+🕘 Auditoría: <b>${Number(r.movimientosAuditoria || 0)}</b>
+
+🔒 Información institucional en modo de solo lectura.`,
+    { reply_markup: directorMainKeyboard() },
+  );
+}
+
+async function startDirectorSearch(chatId) {
+  pendingTextMode.set(String(chatId), 'director-search');
+
+  await sendMessage(
+    chatId,
+    `🔎 <b>BUSCAR PROFESOR</b>
+
+Escribe el nombre, usuario, correo, materia, sección o turno.
+
+Para cancelar escribe <code>cancelar</code>.`,
+  );
+}
+
+async function handleDirectorText(chatId, source, text, mode) {
+  if (mode !== 'director-search') return false;
+
+  const raw = String(text || '').trim();
+
+  if (raw.toLowerCase() === 'cancelar') {
+    pendingTextMode.delete(String(chatId));
+    await showDirectorMenu(chatId, source);
+    return true;
+  }
+
+  if (!raw) {
+    await sendMessage(chatId, '⚠️ Escribe un dato para buscar al profesor.');
+    return true;
+  }
+
+  pendingTextMode.delete(String(chatId));
+  await showDirectorTeachers(chatId, source, { busqueda: raw });
+  return true;
+}
 
 const savedAIState = new Map();
 
@@ -5812,7 +6027,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• /biblioteca abre la Biblioteca digital.\n• /respuestasia abre las Respuestas IA guardadas.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• /biblioteca abre la Biblioteca digital.\n• /respuestasia abre las Respuestas IA guardadas.\n• /direccion abre el panel de Dirección (solo director).\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -5979,6 +6194,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/(direccion|director|paneldirector)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showDirectorMenu(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -6014,6 +6234,11 @@ async function handleMessage(message) {
 
     if (String(mode || '').startsWith('saved-ai-')) {
       await handleSavedAIText(chatId, message, text, mode);
+      return;
+    }
+
+    if (String(mode || '').startsWith('director-')) {
+      await handleDirectorText(chatId, message, text, mode);
       return;
     }
 
@@ -6136,6 +6361,27 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'director:menu') {
+    await showDirectorMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'director:teachers') {
+    await showDirectorTeachers(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'director:summary') {
+    await showDirectorSummary(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'director:search') {
+    await startDirectorSearch(chatId);
+    return;
+  }
+  if (data.startsWith('director:teacher:')) {
+    await showDirectorTeacherDetail(chatId, callbackQuery, data.slice('director:teacher:'.length));
     return;
   }
 
@@ -6842,7 +7088,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase6.4-respuestas-ia-guardadas-ready',
+        status: 'phase6.5-direccion-telegram-ready',
       });
     }
 
