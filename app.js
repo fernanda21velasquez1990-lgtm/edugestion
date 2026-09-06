@@ -9088,14 +9088,14 @@ Archivo enviado directamente desde EduGestión.`);
 /* =========================================================
    EduGestión · FASE 13
    Notas y Control de Estudio
-   - Sincronización compartida Web ↔ Telegram mediante Google Sheets.
    - Registro de actividades, entregas y calificaciones por lapso/sección.
-   - Migra automáticamente periodos antiguos de localStorage cuando el servidor está vacío.
    - Integra asistencia registrada en EduGestión por periodo.
-   - Mantiene espejo local temporal para compatibilidad con Boletín/Cierre mientras se migran.
+   - Cuadro final por sección para Control de Estudio.
+   - Genera ZIP con CSV + HTML + resumen TXT.
+   - Compartir archivo mediante Web Share y accesos rápidos a correo/WhatsApp.
    ========================================================= */
 (() => {
-  const MARK='EDUGESTION_CONTROL_ESTUDIO_SYNC_V2';
+  const MARK='EDUGESTION_CONTROL_ESTUDIO_V1';
   if(window[MARK]) return;
   window[MARK]=true;
   const TAB_ID='tab-control-estudio';
@@ -9117,55 +9117,8 @@ Archivo enviado directamente desde EduGestión.`);
 
   function loadAll(){try{return JSON.parse(localStorage.getItem(storeKey())||'{}')||{}}catch(_){return{}}}
   function saveAll(obj){try{localStorage.setItem(storeKey(),JSON.stringify(obj))}catch(_){}}
-  const migrationKey=()=>`edugestion_control_estudio_sync_migrado_v1_${userKey()}_${btoa(unescape(encodeURIComponent(periodoKey()))).replace(/=+/g,'')}`;
-  function guardarEspejoLocal(){
-    const all=loadAll();
-    all[periodoKey()]={actividades:JSON.parse(JSON.stringify(actividades)),updatedAt:new Date().toISOString(),origen:'servidor_compartido'};
-    saveAll(all);
-  }
-  async function migrarLegacySiHaceFalta(api,serverActivities){
-    if(serverActivities.length) return false;
-    if(localStorage.getItem(migrationKey())==='SI') return false;
-    const legacy=loadAll()?.[periodoKey()]?.actividades;
-    if(!Array.isArray(legacy)||!legacy.length){localStorage.setItem(migrationKey(),'SI');return false;}
-    let migradas=0;
-    for(const antigua of legacy){
-      const nombre=String(antigua?.nombre||`Actividad ${migradas+1}`).trim()||`Actividad ${migradas+1}`;
-      const fecha=String(antigua?.fecha||new Date().toISOString().slice(0,10)).slice(0,10);
-      const ponderacion=Math.max(0.01,Math.min(100,n(antigua?.ponderacion)||0.01));
-      try{
-        const creada=await api('crearActividadControlEstudio',{lapso:contexto.lapso,ano:contexto.ano,seccion:contexto.seccion,turno:contexto.turno,nombre,fecha,ponderacion});
-        const idActividad=creada?.actividad?.id;
-        if(idActividad){
-          const registros=Object.entries(antigua?.registros||{}).map(([idAlumno,r])=>({
-            idAlumno:String(idAlumno),
-            entrego:r?.entrego==='Si'?'Si':'No',
-            nota:r?.nota===''||r?.nota==null?'':Number(r.nota),
-            observacion:String(r?.observacion||'')
-          }));
-          if(registros.length) await api('guardarCalificacionesControlEstudio',{idActividad,registros});
-          migradas++;
-        }
-      }catch(err){
-        console.warn('No se pudo migrar una actividad antigua de Control de Estudio:',err);
-      }
-    }
-    localStorage.setItem(migrationKey(),'SI');
-    return migradas>0;
-  }
-  async function cargarPeriodo(){
-    const api=window.EDUGESTION_API_REQUEST;
-    if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');
-    let r=await api('obtenerControlEstudio',{lapso:contexto.lapso,ano:contexto.ano,seccion:contexto.seccion,turno:contexto.turno});
-    let serverActivities=Array.isArray(r.actividades)?r.actividades:[];
-    const migro=await migrarLegacySiHaceFalta(api,serverActivities);
-    if(migro) r=await api('obtenerControlEstudio',{lapso:contexto.lapso,ano:contexto.ano,seccion:contexto.seccion,turno:contexto.turno});
-    actividades=Array.isArray(r.actividades)?r.actividades:[];
-    if(Array.isArray(r.alumnos)&&r.alumnos.length) alumnos=r.alumnos;
-    guardarEspejoLocal();
-    return r;
-  }
-  function guardarPeriodo(){guardarEspejoLocal();}
+  function cargarPeriodo(){const all=loadAll();const p=all[periodoKey()]||{};actividades=Array.isArray(p.actividades)?p.actividades:[];}
+  function guardarPeriodo(){const all=loadAll();all[periodoKey()]={actividades,updatedAt:new Date().toISOString()};saveAll(all);}
   function cargarContacto(){try{return JSON.parse(localStorage.getItem(configKey())||'{}')||{}}catch(_){return{}}}
   function guardarContacto(){const data={email:document.getElementById('ce-email')?.value.trim()||'',whatsapp:document.getElementById('ce-whatsapp')?.value.trim()||''};try{localStorage.setItem(configKey(),JSON.stringify(data))}catch(_){}return data;}
 
@@ -9177,7 +9130,7 @@ Archivo enviado directamente desde EduGestión.`);
       .ce-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dfe7ee);border-radius:18px;padding:16px;margin-bottom:14px}.ce-card h3{margin:0 0 12px;font-size:1.05rem}
       .ce-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.ce-field label{display:block;font-size:.76rem;font-weight:900;opacity:.7;margin:0 0 5px}.ce-field input,.ce-field select{width:100%;padding:10px 11px;border:1px solid var(--border-color,#d7e0e8);border-radius:10px;background:var(--input-bg,#fff);color:inherit}
       .ce-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.ce-btn{border:0;border-radius:11px;padding:10px 13px;font-weight:900;cursor:pointer}.ce-btn.primary{background:#234f91;color:white}.ce-btn.blue{background:#285ca8;color:white}.ce-btn.soft{background:#edf3fb;color:#234f91}.ce-btn.warn{background:#fff4df;color:#8a5a00}.ce-btn.danger{background:#fff0f0;color:#a43c3c}
-      .ce-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0}.ce-metric{padding:13px;border-radius:14px;background:rgba(35,79,145,.07);border:1px solid rgba(35,79,145,.14)}.ce-metric strong{display:block;font-size:1.35rem}.ce-metric span{font-size:.73rem;font-weight:850;opacity:.72}
+      .ce-metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0}.ce-metric{padding:13px;border-radius:14px;background:rgba(35,141,104,.07);border:1px solid rgba(35,141,104,.13)}.ce-metric strong{display:block;font-size:1.35rem}.ce-metric span{font-size:.73rem;font-weight:850;opacity:.72}
       .ce-activity{border:1px solid var(--border-color,#dfe7ee);border-radius:15px;margin:12px 0;overflow:hidden}.ce-activity-head{display:grid;grid-template-columns:minmax(180px,1fr) 145px 110px auto;gap:8px;align-items:center;padding:11px;background:rgba(90,120,150,.06)}.ce-activity-head input{padding:8px 9px;border:1px solid var(--border-color,#d6dfe8);border-radius:9px;background:var(--input-bg,#fff);color:inherit}.ce-activity-head button{border:0;border-radius:9px;padding:8px 10px;font-weight:900;cursor:pointer;background:#fff0f0;color:#a43c3c}
       .ce-table-wrap{overflow:auto}.ce-table{width:100%;border-collapse:collapse;min-width:760px}.ce-table th,.ce-table td{padding:9px 8px;border-bottom:1px solid var(--border-color,#e4e9ef);text-align:left;font-size:.82rem}.ce-table th{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;opacity:.7;background:rgba(120,140,170,.05)}.ce-table input[type=number]{width:78px;padding:7px;border:1px solid var(--border-color,#d6dfe8);border-radius:8px;background:var(--input-bg,#fff);color:inherit}.ce-table select{padding:7px;border:1px solid var(--border-color,#d6dfe8);border-radius:8px;background:var(--input-bg,#fff);color:inherit}
       .ce-final-note{font-weight:1000}.ce-empty{padding:24px;text-align:center;border:1px dashed var(--border-color,#ccd8e5);border-radius:14px;opacity:.75}.ce-warning{padding:10px 12px;border-radius:11px;background:#fff6df;color:#7a5511;font-size:.82rem;font-weight:750;margin-top:10px}.ce-ok{padding:10px 12px;border-radius:11px;background:#eef6ff;color:#235a8a;font-size:.82rem;font-weight:750;margin-top:10px}.ce-contact{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ce-muted{font-size:.78rem;opacity:.7;margin-top:8px}
@@ -9192,7 +9145,7 @@ Archivo enviado directamente desde EduGestión.`);
     if(!tab){tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Notas y Control de Estudio';tab.dataset.description='Registra calificaciones y genera el cuadro final por sección y lapso.';tab.innerHTML='<i class="fa-solid fa-file-signature"></i><span>Notas y Control de Estudio</span>';const ref=document.getElementById('tab-estadisticas');nav.insertBefore(tab,ref||document.getElementById('tab-auditoria')||null);tab.addEventListener('click',()=>abrir(tab));}
     let sec=document.getElementById(SECTION_ID);
     if(!sec){sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
-      <header class="ce-hero"><small><i class="fa-solid fa-cloud-arrow-up"></i> Web ↔ Telegram sincronizado</small><h2>Notas y Control de Estudio</h2><p>Lleva las actividades y calificaciones de cada lapso usando el mismo almacenamiento compartido de EduGestión en la PC y en Telegram.</p></header>
+      <header class="ce-hero"><small><i class="fa-solid fa-file-signature"></i> Fase 13 · Notas y Control de Estudio</small><h2>Notas y Control de Estudio</h2><p>Lleva las actividades y calificaciones de cada lapso, integra la asistencia registrada y genera el cuadro final por sección para entregar al Departamento de Control de Estudio.</p></header>
       <div class="ce-card"><h3>1. Selecciona el lapso y la sección</h3><div class="ce-grid">
         <div class="ce-field"><label>Lapso</label><select id="ce-lapso"><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select></div>
         <div class="ce-field"><label>Sección / Año</label><select id="ce-seccion"><option value="">Cargando secciones…</option></select></div>
@@ -9206,8 +9159,8 @@ Archivo enviado directamente desde EduGestión.`);
         <div class="ce-muted">“Compartir ZIP” intenta enviar el archivo directamente mediante el menú de compartir del dispositivo. Si tu navegador no permite adjuntar archivos automáticamente, se descargará el ZIP y se abrirá el correo o WhatsApp con el mensaje listo para que adjuntes el archivo.</div></div>`;main.appendChild(sec);
       const hoy=new Date(),y=hoy.getFullYear(),m=String(hoy.getMonth()+1).padStart(2,'0'),d=String(hoy.getDate()).padStart(2,'0');sec.querySelector('#ce-hasta').value=`${y}-${m}-${d}`;sec.querySelector('#ce-desde').value=`${y}-${m}-01`;
       const c=cargarContacto();sec.querySelector('#ce-email').value=c.email||'';sec.querySelector('#ce-whatsapp').value=c.whatsapp||'';
-      sec.querySelector('#ce-cargar').addEventListener('click',cargarSeccion);sec.querySelector('#ce-add').addEventListener('click',agregarActividad);sec.querySelector('#ce-zip').addEventListener('click',()=>generarZip(true));sec.querySelector('#ce-share').addEventListener('click',compartirZip);sec.querySelector('#ce-mail').addEventListener('click',abrirCorreo);sec.querySelector('#ce-wa').addEventListener('click',abrirWhatsApp);sec.querySelector('#ce-email').addEventListener('change',guardarContacto);sec.querySelector('#ce-whatsapp').addEventListener('change',guardarContacto);sec.querySelector('#ce-lapso').addEventListener('change',async()=>{if(contexto.ano){contexto.lapso=sec.querySelector('#ce-lapso').value;const st=document.getElementById('ce-status');if(st)st.textContent='Sincronizando notas del lapso…';try{await cargarPeriodo();renderTodo();if(st)st.textContent='Notas sincronizadas con Telegram.';}catch(err){if(st)st.textContent=err.message||'No se pudieron sincronizar las notas.';toast(err.message||'No se pudieron sincronizar las notas.','error');}}});sec.querySelector('#ce-seccion').addEventListener('change',()=>{const v=sec.querySelector('#ce-seccion').value;if(v){const [ano,seccion,turno]=v.split('|');contexto={...contexto,ano,seccion,turno};}});
-      sec.querySelector('#ce-activities').addEventListener('input',onActividadInput);sec.querySelector('#ce-activities').addEventListener('change',onActividadInput);
+      sec.querySelector('#ce-cargar').addEventListener('click',cargarSeccion);sec.querySelector('#ce-add').addEventListener('click',agregarActividad);sec.querySelector('#ce-zip').addEventListener('click',()=>generarZip(true));sec.querySelector('#ce-share').addEventListener('click',compartirZip);sec.querySelector('#ce-mail').addEventListener('click',abrirCorreo);sec.querySelector('#ce-wa').addEventListener('click',abrirWhatsApp);sec.querySelector('#ce-email').addEventListener('change',guardarContacto);sec.querySelector('#ce-whatsapp').addEventListener('change',guardarContacto);sec.querySelector('#ce-lapso').addEventListener('change',()=>{if(contexto.ano){contexto.lapso=sec.querySelector('#ce-lapso').value;cargarPeriodo();renderTodo();}});sec.querySelector('#ce-seccion').addEventListener('change',()=>{const v=sec.querySelector('#ce-seccion').value;if(v){const [ano,seccion,turno]=v.split('|');contexto={...contexto,ano,seccion,turno};}});
+      sec.querySelector('#ce-activities').addEventListener('input',onActividadInput);sec.querySelector('#ce-activities').addEventListener('change',onActividadInput);sec.querySelector('#ce-activities').addEventListener('click',e=>{const b=e.target.closest('[data-ce-del]');if(b)eliminarActividad(b.dataset.ceDel);});
     }
   }
 
@@ -9225,55 +9178,19 @@ Archivo enviado directamente desde EduGestión.`);
 
   async function cargarSeccion(){
     const sel=document.getElementById('ce-seccion'),v=sel?.value||'';if(!v){toast('Selecciona una sección.','warning');return;}const [ano,seccion,turno]=v.split('|');contexto={ano,seccion,turno,lapso:document.getElementById('ce-lapso')?.value||'1er Lapso'};const desde=document.getElementById('ce-desde')?.value||'',hasta=document.getElementById('ce-hasta')?.value||'';const status=document.getElementById('ce-status');if(status)status.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes y asistencia…';
-    try{const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');const [a,s]=await Promise.all([api('obtenerAlumnos',{ano,seccion,turno}),api('obtenerEstadisticasAsistencia',{fechaDesde:desde,fechaHasta:hasta,ano,seccion,turno})]);alumnos=Array.isArray(a.alumnos)?a.alumnos:[];stats=s||null;await cargarPeriodo();renderTodo();if(status)status.textContent=`${alumnos.length} estudiantes · ${actividades.length} actividades · sincronizado Web ↔ Telegram.`;}
+    try{const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');const [a,s]=await Promise.all([api('obtenerAlumnos',{ano,seccion,turno}),api('obtenerEstadisticasAsistencia',{fechaDesde:desde,fechaHasta:hasta,ano,seccion,turno})]);alumnos=Array.isArray(a.alumnos)?a.alumnos:[];stats=s||null;cargarPeriodo();renderTodo();if(status)status.textContent=`${alumnos.length} estudiantes cargados · asistencia del ${desde||'inicio'} al ${hasta||'hoy'}.`;}
     catch(err){if(status)status.textContent=err.message||'No se pudo cargar la sección.';toast(err.message||'No se pudo cargar la sección.','error');}
   }
 
-  async function agregarActividad(){
-    if(!alumnos.length){toast('Carga primero una sección.','warning');return;}
-    const nombre=prompt('Nombre de la actividad:',`Actividad ${actividades.length+1}`);if(nombre===null)return;
-    const fecha=prompt('Fecha de la actividad (AAAA-MM-DD):',new Date().toISOString().slice(0,10));if(fecha===null)return;
-    const ponderacionTxt=prompt('Ponderación de la actividad (%):','25');if(ponderacionTxt===null)return;
-    const ponderacion=Number(String(ponderacionTxt).replace(',','.'));
-    if(!nombre.trim()){toast('Escribe el nombre de la actividad.','warning');return;}
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)){toast('La fecha debe tener formato AAAA-MM-DD.','warning');return;}
-    if(!Number.isFinite(ponderacion)||ponderacion<=0||ponderacion>100){toast('La ponderación debe ser mayor que 0 y no superar 100%.','warning');return;}
-    try{
-      const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');
-      await api('crearActividadControlEstudio',{lapso:contexto.lapso,ano:contexto.ano,seccion:contexto.seccion,turno:contexto.turno,nombre:nombre.trim(),fecha,ponderacion});
-      await cargarPeriodo();renderTodo();toast('Actividad creada y sincronizada con Telegram.','success');
-    }catch(err){toast(err.message||'No se pudo crear la actividad.','error');}
-  }
-  function eliminarActividad(){toast('La eliminación de actividades se habilitará en la siguiente actualización del backend para proteger las notas sincronizadas.','info');}
-  const syncTimers=new Map();
-  async function guardarNotasActividad(act){
-    try{
-      const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');
-      const registros=alumnos.map(al=>{const r=act.registros?.[String(al.id)]||{entrego:'No',nota:''};return{idAlumno:String(al.id),entrego:r.entrego==='Si'?'Si':'No',nota:r.nota===''||r.nota==null?'':Number(r.nota),observacion:String(r.observacion||'')}});
-      if(registros.length)await api('guardarCalificacionesControlEstudio',{idActividad:act.id,registros});
-      guardarEspejoLocal();
-      const st=document.getElementById('ce-status');if(st)st.textContent='Notas guardadas y sincronizadas con Telegram.';
-    }catch(err){const st=document.getElementById('ce-status');if(st)st.textContent=err.message||'No se pudieron sincronizar las notas.';toast(err.message||'No se pudieron sincronizar las notas.','error');}
-  }
-  function onActividadInput(e){
-    const el=e.target,id=el.dataset.actId;if(!id)return;const act=actividades.find(a=>String(a.id)===String(id));if(!act)return;
-    const alumnoId=el.dataset.alumnoId;
-    if(!alumnoId)return;
-    act.registros=act.registros||{};
-    const r=act.registros[alumnoId]||{entrego:'No',nota:'',observacion:''};
-    if(el.dataset.field==='entrego')r.entrego=el.value;
-    if(el.dataset.field==='nota'){r.nota=el.value===''?'':Math.max(0,Math.min(20,n(el.value)));if(r.nota!=='')r.entrego='Si';}
-    act.registros[alumnoId]=r;
-    guardarEspejoLocal();renderResumen(false);renderWeight();
-    clearTimeout(syncTimers.get(act.id));
-    syncTimers.set(act.id,setTimeout(()=>guardarNotasActividad(act),500));
-  }
+  function agregarActividad(){if(!alumnos.length){toast('Carga primero una sección.','warning');return;}const id='act_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);actividades.push({id,nombre:`Actividad ${actividades.length+1}`,fecha:'',ponderacion:0,registros:{}});guardarPeriodo();renderTodo();}
+  function eliminarActividad(id){if(!confirm('¿Eliminar esta actividad y sus notas?'))return;actividades=actividades.filter(a=>a.id!==id);guardarPeriodo();renderTodo();}
+  function onActividadInput(e){const el=e.target;const id=el.dataset.actId;if(!id)return;const act=actividades.find(a=>a.id===id);if(!act)return;if(el.dataset.field==='nombre')act.nombre=el.value;if(el.dataset.field==='fecha')act.fecha=el.value;if(el.dataset.field==='ponderacion')act.ponderacion=Math.max(0,Math.min(100,n(el.value)));const alumnoId=el.dataset.alumnoId;if(alumnoId){act.registros=act.registros||{};const r=act.registros[alumnoId]||{entrego:'No',nota:''};if(el.dataset.field==='entrego')r.entrego=el.value;if(el.dataset.field==='nota')r.nota=el.value===''?'':Math.max(0,Math.min(20,n(el.value)));act.registros[alumnoId]=r;}guardarPeriodo();renderResumen(false);renderWeight();}
 
   function resumenAsistenciaAlumno(alumno){const arr=Array.isArray(stats?.porAlumno)?stats.porAlumno:[];const item=arr.find(x=>norm(x.alumno)===norm(alumno.nombre||alumno.nombreCompleto||alumno.apellidosNombres));return{presentes:n(item?.presentes),ausentes:n(item?.ausentes),tardanzas:n(item?.tardanzas),justificadas:n(item?.justificadas),total:n(item?.total)};}
   function resumenNotasAlumno(alumno){let entregadas=0;let total=actividades.length;let sumaPeso=0,suma=0;actividades.forEach(a=>{const r=a.registros?.[String(alumno.id)]||{};if(r.entrego==='Si')entregadas++;if(r.nota!==''&&r.nota!=null){const peso=n(a.ponderacion);if(peso>0){suma+=n(r.nota)*peso;sumaPeso+=peso;}}});const nota=sumaPeso?Math.round((suma/sumaPeso)*100)/100:null;return{entregadas,total,nota};}
   function renderTodo(){renderActividades();renderResumen(true);renderWeight();}
   function renderActivitiesRow(a,al){const r=a.registros?.[String(al.id)]||{entrego:'No',nota:''};return`<tr><td>${esc(al.nombre||al.nombreCompleto||'Estudiante')}</td><td>${esc(al.cedula||al.id||'')}</td><td><select data-act-id="${esc(a.id)}" data-alumno-id="${esc(al.id)}" data-field="entrego"><option value="No" ${r.entrego!=='Si'?'selected':''}>No</option><option value="Si" ${r.entrego==='Si'?'selected':''}>Sí</option></select></td><td><input type="number" min="0" max="20" step="0.01" data-act-id="${esc(a.id)}" data-alumno-id="${esc(al.id)}" data-field="nota" value="${r.nota===''?'':esc(r.nota)}"></td></tr>`;}
-  function renderActividades(){const box=document.getElementById('ce-activities');if(!box)return;if(!alumnos.length){box.innerHTML='<div class="ce-empty">Primero carga una sección.</div>';return;}if(!actividades.length){box.innerHTML='<div class="ce-empty">Aún no hay actividades en este lapso. Pulsa “Agregar actividad”.</div>';return;}box.innerHTML=actividades.map((a,i)=>`<article class="ce-activity"><div class="ce-activity-head"><input value="${esc(a.nombre||'Actividad '+(i+1))}" readonly title="Nombre sincronizado"><input type="date" value="${esc(a.fecha||'')}" readonly title="Fecha sincronizada"><input type="text" value="${esc(a.ponderacion||0)}%" readonly title="Ponderación sincronizada"><span class="ce-ok" style="margin:0;text-align:center"><i class="fa-solid fa-cloud"></i> Sincronizada</span></div><div class="ce-table-wrap"><table class="ce-table"><thead><tr><th>Estudiante</th><th>C.I./ID</th><th>Entregó</th><th>Nota /20</th></tr></thead><tbody>${alumnos.map(al=>renderActivitiesRow(a,al)).join('')}</tbody></table></div></article>`).join('');}
+  function renderActividades(){const box=document.getElementById('ce-activities');if(!box)return;if(!alumnos.length){box.innerHTML='<div class="ce-empty">Primero carga una sección.</div>';return;}if(!actividades.length){box.innerHTML='<div class="ce-empty">Aún no hay actividades en este lapso. Pulsa “Agregar actividad”.</div>';return;}box.innerHTML=actividades.map((a,i)=>`<article class="ce-activity"><div class="ce-activity-head"><input data-act-id="${esc(a.id)}" data-field="nombre" value="${esc(a.nombre||'Actividad '+(i+1))}" placeholder="Nombre de la actividad"><input type="date" data-act-id="${esc(a.id)}" data-field="fecha" value="${esc(a.fecha||'')}"><input type="number" min="0" max="100" step="1" data-act-id="${esc(a.id)}" data-field="ponderacion" value="${esc(a.ponderacion||0)}" title="Ponderación %"><button type="button" data-ce-del="${esc(a.id)}"><i class="fa-solid fa-trash"></i> Eliminar</button></div><div class="ce-table-wrap"><table class="ce-table"><thead><tr><th>Estudiante</th><th>C.I./ID</th><th>Entregó</th><th>Nota /20</th></tr></thead><tbody>${alumnos.map(al=>renderActivitiesRow(a,al)).join('')}</tbody></table></div></article>`).join('');}
   function renderWeight(){const box=document.getElementById('ce-weight-msg');if(!box)return;const t=actividades.reduce((s,a)=>s+n(a.ponderacion),0);box.className=t===100?'ce-ok':'ce-warning';box.innerHTML=t===100?`<i class="fa-solid fa-circle-check"></i> Ponderación completa: <strong>100%</strong>.`:`<i class="fa-solid fa-triangle-exclamation"></i> La ponderación actual suma <strong>${t}%</strong>. Para un cierre formal del lapso se recomienda completar 100%.`;}
   function renderResumen(completo=true){const box=document.getElementById('ce-final'),m=document.getElementById('ce-metrics');if(!box||!m)return;if(!alumnos.length){m.innerHTML='';box.innerHTML='<div class="ce-empty">El cuadro aparecerá al cargar la sección.</div>';return;}const rows=alumnos.map(al=>({al,asis:resumenAsistenciaAlumno(al),notas:resumenNotasAlumno(al)}));const totalAus=rows.reduce((s,x)=>s+x.asis.ausentes,0),totalPres=rows.reduce((s,x)=>s+x.asis.presentes,0),conNota=rows.filter(x=>x.notas.nota!==null).length;const prom=conNota?rows.reduce((s,x)=>s+(x.notas.nota||0),0)/conNota:0;m.innerHTML=`<div class="ce-metric"><strong>${alumnos.length}</strong><span>Estudiantes</span></div><div class="ce-metric"><strong>${actividades.length}</strong><span>Actividades</span></div><div class="ce-metric"><strong>${totalPres}</strong><span>Asistencias registradas</span></div><div class="ce-metric"><strong>${totalAus}</strong><span>Inasistencias</span></div><div class="ce-metric"><strong>${conNota?prom.toFixed(2):'—'}</strong><span>Promedio sección /20</span></div>`;box.innerHTML=`<div class="ce-table-wrap"><table class="ce-table"><thead><tr><th>N°</th><th>Estudiante</th><th>Días asistidos</th><th>Inasistencias</th><th>Tardanzas</th><th>Actividades entregadas</th><th>Nota final /20</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td>${i+1}</td><td><strong>${esc(x.al.nombre||x.al.nombreCompleto||'Estudiante')}</strong></td><td>${x.asis.presentes}</td><td>${x.asis.ausentes}</td><td>${x.asis.tardanzas}</td><td>${x.notas.entregadas}/${x.notas.total}</td><td class="ce-final-note">${x.notas.nota===null?'—':x.notas.nota.toFixed(2)}</td></tr>`).join('')}</tbody></table></div>`;}
 
@@ -9300,7 +9217,7 @@ Archivo enviado directamente desde EduGestión.`);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,250),{once:true});else setTimeout(init,120);
   window.addEventListener('edugestion:session',()=>setTimeout(()=>{asegurarUI();secciones=[];alumnos=[];stats=null;actividades=[];},80));
 })();
-/* EDUGESTION_CONTROL_ESTUDIO_SYNC_V2_END */
+/* EDUGESTION_CONTROL_ESTUDIO_V1_END */
 
 /* =========================================================
    EduGestión · FASE 14
@@ -9310,7 +9227,7 @@ Archivo enviado directamente desde EduGestión.`);
    - Permite imprimir/guardar un boletín individual y descargar ZIP por sección.
    ========================================================= */
 (() => {
-  const MARK='EDUGESTION_BOLETIN_ESTUDIANTE_SYNC_V2';
+  const MARK='EDUGESTION_BOLETIN_ESTUDIANTE_V1';
   if(window[MARK]) return;
   window[MARK]=true;
   const TAB_ID='tab-boletin-estudiante';
@@ -9353,7 +9270,7 @@ Archivo enviado directamente desde EduGestión.`);
     if(!tab){tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Boletín por estudiante';tab.dataset.description='Genera un resumen individual del lapso con asistencia, actividades, nota y observaciones.';tab.innerHTML='<i class="fa-solid fa-id-card-clip"></i><span>Boletín por estudiante</span>';const ref=document.getElementById('tab-estadisticas');nav.insertBefore(tab,ref||null);tab.addEventListener('click',()=>abrir(tab));}
     let sec=document.getElementById(SECTION_ID);
     if(!sec){sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
-      <header class="be-hero"><small><i class="fa-solid fa-cloud"></i> Web ↔ servidor sincronizado</small><h2>Boletín por estudiante</h2><p>Genera al cierre de cada lapso una ficha individual con asistencia, actividades, calificaciones, nota final y observaciones. Las notas se leen directamente del servidor compartido.</p></header>
+      <header class="be-hero"><small><i class="fa-solid fa-id-card-clip"></i> Fase 14 · Boletín individual</small><h2>Boletín por estudiante</h2><p>Genera al cierre de cada lapso una ficha individual con asistencia, inasistencias, actividades entregadas, calificaciones, nota final y observaciones del docente.</p></header>
       <div class="be-card"><h3>1. Selecciona lapso y sección</h3><div class="be-grid">
         <div class="be-field"><label>Lapso</label><select id="be-lapso"><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select></div>
         <div class="be-field"><label>Sección / Año</label><select id="be-seccion"><option value="">Cargando secciones…</option></select></div>
@@ -9369,7 +9286,7 @@ Archivo enviado directamente desde EduGestión.`);
 
   async function abrir(tab){const sec=document.getElementById(SECTION_ID);if(!sec)return;if(typeof window.cambiarPestana==='function')window.cambiarPestana(tab,sec);else{document.querySelectorAll('#app-nav .nav-item').forEach(x=>{x.classList.toggle('is-active',x===tab);x.setAttribute('aria-selected',x===tab?'true':'false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==sec));}if(!secciones.length)await cargarSecciones();}
   async function cargarSecciones(){const sel=document.getElementById('be-seccion');if(!sel)return;sel.innerHTML='<option value="">Cargando…</option>';try{const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');const r=await api('obtenerDatosIniciales');const horarios=Array.isArray(r.horarios)?r.horarios:[];const map=new Map();horarios.forEach(x=>{const ano=String(x.ano||'').trim(),seccion=String(x.seccion||'').trim(),turno=String(x.turno||'').trim();if(ano&&seccion)map.set([ano,seccion,turno].join('|'),{ano,seccion,turno});});if(!map.size&&window.profesorActual?.seccion){const ano=String(window.profesorActual?.ano||window.profesorActual?.grado||'').trim(),seccion=String(window.profesorActual.seccion||'').trim(),turno=String(window.profesorActual.turno||'').trim();if(seccion)map.set([ano,seccion,turno].join('|'),{ano,seccion,turno});}secciones=[...map.values()].sort((a,b)=>(a.ano+a.seccion).localeCompare(b.ano+b.seccion,'es'));sel.innerHTML='<option value="">Selecciona una sección</option>'+secciones.map(s=>`<option value="${esc([s.ano,s.seccion,s.turno].join('|'))}">${esc(s.ano||'Curso')} · Sección ${esc(s.seccion)}${s.turno?' · '+esc(s.turno):''}</option>`).join('');}catch(err){sel.innerHTML='<option value="">No se pudieron cargar las secciones</option>';status(err.message||'Error de conexión.');}}
-  async function cargar(){const v=document.getElementById('be-seccion')?.value||'';if(!v){toast('Selecciona una sección.','warning');return;}const [ano,seccion,turno]=v.split('|');contexto={ano,seccion,turno,lapso:document.getElementById('be-lapso')?.value||'1er Lapso'};const desde=document.getElementById('be-desde')?.value||'',hasta=document.getElementById('be-hasta')?.value||'';status('<i class="fa-solid fa-spinner fa-spin"></i> Sincronizando estudiantes, asistencia y notas desde el servidor…',true);try{const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');const [a,s,n]=await Promise.all([api('obtenerAlumnos',{ano,seccion,turno}),api('obtenerEstadisticasAsistencia',{fechaDesde:desde,fechaHasta:hasta,ano,seccion,turno}),api('obtenerControlEstudio',{lapso:contexto.lapso,ano,seccion,turno})]);alumnos=Array.isArray(n.alumnos)&&n.alumnos.length?n.alumnos:(Array.isArray(a.alumnos)?a.alumnos:[]);stats=s||null;actividades=Array.isArray(n.actividades)?n.actividades:[];render();status(`${alumnos.length} estudiantes · ${actividades.length} actividades · boletines sincronizados con el servidor.`);}catch(err){status(err.message||'No se pudo cargar la sección.');toast(err.message||'No se pudo cargar la sección.','error');}}
+  async function cargar(){const v=document.getElementById('be-seccion')?.value||'';if(!v){toast('Selecciona una sección.','warning');return;}const [ano,seccion,turno]=v.split('|');contexto={ano,seccion,turno,lapso:document.getElementById('be-lapso')?.value||'1er Lapso'};const desde=document.getElementById('be-desde')?.value||'',hasta=document.getElementById('be-hasta')?.value||'';status('<i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes, asistencia y notas…',true);try{const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');const [a,s]=await Promise.all([api('obtenerAlumnos',{ano,seccion,turno}),api('obtenerEstadisticasAsistencia',{fechaDesde:desde,fechaHasta:hasta,ano,seccion,turno})]);alumnos=Array.isArray(a.alumnos)?a.alumnos:[];stats=s||null;cargarNotas();render();status(`${alumnos.length} estudiantes cargados · ${actividades.length} actividades del ${contexto.lapso}.`);}catch(err){status(err.message||'No se pudo cargar la sección.');toast(err.message||'No se pudo cargar la sección.','error');}}
   function asistencia(al){const arr=Array.isArray(stats?.porAlumno)?stats.porAlumno:[];const item=arr.find(x=>norm(x.alumno)===norm(al.nombre||al.nombreCompleto||al.apellidosNombres));return{presentes:num(item?.presentes),ausentes:num(item?.ausentes),tardanzas:num(item?.tardanzas),justificadas:num(item?.justificadas),total:num(item?.total)};}
   function notas(al){let entregadas=0,sumaPeso=0,suma=0;const detalle=actividades.map(a=>{const r=a.registros?.[String(al.id)]||a.registros?.[idAlumno(al)]||{};if(r.entrego==='Si')entregadas++;const nota=r.nota===''||r.nota==null?null:num(r.nota),peso=num(a.ponderacion);if(nota!==null&&peso>0){suma+=nota*peso;sumaPeso+=peso;}return{nombre:a.nombre||'Actividad',fecha:a.fecha||'',ponderacion:peso,entrego:r.entrego==='Si',nota};});return{entregadas,total:actividades.length,nota:sumaPeso?Math.round((suma/sumaPeso)*100)/100:null,detalle};}
   function render(){const box=document.getElementById('be-list'),sum=document.getElementById('be-summary');if(!box||!sum)return;if(!alumnos.length){sum.innerHTML='';box.innerHTML='<div class="be-empty">Selecciona una sección y pulsa “Cargar boletines”.</div>';return;}const rows=alumnos.map(al=>({al,as:asistencia(al),no:notas(al)}));const promRows=rows.filter(x=>x.no.nota!==null),prom=promRows.length?promRows.reduce((s,x)=>s+x.no.nota,0)/promRows.length:null;sum.innerHTML=`<article><strong>${alumnos.length}</strong><span>Estudiantes</span></article><article><strong>${actividades.length}</strong><span>Actividades</span></article><article><strong>${rows.reduce((s,x)=>s+x.as.presentes,0)}</strong><span>Asistencias</span></article><article><strong>${rows.reduce((s,x)=>s+x.as.ausentes,0)}</strong><span>Inasistencias</span></article><article><strong>${prom===null?'—':prom.toFixed(2)}</strong><span>Promedio /20</span></article>`;const q=norm(document.getElementById('be-search')?.value||'');const fil=rows.filter(x=>!q||norm(`${x.al.nombre||x.al.nombreCompleto||''} ${x.al.cedula||x.al.id||''}`).includes(q));box.innerHTML=fil.length?`<div class="be-list">${fil.map(x=>card(x)).join('')}</div>`:'<div class="be-empty">No se encontraron estudiantes con esa búsqueda.</div>';}
@@ -9391,7 +9308,7 @@ Archivo enviado directamente desde EduGestión.`);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,280),{once:true});else setTimeout(init,160);
   window.addEventListener('edugestion:session',()=>setTimeout(()=>{asegurarUI();secciones=[];alumnos=[];stats=null;actividades=[];},100));
 })();
-/* EDUGESTION_BOLETIN_ESTUDIANTE_SYNC_V2_END */
+/* EDUGESTION_BOLETIN_ESTUDIANTE_V1_END */
 
 /* =========================================================
    EduGestión · FASE 15
@@ -9503,284 +9420,418 @@ Archivo enviado directamente desde EduGestión.`);
 })();
 /* EDUGESTION_CIERRE_LAPSO_V1_END */
 
+
+
 /* =========================================================
-   EduGestión · FASE 16 · HISTORIAL DE CIERRES COMPARTIDO
-   Web ↔ servidor · separado por docente
+   EduGestión · FASE 18
+   Chat interno Dirección ↔ Docente
+   - Usa el backend compartido ChatInterno.
+   - Docente: solo su conversación con Dirección.
+   - Dirección: lista de docentes + conversación seleccionada.
+   - Mensajes leídos/no leídos.
+   - Estilo azul integrado con EduGestión.
    ========================================================= */
 (() => {
-  const MARK='EDUGESTION_HISTORIAL_CIERRES_SHARED_V2';
-  if(window[MARK]) return;
-  window[MARK]=true;
+  const MARK = 'EDUGESTION_CHAT_INTERNO_WEB_V1';
+  if (window[MARK]) return;
+  window[MARK] = true;
 
-  const TAB_ID='tab-historial-cierres';
-  const SECTION_ID='section-historial-cierres';
-  let registros=[];
+  const TAB_ID = 'tab-chat-interno';
+  const SECTION_ID = 'section-chat-interno';
+  const POLL_MS = 12000;
 
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const userKey=()=>String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'sin_usuario').replace(/[^a-z0-9_-]/gi,'_');
-  const legacyKey=()=>`edugestion_historial_cierres_v2_${userKey()}`;
-  const migrationKey=()=>`edugestion_historial_cierres_shared_migrado_v1_${userKey()}`;
-  const fmt=v=>{try{return new Date(v).toLocaleString('es-VE',{dateStyle:'short',timeStyle:'short'})}catch(_){return v||''}};
+  let contexto = null;
+  let conversaciones = [];
+  let docenteSeleccionado = '';
+  let mensajes = [];
+  let timer = null;
+  let cargando = false;
 
-  function toast(msg,type='success'){
-    if(typeof window.mostrarToast==='function')window.mostrarToast(msg,type,'Historial de cierres');
-    else if(type==='error') alert(msg);
-  }
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
 
-  function api(){
-    if(typeof window.EDUGESTION_API_REQUEST!=='function') throw new Error('La conexión con EduGestión no está disponible.');
-    return window.EDUGESTION_API_REQUEST;
-  }
-
-  function loadLegacy(){
-    try{
-      const x=JSON.parse(localStorage.getItem(legacyKey())||'[]');
-      return Array.isArray(x)?x:[];
-    }catch(_){return[]}
-  }
-
-  async function migrarLegacy(){
-    if(localStorage.getItem(migrationKey())==='SI') return;
-    const antiguos=loadLegacy();
-    for(const r of antiguos){
-      try{
-        await api()('registrarHistorialCierre',{
-          id:String(r.id||''),
-          fecha:String(r.fecha||new Date().toISOString()),
-          accion:String(r.accion||'Generado'),
-          medio:String(r.medio||''),
-          ano:String(r.ano||''),
-          seccion:String(r.seccion||''),
-          turno:String(r.turno||''),
-          lapso:String(r.lapso||'1er Lapso'),
-          docente:String(r.docente||window.profesorActual?.nombre||''),
-          materia:String(r.materia||window.profesorActual?.materia||''),
-          enviado:Boolean(r.enviado),
-          fechaEnvio:String(r.fechaEnvio||'')
-        });
-      }catch(err){
-        console.warn('No se pudo migrar un cierre antiguo:',err);
-      }
+  const rol = () => String(window.profesorActual?.rol || 'docente').toLowerCase();
+  const esDirector = () => rol() === 'director';
+  const api = async (accion, payload={}) => {
+    if (typeof window.EDUGESTION_API_REQUEST !== 'function') {
+      throw new Error('La conexión con EduGestión todavía no está disponible.');
     }
-    localStorage.setItem(migrationKey(),'SI');
-  }
+    return window.EDUGESTION_API_REQUEST(accion, payload);
+  };
 
-  async function cargar(){
-    try{
-      await migrarLegacy();
-      const r=await api()('obtenerHistorialCierres',{});
-      registros=Array.isArray(r.historial)?r.historial:[];
-      render();
-    }catch(err){
-      registros=[];
-      render();
-      toast(err.message||'No se pudo cargar el historial.','error');
-    }
-  }
-
-  function contextoActual(){
-    const raw=document.getElementById('cl-seccion')?.value||'';
-    const [ano='',seccion='',turno='']=raw.split('|');
-    return {ano,seccion,turno,lapso:document.getElementById('cl-lapso')?.value||'1er Lapso'};
-  }
-
-  async function registrar(accion,medio=''){
-    const c=contextoActual();
-    if(!c.ano||!c.seccion) return;
-    try{
-      await api()('registrarHistorialCierre',{
-        fecha:new Date().toISOString(),
-        accion,
-        medio,
-        ano:c.ano,
-        seccion:c.seccion,
-        turno:c.turno,
-        lapso:c.lapso,
-        docente:window.profesorActual?.nombre||'',
-        materia:window.profesorActual?.materia||'',
-        enviado:false,
-        fechaEnvio:''
-      });
-      await cargar();
-    }catch(err){
-      toast(err.message||'No se pudo registrar el cierre.','error');
-    }
-  }
-
-  function estilos(){
-    if(document.getElementById('edu-hc-shared-styles'))return;
-    const st=document.createElement('style');
-    st.id='edu-hc-shared-styles';
-    st.textContent=`
-      .hcs-hero{padding:22px;border-radius:22px;background:linear-gradient(135deg,#233876,#316cb0);color:#fff;margin-bottom:18px;box-shadow:0 12px 30px rgba(35,56,118,.18)}
-      .hcs-hero small{font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.92}.hcs-hero h2{margin:6px 0 8px;font-size:1.6rem}.hcs-hero p{margin:0;max-width:980px;opacity:.95}
-      .hcs-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dfe7ee);border-radius:18px;padding:16px;margin-bottom:14px}
-      .hcs-tools{display:grid;grid-template-columns:2fr 1fr 1fr;gap:9px}.hcs-tools input,.hcs-tools select{width:100%;padding:10px 11px;border:1px solid var(--border-color,#d7e0e8);border-radius:10px;background:var(--input-bg,#fff);color:inherit}
-      .hcs-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0}.hcs-summary article{padding:12px;border-radius:13px;background:#f1f6fc;border:1px solid #dce9f8}.hcs-summary strong{display:block;font-size:1.2rem;color:#234f91}.hcs-summary span{font-size:.72rem;font-weight:850;opacity:.72}
-      .hcs-list{display:grid;gap:10px}.hcs-item{border:1px solid #dce7f4;border-radius:14px;padding:13px;background:var(--card-bg,#fff);display:grid;grid-template-columns:1.6fr auto;gap:12px;align-items:center}
-      .hcs-title{font-weight:900;color:#234f91}.hcs-meta{font-size:.78rem;opacity:.72;margin-top:4px}.hcs-badge{display:inline-flex;padding:4px 8px;border-radius:999px;background:#edf3fb;color:#234f91;font-size:.7rem;font-weight:900;margin-right:4px}.hcs-badge.ok{background:#eaf3ff;color:#234f91}
-      .hcs-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.hcs-btn{border:0;border-radius:9px;padding:8px 10px;font-weight:850;cursor:pointer}.hcs-btn.primary{background:#234f91;color:#fff}.hcs-btn.soft{background:#edf3fb;color:#234f91}.hcs-btn.danger{background:#fff0f0;color:#a83232}
-      .hcs-empty{padding:28px;text-align:center;border:1px dashed var(--border-color,#ccd8e5);border-radius:14px;opacity:.75}
-      @media(max-width:800px){.hcs-tools,.hcs-summary{grid-template-columns:1fr}.hcs-item{grid-template-columns:1fr}.hcs-actions{justify-content:flex-start}}
+  function estilos() {
+    if (document.getElementById('edu-chat-interno-styles')) return;
+    const st = document.createElement('style');
+    st.id = 'edu-chat-interno-styles';
+    st.textContent = `
+      .chat-nav-badge{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#245ea8;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:900;margin-left:auto}
+      .chat-shell{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;min-height:620px}
+      .chat-sidebar,.chat-panel{background:#fff;border:1px solid #dbe5f2;border-radius:22px;box-shadow:0 12px 28px rgba(35,56,118,.08);overflow:hidden}
+      .chat-sidebar-head,.chat-panel-head{padding:18px 20px;background:linear-gradient(135deg,#233876,#316cb0);color:#fff}
+      .chat-sidebar-head h3,.chat-panel-head h3{margin:0;font-size:1.05rem}.chat-sidebar-head p,.chat-panel-head p{margin:5px 0 0;opacity:.9;font-size:.88rem}
+      .chat-search{padding:12px;border-bottom:1px solid #e5edf7}.chat-search input{width:100%;border:1px solid #cfdbea;border-radius:14px;padding:11px 13px;font:inherit;outline:none}
+      .chat-search input:focus{border-color:#316cb0;box-shadow:0 0 0 3px rgba(49,108,176,.12)}
+      .chat-conversations{max-height:540px;overflow:auto;padding:8px}
+      .chat-conversation{width:100%;text-align:left;border:0;background:transparent;border-radius:14px;padding:12px;display:flex;gap:10px;cursor:pointer;color:#17233c}
+      .chat-conversation:hover,.chat-conversation.is-active{background:#edf4fc}
+      .chat-avatar{width:42px;height:42px;border-radius:13px;background:#dceafb;color:#245ea8;display:flex;align-items:center;justify-content:center;font-weight:900;flex:0 0 auto}
+      .chat-conversation-copy{min-width:0;flex:1}.chat-conversation-copy strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .chat-conversation-copy small{display:block;color:#6c7890;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+      .chat-unread{background:#245ea8;color:#fff;border-radius:999px;min-width:22px;height:22px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:900}
+      .chat-panel{display:flex;flex-direction:column;min-width:0}
+      .chat-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+      .chat-panel-title{min-width:0}.chat-panel-title h3,.chat-panel-title p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .chat-refresh{border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.12);color:#fff;border-radius:12px;padding:9px 12px;cursor:pointer;font-weight:800}
+      .chat-messages{flex:1;min-height:430px;max-height:520px;overflow:auto;padding:20px;background:#f5f8fc;display:flex;flex-direction:column;gap:10px}
+      .chat-msg{max-width:78%;padding:11px 13px;border-radius:16px;background:#fff;border:1px solid #dce6f2;box-shadow:0 4px 12px rgba(31,61,105,.05)}
+      .chat-msg.mine{align-self:flex-end;background:#dfeeff;border-color:#bfd8f3}
+      .chat-msg.other{align-self:flex-start}
+      .chat-msg strong{display:block;color:#274d83;font-size:.82rem;margin-bottom:4px}.chat-msg p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.42}
+      .chat-msg time{display:block;color:#7a869b;font-size:.72rem;margin-top:6px;text-align:right}
+      .chat-compose{padding:14px;border-top:1px solid #e0e8f2;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;background:#fff}
+      .chat-compose textarea{resize:none;min-height:48px;max-height:130px;border:1px solid #cfdbea;border-radius:14px;padding:12px 14px;font:inherit;outline:none}
+      .chat-compose textarea:focus{border-color:#316cb0;box-shadow:0 0 0 3px rgba(49,108,176,.12)}
+      .chat-send{border:0;border-radius:14px;background:#245ea8;color:#fff;padding:0 18px;font-weight:900;cursor:pointer}
+      .chat-send:disabled{opacity:.55;cursor:not-allowed}
+      .chat-empty{padding:36px 20px;text-align:center;color:#65728a}.chat-empty i{font-size:2rem;color:#7897bd;margin-bottom:10px}.chat-empty strong{display:block;color:#263a59;margin-bottom:5px}
+      .chat-docente-only .chat-sidebar{display:none}.chat-docente-only{grid-template-columns:1fr}
+      .chat-status{font-size:.78rem;opacity:.9}
+      @media(max-width:860px){.chat-shell{grid-template-columns:1fr}.chat-sidebar{max-height:320px}.chat-conversations{max-height:240px}.chat-msg{max-width:90%}.chat-docente-only .chat-sidebar{display:none}}
     `;
     document.head.appendChild(st);
   }
 
-  function asegurarUI(){
+  function asegurarUI() {
     estilos();
-    const nav=document.getElementById('app-nav'),main=document.getElementById('app-main');
-    if(!nav||!main)return;
+    const nav = document.getElementById('app-nav') || document.querySelector('.app-sidebar nav');
+    const main = document.getElementById('app-main') || document.querySelector('main');
+    if (!nav || !main) return;
 
-    let tab=document.getElementById(TAB_ID);
-    if(!tab){
-      tab=document.createElement('button');
-      tab.id=TAB_ID;
-      tab.type='button';
-      tab.className='nav-item';
+    let tab = document.getElementById(TAB_ID);
+    if (!tab) {
+      tab = document.createElement('button');
+      tab.id = TAB_ID;
+      tab.type = 'button';
+      tab.className = 'nav-item';
       tab.setAttribute('aria-selected','false');
-      tab.dataset.title='Historial de cierres';
-      tab.dataset.description='Registro compartido de cierres de Control de Estudio.';
-      tab.innerHTML='<i class="fa-solid fa-clock-rotate-left"></i><span>Historial de cierres</span>';
-      const cierre=document.getElementById('tab-cierre-lapso');
-      const ref=document.getElementById('tab-estadisticas');
-      if(cierre && cierre.parentElement===nav) cierre.insertAdjacentElement('afterend',tab);
-      else nav.insertBefore(tab,ref||null);
-      tab.addEventListener('click',()=>abrir(tab));
+      tab.dataset.title = 'Chat interno';
+      tab.dataset.description = 'Mensajería entre Dirección y docentes.';
+      tab.innerHTML = '<i class="fa-solid fa-comments"></i><span>Chat interno</span><em id="chat-nav-badge" class="chat-nav-badge hidden">0</em>';
+      nav.appendChild(tab);
+      tab.addEventListener('click', abrir);
     }
 
-    let sec=document.getElementById(SECTION_ID);
-    if(!sec){
-      sec=document.createElement('section');
-      sec.id=SECTION_ID;
-      sec.className='hidden';
-      sec.innerHTML=`
-        <header class="hcs-hero">
-          <small><i class="fa-solid fa-cloud"></i> Web ↔ servidor sincronizado</small>
-          <h2>Historial de cierres</h2>
-          <p>Consulta desde cualquier dispositivo los cierres generados o preparados para enviar. El historial está separado por docente.</p>
-        </header>
-        <div class="hcs-card">
-          <div class="hcs-tools">
-            <input id="hcs-q" placeholder="Buscar sección, lapso o materia...">
-            <select id="hcs-lapso"><option value="">Todos los lapsos</option><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select>
-            <select id="hcs-estado"><option value="">Todos los estados</option><option value="enviado">Enviados</option><option value="pendiente">Pendientes</option></select>
+    let sec = document.getElementById(SECTION_ID);
+    if (!sec) {
+      sec = document.createElement('section');
+      sec.id = SECTION_ID;
+      sec.className = 'hidden';
+      sec.innerHTML = `
+        <header class="platform-hero">
+          <div class="platform-hero__copy">
+            <span class="platform-hero__eyebrow"><i class="fa-solid fa-comments"></i> Comunicación institucional</span>
+            <h2>Chat interno</h2>
+            <p>Mensajería directa entre Dirección y docentes, integrada con EduGestión.</p>
+            <div class="platform-hero__badges">
+              <span><i class="fa-solid fa-lock"></i> Conversaciones privadas</span>
+              <span><i class="fa-solid fa-check-double"></i> Lectura controlada</span>
+              <span><i class="fa-solid fa-paper-plane"></i> Preparado para Telegram</span>
+            </div>
           </div>
-          <div id="hcs-summary" class="hcs-summary"></div>
-        </div>
-        <div class="hcs-card"><div id="hcs-list" class="hcs-list"></div></div>`;
+          <div class="platform-hero__icon"><i class="fa-solid fa-message"></i></div>
+        </header>
+        <div id="chat-root"><div class="chat-empty"><i class="fa-solid fa-comments"></i><strong>Abre el chat para cargar tus mensajes.</strong></div></div>`;
       main.appendChild(sec);
-      ['hcs-q','hcs-lapso','hcs-estado'].forEach(id=>sec.querySelector('#'+id)?.addEventListener(id==='hcs-q'?'input':'change',render));
     }
+    actualizarVisibilidad();
   }
 
-  async function abrir(tab){
-    const sec=document.getElementById(SECTION_ID);
-    if(!sec)return;
-    if(typeof window.cambiarPestana==='function')window.cambiarPestana(tab,sec);
-    else{
-      document.querySelectorAll('#app-nav .nav-item').forEach(x=>{x.classList.toggle('is-active',x===tab);x.setAttribute('aria-selected',x===tab?'true':'false')});
-      document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==sec));
-    }
-    const list=document.getElementById('hcs-list');
-    if(list)list.innerHTML='<div class="hcs-empty">Sincronizando historial…</div>';
-    await cargar();
+  function actualizarVisibilidad() {
+    const tab = document.getElementById(TAB_ID);
+    if (!tab) return;
+    const conectado = Boolean(window.profesorActual);
+    tab.classList.toggle('role-hidden', !conectado);
   }
 
-  function filtrados(){
-    const q=(document.getElementById('hcs-q')?.value||'').toLowerCase().trim();
-    const lap=document.getElementById('hcs-lapso')?.value||'';
-    const est=document.getElementById('hcs-estado')?.value||'';
-    return registros.filter(r=>{
-      const t=[r.ano,r.seccion,r.lapso,r.materia,r.docente,r.medio].join(' ').toLowerCase();
-      return(!q||t.includes(q))&&(!lap||r.lapso===lap)&&(!est||(est==='enviado'?r.enviado:!r.enviado));
+  function activarPestana() {
+    const tab = document.getElementById(TAB_ID);
+    const sec = document.getElementById(SECTION_ID);
+    if (!tab || !sec) return;
+    document.querySelectorAll('#app-nav .nav-item').forEach(x => {
+      x.classList.toggle('is-active', x === tab);
+      x.setAttribute('aria-selected', x === tab ? 'true' : 'false');
     });
+    document.querySelectorAll('#app-main > section').forEach(x => x.classList.toggle('hidden', x !== sec));
+    const title = document.getElementById('page-title');
+    const desc = document.getElementById('page-description');
+    if (title) title.textContent = 'Chat interno';
+    if (desc) desc.textContent = 'Comunicación directa entre Dirección y docentes.';
+    window.scrollTo({top:0,behavior:'smooth'});
   }
 
-  function render(){
-    const list=document.getElementById('hcs-list'),sum=document.getElementById('hcs-summary');
-    if(!list||!sum)return;
-    const all=registros;
-    const arr=filtrados();
-    const env=all.filter(x=>x.enviado).length;
-    sum.innerHTML=`<article><strong>${all.length}</strong><span>Registros totales</span></article><article><strong>${env}</strong><span>Enviados confirmados</span></article><article><strong>${all.length-env}</strong><span>Pendientes</span></article>`;
-    if(!arr.length){
-      list.innerHTML='<div class="hcs-empty">Todavía no hay cierres registrados.</div>';
+  async function abrir() {
+    if (!window.profesorActual) return;
+    activarPestana();
+    await cargarContexto(true);
+    iniciarPolling();
+  }
+
+  async function cargarContexto(forzar=false) {
+    if (cargando) return;
+    cargando = true;
+    try {
+      contexto = await api('obtenerChatContexto');
+      actualizarBadge(contexto.noLeidos || 0);
+      if (esDirector()) {
+        const r = await api('obtenerConversacionesChat');
+        conversaciones = Array.isArray(r.conversaciones) ? r.conversaciones : [];
+        if (!docenteSeleccionado && conversaciones.length) docenteSeleccionado = String(conversaciones[0].idDocente || '');
+      } else {
+        docenteSeleccionado = String(window.profesorActual?.id || '');
+      }
+      await cargarConversacion(false);
+    } catch (err) {
+      renderError(err);
+    } finally {
+      cargando = false;
+    }
+  }
+
+  async function cargarConversacion(marcar=true) {
+    if (!docenteSeleccionado) {
+      mensajes = [];
+      render();
       return;
     }
-    list.innerHTML=arr.map(r=>`<article class="hcs-item" data-id="${esc(r.id)}"><div><div class="hcs-title">${esc(r.ano||'Curso')} · Sección ${esc(r.seccion||'—')} · ${esc(r.lapso||'—')}</div><div class="hcs-meta">${esc(r.materia||'')} · ${esc(r.docente||'')} · ${fmt(r.fecha)}</div><div style="margin-top:7px"><span class="hcs-badge ${r.enviado?'ok':''}">${r.enviado?'Enviado':esc(r.accion||'Generado')}</span>${r.medio?`<span class="hcs-badge">${esc(r.medio)}</span>`:''}</div></div><div class="hcs-actions"><button class="hcs-btn primary" data-act="reabrir">Reabrir</button>${r.enviado?'<button class="hcs-btn soft" data-act="pendiente">Marcar pendiente</button>':'<button class="hcs-btn soft" data-act="enviado">Marcar enviado</button>'}<button class="hcs-btn danger" data-act="eliminar">Eliminar</button></div></article>`).join('');
-    list.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>accion(b.closest('.hcs-item')?.dataset.id,b.dataset.act)));
-  }
-
-  async function accion(id,act){
-    const r=registros.find(x=>String(x.id)===String(id));
-    if(!r)return;
-
-    if(act==='reabrir'){
-      document.getElementById('tab-cierre-lapso')?.click();
-      setTimeout(()=>{
-        const lap=document.getElementById('cl-lapso'),sel=document.getElementById('cl-seccion');
-        if(lap)lap.value=r.lapso||'1er Lapso';
-        if(sel){
-          const op=[...sel.options].find(o=>{
-            const [a,s]=String(o.value||'').split('|');
-            return a===r.ano&&s===r.seccion;
-          });
-          if(op)sel.value=op.value;
-        }
-        document.getElementById('cl-cargar')?.click();
-      },400);
-      return;
-    }
-
-    try{
-      if(act==='eliminar'){
-        if(!confirm('¿Eliminar este registro del historial?'))return;
-        await api()('eliminarHistorialCierre',{id:r.id});
-      }else if(act==='enviado'){
-        await api()('actualizarHistorialCierre',{id:r.id,enviado:true,accion:'Enviado',fechaEnvio:new Date().toISOString()});
-      }else if(act==='pendiente'){
-        await api()('actualizarHistorialCierre',{id:r.id,enviado:false,accion:'Pendiente',fechaEnvio:''});
+    try {
+      const payload = esDirector() ? {idDocente: docenteSeleccionado} : {};
+      const r = await api('obtenerConversacionChat', payload);
+      mensajes = Array.isArray(r.mensajes) ? r.mensajes : [];
+      if (marcar && Number(r.noLeidos || 0) > 0) {
+        await api('marcarChatLeido', payload);
       }
-      await cargar();
-    }catch(err){
-      toast(err.message||'No se pudo actualizar el historial.','error');
+      if (esDirector()) {
+        const conv = conversaciones.find(c => String(c.idDocente) === String(docenteSeleccionado));
+        if (conv) conv.noLeidos = 0;
+      }
+      render(r.docente || null);
+      await refrescarBadgeSilencioso();
+    } catch (err) {
+      renderError(err);
     }
   }
 
-  function instalarCaptura(){
-    if(window.__EDU_HC_SHARED_CAPTURE__)return;
-    window.__EDU_HC_SHARED_CAPTURE__=true;
-    document.addEventListener('click',ev=>{
-      const b=ev.target?.closest?.('#cl-zip,#cl-share,#cl-mail,#cl-whatsapp');
-      if(!b)return;
-      setTimeout(()=>{
-        if(b.id==='cl-zip')registrar('Generado');
-        else if(b.id==='cl-share')registrar('Preparado para enviar','Compartir');
-        else if(b.id==='cl-mail')registrar('Preparado para enviar','Correo');
-        else if(b.id==='cl-whatsapp')registrar('Preparado para enviar','WhatsApp');
-      },80);
-    },true);
+  async function refrescarBadgeSilencioso() {
+    try {
+      const c = await api('obtenerChatContexto');
+      contexto = c;
+      actualizarBadge(c.noLeidos || 0);
+    } catch (_) {}
   }
 
-  let observer=null;
-  function vigilarMenu(){
-    if(observer)return;
-    observer=new MutationObserver(()=>{
-      if(!document.getElementById(TAB_ID) || !document.getElementById(SECTION_ID)){
-        asegurarUI();
+  function actualizarBadge(n) {
+    const badge = document.getElementById('chat-nav-badge');
+    if (!badge) return;
+    const total = Number(n || 0);
+    badge.textContent = total > 99 ? '99+' : String(total);
+    badge.classList.toggle('hidden', total <= 0);
+  }
+
+  function fechaLegible(v) {
+    if (!v) return '';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    return d.toLocaleString('es-VE', {dateStyle:'short', timeStyle:'short'});
+  }
+
+  function render(docenteDetalle=null) {
+    const root = document.getElementById('chat-root');
+    if (!root) return;
+
+    const director = esDirector();
+    let docente = docenteDetalle;
+    if (!docente && director) {
+      const c = conversaciones.find(x => String(x.idDocente) === String(docenteSeleccionado));
+      docente = c ? {id:c.idDocente,nombre:c.docente,materia:c.materia,activo:c.activo} : null;
+    }
+    if (!docente && !director) {
+      docente = {
+        id: window.profesorActual?.id || '',
+        nombre: window.profesorActual?.nombre || 'Docente',
+        materia: window.profesorActual?.materia || ''
+      };
+    }
+
+    const lista = director ? `
+      <aside class="chat-sidebar">
+        <div class="chat-sidebar-head">
+          <h3>Conversaciones</h3>
+          <p>${conversaciones.length} docente(s)</p>
+        </div>
+        <div class="chat-search"><input id="chat-search" type="search" placeholder="Buscar docente o materia"></div>
+        <div id="chat-conversations" class="chat-conversations">${renderConversaciones(conversaciones)}</div>
+      </aside>` : '<aside class="chat-sidebar"></aside>';
+
+    const title = director
+      ? (docente?.nombre || 'Selecciona un docente')
+      : 'Dirección';
+    const subtitle = director
+      ? (docente?.materia || 'Conversación institucional')
+      : 'Comunicación institucional';
+
+    root.innerHTML = `
+      <div class="chat-shell ${director ? '' : 'chat-docente-only'}">
+        ${lista}
+        <section class="chat-panel">
+          <div class="chat-panel-head">
+            <div class="chat-panel-title">
+              <h3>${esc(title)}</h3>
+              <p>${esc(subtitle)}</p>
+            </div>
+            <button id="chat-refresh" class="chat-refresh" type="button"><i class="fa-solid fa-rotate"></i> Actualizar</button>
+          </div>
+          <div id="chat-messages" class="chat-messages">
+            ${renderMensajes()}
+          </div>
+          <form id="chat-compose" class="chat-compose">
+            <textarea id="chat-input" maxlength="2500" placeholder="Escribe un mensaje..." ${director && !docenteSeleccionado ? 'disabled' : ''}></textarea>
+            <button id="chat-send" class="chat-send" type="submit" ${director && !docenteSeleccionado ? 'disabled' : ''}><i class="fa-solid fa-paper-plane"></i> Enviar</button>
+          </form>
+        </section>
+      </div>`;
+
+    root.querySelector('#chat-refresh')?.addEventListener('click', () => cargarContexto(true));
+    root.querySelector('#chat-compose')?.addEventListener('submit', enviar);
+    root.querySelector('#chat-input')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        root.querySelector('#chat-compose')?.requestSubmit();
       }
     });
-    observer.observe(document.body,{childList:true,subtree:true});
+
+    if (director) {
+      root.querySelector('#chat-search')?.addEventListener('input', e => filtrarConversaciones(e.target.value));
+      root.querySelector('#chat-conversations')?.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-chat-docente]');
+        if (!btn) return;
+        docenteSeleccionado = String(btn.dataset.chatDocente || '');
+        await cargarConversacion(true);
+      });
+    }
+
+    const box = root.querySelector('#chat-messages');
+    if (box) box.scrollTop = box.scrollHeight;
   }
 
-  function init(){
+  function renderConversaciones(items) {
+    if (!items.length) return '<div class="chat-empty"><i class="fa-solid fa-inbox"></i><strong>No hay docentes disponibles.</strong></div>';
+    return items.map(c => `
+      <button type="button" class="chat-conversation ${String(c.idDocente)===String(docenteSeleccionado)?'is-active':''}" data-chat-docente="${esc(c.idDocente)}">
+        <span class="chat-avatar">${esc((c.docente || 'D').charAt(0).toUpperCase())}</span>
+        <span class="chat-conversation-copy">
+          <strong>${esc(c.docente || 'Docente')}</strong>
+          <small>${esc(c.materia || c.ultimoMensaje || 'Sin mensajes')}</small>
+        </span>
+        ${Number(c.noLeidos||0)>0?`<em class="chat-unread">${Number(c.noLeidos)}</em>`:''}
+      </button>`).join('');
+  }
+
+  function filtrarConversaciones(q) {
+    const term = String(q || '').trim().toLowerCase();
+    const items = !term ? conversaciones : conversaciones.filter(c =>
+      [c.docente,c.usuario,c.materia,c.ultimoMensaje].join(' ').toLowerCase().includes(term)
+    );
+    const box = document.getElementById('chat-conversations');
+    if (box) box.innerHTML = renderConversaciones(items);
+  }
+
+  function renderMensajes() {
+    if (!mensajes.length) {
+      return '<div class="chat-empty"><i class="fa-solid fa-message"></i><strong>Aún no hay mensajes.</strong><span>Escribe el primero para iniciar la conversación.</span></div>';
+    }
+    const miRol = esDirector() ? 'director' : 'docente';
+    return mensajes.map(m => {
+      const mine = String(m.rolRemitente || '') === miRol;
+      return `<article class="chat-msg ${mine?'mine':'other'}">
+        <strong>${esc(m.nombreRemitente || (mine?'Tú':'Remitente'))}</strong>
+        <p>${esc(m.mensaje || '')}</p>
+        <time>${esc(fechaLegible(m.creadoEn))}</time>
+      </article>`;
+    }).join('');
+  }
+
+  async function enviar(e) {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    const btn = document.getElementById('chat-send');
+    const mensaje = String(input?.value || '').trim();
+    if (!mensaje) return;
+    if (btn) btn.disabled = true;
+    try {
+      const payload = {mensaje, origen:'Web'};
+      if (esDirector()) payload.idDocente = docenteSeleccionado;
+      await api('enviarMensajeChat', payload);
+      if (input) input.value = '';
+      await cargarConversacion(true);
+      if (esDirector()) {
+        const r = await api('obtenerConversacionesChat');
+        conversaciones = Array.isArray(r.conversaciones) ? r.conversaciones : conversaciones;
+      }
+    } catch (err) {
+      if (typeof window.mostrarToast === 'function') window.mostrarToast(err.message || 'No se pudo enviar el mensaje.', 'error', 'Chat');
+      else alert(err.message || 'No se pudo enviar el mensaje.');
+    } finally {
+      if (btn) btn.disabled = false;
+      input?.focus();
+    }
+  }
+
+  function renderError(err) {
+    const root = document.getElementById('chat-root');
+    if (root) root.innerHTML = `<div class="chat-empty"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar el chat.</strong><span>${esc(err?.message || 'Error de conexión.')}</span></div>`;
+  }
+
+  function iniciarPolling() {
+    if (timer) clearInterval(timer);
+    timer = setInterval(async () => {
+      const sec = document.getElementById(SECTION_ID);
+      if (!window.profesorActual) return;
+      if (sec && !sec.classList.contains('hidden')) {
+        await cargarContexto(true);
+      } else {
+        await refrescarBadgeSilencioso();
+      }
+    }, POLL_MS);
+  }
+
+  function detenerPolling() {
+    if (timer) clearInterval(timer);
+    timer = null;
+  }
+
+  function init() {
     asegurarUI();
-    instalarCaptura();
-    vigilarMenu();
-    cargar();
+    actualizarVisibilidad();
+    if (window.profesorActual) {
+      refrescarBadgeSilencioso();
+      iniciarPolling();
+    } else {
+      detenerPolling();
+      actualizarBadge(0);
+    }
   }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,350),{once:true});
-  else setTimeout(init,220);
-  window.addEventListener('edugestion:session',()=>setTimeout(()=>{asegurarUI();cargar();},180));
+
+  window.addEventListener('edugestion:session', () => setTimeout(init, 80));
+  document.addEventListener('click', e => {
+    if (e.target?.closest?.('#login-btn,#btn-logout')) setTimeout(init, 350);
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, {once:true});
+  } else {
+    init();
+  }
 })();
-/* EDUGESTION_HISTORIAL_CIERRES_SHARED_V2_END */
+/* EDUGESTION_CHAT_INTERNO_WEB_V1_END */
+
