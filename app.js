@@ -3628,6 +3628,7 @@ const SESSION_KEY = 'edugestion_session_v2';
             <div class="library-filter-list library-filter-list--categories">
               <button class="is-active" data-library-filter="Todos"><i class="fa-solid fa-layer-group"></i><span>Todos</span></button>
               <button data-library-filter="Libros"><i class="fa-solid fa-book"></i><span>Libros</span></button>
+              <button data-library-filter="Fisioterapia"><i class="fa-solid fa-notes-medical"></i><span>Fisioterapia</span></button>
               <button data-library-filter="Cuadernillos"><i class="fa-solid fa-book-open"></i><span>Cuadernillos</span></button>
               <button data-library-filter="Cursos"><i class="fa-solid fa-graduation-cap"></i><span>Cursos</span></button>
               <button data-library-filter="Normativas"><i class="fa-solid fa-landmark"></i><span>Normativas</span></button>
@@ -3772,10 +3773,24 @@ const SESSION_KEY = 'edugestion_session_v2';
     } else if (bibliotecaFiltro === 'Libros') {
       items = items.filter(x => {
         const cat = String(x.categoria || '').toLowerCase();
+        const area = String(x.area || '').toLowerCase();
+        const etiquetas = String(x.etiquetas || '').toLowerCase();
         const titulo = String(x.titulo || '').toLowerCase();
+        const esFisioterapia = cat.includes('fisioterapia') || area.includes('fisioterapia') ||
+          etiquetas.includes('fisioterapia') || etiquetas.includes('rehabilitacion') ||
+          etiquetas.includes('rehabilitación') || etiquetas.includes('terapia fisica') ||
+          etiquetas.includes('terapia física');
+        if (esFisioterapia) return false;
         return cat.includes('libro') || cat.includes('documento') ||
           (x.tipo === 'Archivo' && !cat.includes('cuadern')) ||
           titulo.endsWith('.pdf');
+      });
+    } else if (bibliotecaFiltro === 'Fisioterapia') {
+      items = items.filter(x => {
+        const bolsa = [x.categoria,x.area,x.titulo,x.descripcion,x.etiquetas].join(' ').toLowerCase();
+        return bolsa.includes('fisioterapia') || bolsa.includes('rehabilitacion') ||
+          bolsa.includes('rehabilitación') || bolsa.includes('terapia fisica') ||
+          bolsa.includes('terapia física');
       });
     } else if (bibliotecaFiltro === 'Cuadernillos') {
       items = items.filter(x => {
@@ -3820,6 +3835,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     const descriptions = {
       Todos: 'Todos los recursos disponibles para preparar tus clases.',
       Libros: 'Libros y documentos organizados en un solo lugar.',
+      Fisioterapia: 'Libros de fisioterapia, rehabilitación y terapia física.',
       Cuadernillos: 'Cuadernillos pedagógicos y materiales de trabajo.',
       Cursos: 'Cursos y recursos formativos guardados.',
       Normativas: 'Normativas, leyes y material oficial para consulta.',
@@ -10669,3 +10685,8 @@ Archivo enviado directamente desde EduGestión.`);
 })();
 /* EDUGESTION_BIBLIOTECA_LIMPIA_V2_END */
 
+/* =========================================================
+   EduGestión · FASE 20D
+   CATEGORÍA FISIOTERAPIA EN BIBLIOTECA DIGITAL
+   ========================================================= */
+/* EDUGESTION_BIBLIOTECA_FISIOTERAPIA_V1_END */
