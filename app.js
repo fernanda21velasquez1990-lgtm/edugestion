@@ -10690,3 +10690,122 @@ Archivo enviado directamente desde EduGestión.`);
    CATEGORÍA FISIOTERAPIA EN BIBLIOTECA DIGITAL
    ========================================================= */
 /* EDUGESTION_BIBLIOTECA_FISIOTERAPIA_V1_END */
+
+
+
+/* =========================================================
+   EduGestión · FASE 20E
+   BIBLIOTECA DIGITAL · GEMINI MÁS LEGIBLE
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_BIBLIOTECA_GEMINI_LEGIBLE_V1) return;
+  window.EDUGESTION_BIBLIOTECA_GEMINI_LEGIBLE_V1 = true;
+
+  const s = document.createElement('style');
+  s.id = 'edugestion-biblioteca-gemini-legible-v1';
+  s.textContent = `
+    #section-biblioteca #library-ai-tools,
+    #section-biblioteca .library-ai,
+    #section-biblioteca [data-library-ai] {
+      font-size: 17px !important;
+    }
+
+    #section-biblioteca #library-ai-tools h3,
+    #section-biblioteca .library-ai h3,
+    #section-biblioteca [data-library-ai] h3 {
+      font-size: 1.35rem !important;
+      line-height: 1.3 !important;
+      font-weight: 800 !important;
+      color: #244a78 !important;
+    }
+
+    #section-biblioteca #library-ai-tools p,
+    #section-biblioteca .library-ai p,
+    #section-biblioteca [data-library-ai] p {
+      font-size: 1rem !important;
+      line-height: 1.6 !important;
+      color: #6a7c95 !important;
+    }
+
+    #section-biblioteca #library-ai-tools label,
+    #section-biblioteca .library-ai label,
+    #section-biblioteca [data-library-ai] label {
+      font-size: .94rem !important;
+      font-weight: 800 !important;
+      line-height: 1.3 !important;
+      color: #536b8c !important;
+    }
+
+    #section-biblioteca #library-ai-tools textarea,
+    #section-biblioteca .library-ai textarea,
+    #section-biblioteca [data-library-ai] textarea {
+      font-size: 1rem !important;
+      line-height: 1.55 !important;
+      min-height: 135px !important;
+      padding: 14px !important;
+    }
+
+    #section-biblioteca #library-ai-tools select,
+    #section-biblioteca .library-ai select,
+    #section-biblioteca [data-library-ai] select {
+      font-size: 1rem !important;
+      min-height: 46px !important;
+      padding: 10px 12px !important;
+    }
+
+    #section-biblioteca #library-ai-tools button,
+    #section-biblioteca .library-ai button,
+    #section-biblioteca [data-library-ai] button {
+      font-size: 1rem !important;
+      min-height: 48px !important;
+      font-weight: 800 !important;
+    }
+
+    #section-biblioteca #library-ai-tools small,
+    #section-biblioteca .library-ai small,
+    #section-biblioteca [data-library-ai] small {
+      font-size: .92rem !important;
+      line-height: 1.5 !important;
+    }
+
+    /* Buscadores superiores de Google y YouTube */
+    #section-biblioteca .library-search-hub h3,
+    #section-biblioteca .library-search-hub strong {
+      font-size: 1rem !important;
+    }
+
+    #section-biblioteca .library-search-hub p,
+    #section-biblioteca .library-search-hub small {
+      font-size: .9rem !important;
+      line-height: 1.45 !important;
+    }
+
+    #section-biblioteca .library-search-hub input {
+      font-size: .98rem !important;
+      min-height: 45px !important;
+    }
+
+    #section-biblioteca .library-search-hub button {
+      font-size: .96rem !important;
+      min-height: 45px !important;
+      font-weight: 800 !important;
+    }
+
+    @media (max-width: 700px) {
+      #section-biblioteca #library-ai-tools h3,
+      #section-biblioteca .library-ai h3,
+      #section-biblioteca [data-library-ai] h3 {
+        font-size: 1.25rem !important;
+      }
+
+      #section-biblioteca #library-ai-tools p,
+      #section-biblioteca .library-ai p,
+      #section-biblioteca [data-library-ai] p {
+        font-size: .98rem !important;
+      }
+    }
+  `;
+  document.head.appendChild(s);
+})();
+/* EDUGESTION_BIBLIOTECA_GEMINI_LEGIBLE_V1_END */
+
