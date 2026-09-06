@@ -281,6 +281,34 @@ async function callEduGestion(action, payload = {}) {
   return data;
 }
 
+
+const quickMenuInstalledChats = new Set();
+
+function quickMenuKeyboard() {
+  return {
+    keyboard: [[{ text: '☰ TODAS LAS OPCIONES' }]],
+    resize_keyboard: true,
+    is_persistent: true,
+    one_time_keyboard: false,
+    input_field_placeholder: 'Toca ☰ TODAS LAS OPCIONES para abrir el menú',
+  };
+}
+
+async function ensureQuickMenuButton(chatId) {
+  const key = String(chatId);
+  if (quickMenuInstalledChats.has(key)) return;
+  try {
+    await sendMessage(
+      chatId,
+      '☰ <b>Acceso rápido activado</b>\n\nDesde ahora puedes tocar <b>TODAS LAS OPCIONES</b> junto al cuadro de mensaje para abrir el menú completo sin escribir “menu”.',
+      { reply_markup: quickMenuKeyboard() },
+    );
+    quickMenuInstalledChats.add(key);
+  } catch (error) {
+    console.error('No se pudo instalar el botón de menú rápido:', error);
+  }
+}
+
 function mainMenuKeyboard(linked = true) {
   const rows = [];
   if (linked) {
@@ -312,6 +340,7 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '📘 Ficha académica', callback_data: 'academic:menu' },
+      { text: '📄 Boletines', callback_data: 'bulletin:menu' },
     ]);
     rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
@@ -412,6 +441,39 @@ function academicDetailKeyboard(index, lapsoCode) {
       [{ text: '🔄 Ver otro lapso', callback_data: `academic:student:${Number(index)}` }],
       [{ text: '👨‍🎓 Elegir otro estudiante', callback_data: 'academic:menu' }],
       [{ text: '🏠 Menú principal', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function bulletinStudentsKeyboard(students = []) {
+  const rows = students.slice(0, 30).map((student, index) => [{
+    text: `${index + 1}. ${student.nombre || 'Estudiante'} · ${student.ano || ''}${student.seccion ? ` ${student.seccion}` : ''}`.slice(0, 60),
+    callback_data: `bulletin:student:${index}`,
+  }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function bulletinLapsoKeyboard(index) {
+  return {
+    inline_keyboard: [
+      [
+        { text: '1️⃣ 1er Lapso', callback_data: `bulletin:lapso:${Number(index)}:L1` },
+        { text: '2️⃣ 2do Lapso', callback_data: `bulletin:lapso:${Number(index)}:L2` },
+      ],
+      [{ text: '3️⃣ 3er Lapso', callback_data: `bulletin:lapso:${Number(index)}:L3` }],
+      [{ text: '👨‍🎓 Elegir otro estudiante', callback_data: 'bulletin:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function bulletinDetailKeyboard(index) {
+  return {
+    inline_keyboard: [
+      [{ text: '🔄 Ver otro lapso', callback_data: `bulletin:student:${Number(index)}` }],
+      [{ text: '👨‍🎓 Elegir otro estudiante', callback_data: 'bulletin:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
     ],
   };
 }
@@ -1250,6 +1312,8 @@ async function showMainMenu(chatId, source) {
   const telegramId = teacherTelegramId(source);
   const profile = await linkedProfile(telegramId);
 
+  await ensureQuickMenuButton(chatId);
+
   if (!profile) {
     await sendMessage(
       chatId,
@@ -1845,6 +1909,142 @@ Actividades: <b>${Number(academic.totalActividades || 0)}</b>
 📚 <b>Detalle de actividades</b>
 ${activitiesText}`,
     { reply_markup: academicDetailKeyboard(Number(index), lapsoCode) },
+  );
+}
+
+
+
+async function showBulletinStudents(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  pendingTextMode.delete(String(chatId));
+
+  const result = await callEduGestion('botListarEstudiantes', {
+    telegramId,
+    limite: 30,
+  });
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+
+  if (!students.length) {
+    await sendMessage(
+      chatId,
+      '📄 <b>Boletines</b>\n\nTodavía no tienes estudiantes registrados.',
+      { reply_markup: mainMenuKeyboard(true) },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📄 <b>BOLETINES POR ESTUDIANTE</b>
+
+Selecciona el estudiante.
+
+El boletín mostrará:
+• Datos del estudiante
+• Lapso
+• Resumen de asistencia
+• Actividades y ponderaciones
+• Entregadas / no entregadas
+• Calificaciones
+• Promedio final del lapso
+
+Los datos se toman del mismo registro compartido que usa Notas y Control de Estudio.`,
+    { reply_markup: bulletinStudentsKeyboard(students) },
+  );
+}
+
+async function chooseBulletinStudent(chatId, source, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetalleEstudiante', {
+    telegramId,
+    indice: Number(index),
+  });
+  const student = result.estudiante || {};
+
+  await sendMessage(
+    chatId,
+    `📄 <b>Boletín del estudiante</b>
+
+👨‍🎓 <b>${escapeHtml(student.nombre || 'Estudiante')}</b>
+Curso: <b>${escapeHtml(student.ano || 'No registrado')} · Sección ${escapeHtml(student.seccion || '—')}</b>
+
+Selecciona el lapso del boletín:`,
+    { reply_markup: bulletinLapsoKeyboard(Number(index)) },
+  );
+}
+
+async function showStudentBulletin(chatId, source, index, lapsoCode) {
+  const telegramId = teacherTelegramId(source);
+  const lapso = academicLapsoLabel(lapsoCode);
+
+  const result = await callEduGestion('botFichaAcademicaEstudiante', {
+    telegramId,
+    indice: Number(index),
+    lapso,
+  });
+
+  const student = result.estudiante || {};
+  const attendance = result.asistencia || {};
+  const academic = result.resumenAcademico || {};
+  const activities = Array.isArray(result.actividades) ? result.actividades : [];
+
+  const average = academic.promedioLapso === null || academic.promedioLapso === undefined
+    ? 'Sin promedio'
+    : `${Number(academic.promedioLapso).toFixed(2)}/20`;
+
+  const attendancePercent = Number(attendance.porcentajeAsistencia || 0).toFixed(2);
+
+  const activitiesText = activities.length
+    ? activities.map((item, i) => {
+        const grade = item.nota === null || item.nota === undefined
+          ? 'Sin nota'
+          : `${Number(item.nota).toFixed(2)}/20`;
+        return `${i + 1}. ${item.entrego ? '✅' : '❌'} ${escapeHtml(item.actividad || 'Actividad')}\n` +
+          `   ${Number(item.ponderacion || 0)}% · ${grade}`;
+      }).join('\n')
+    : 'Sin actividades registradas en este lapso.';
+
+  await sendMessage(
+    chatId,
+    `📄 <b>BOLETÍN INDIVIDUAL</b>
+━━━━━━━━━━━━━━━━━━
+
+👨‍🎓 <b>Estudiante</b>
+${escapeHtml(student.nombre || 'Estudiante')}
+Cédula: ${escapeHtml(student.cedula || 'No registrada')}
+Curso: ${escapeHtml(student.ano || 'No registrado')} · Sección ${escapeHtml(student.seccion || '—')}
+Turno: ${escapeHtml(student.turno || 'No registrado')}
+Lapso: <b>${escapeHtml(result.lapso || lapso)}</b>
+
+📋 <b>ASISTENCIA</b>
+Presentes: <b>${Number(attendance.presentes || 0)}</b>
+Ausentes: <b>${Number(attendance.ausentes || 0)}</b>
+Tardanzas: <b>${Number(attendance.tardanzas || 0)}</b>
+Justificadas: <b>${Number(attendance.justificadas || 0)}</b>
+Asistencia efectiva: <b>${attendancePercent}%</b>
+
+📝 <b>EVALUACIÓN</b>
+Actividades: <b>${Number(academic.totalActividades || 0)}</b>
+Entregadas: <b>${Number(academic.entregadas || 0)}</b>
+No entregadas: <b>${Number(academic.noEntregadas || 0)}</b>
+
+📚 <b>DETALLE DE ACTIVIDADES</b>
+${activitiesText}
+
+⭐ <b>NOTA FINAL DEL LAPSO: ${average}</b>
+
+💬 <b>Observación del docente:</b>
+No registrada desde Telegram.
+
+━━━━━━━━━━━━━━━━━━
+Boletín generado por EduGestión desde el bot de Telegram.`,
+    { reply_markup: bulletinDetailKeyboard(Number(index)) },
   );
 }
 
@@ -2476,7 +2676,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -2486,6 +2686,11 @@ async function handleMessage(message) {
   if (!chatId) return;
 
   const text = normalizeCommand(message.text);
+
+  if (/^(☰\s*)?(TODAS LAS OPCIONES|MENÚ COMPLETO|MENU COMPLETO|MENÚ|MENU)$/i.test(text)) {
+    await showMainMenu(chatId, message);
+    return;
+  }
 
   if (/^\/(start|menu)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showMainMenu(chatId, message);
@@ -2560,6 +2765,11 @@ async function handleMessage(message) {
 
   if (/^\/ficha(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showAcademicStudents(chatId, message);
+    return;
+  }
+
+  if (/^\/boletin(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showBulletinStudents(chatId, message);
     return;
   }
 
@@ -2672,6 +2882,23 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'bulletin:menu') {
+    await showBulletinStudents(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('bulletin:student:')) {
+    const index = Number(data.split(':')[2]);
+    await chooseBulletinStudent(chatId, callbackQuery, index);
+    return;
+  }
+  if (data.startsWith('bulletin:lapso:')) {
+    const parts = data.split(':');
+    const index = Number(parts[2]);
+    const lapsoCode = parts[3] || 'L1';
+    await showStudentBulletin(chatId, callbackQuery, index, lapsoCode);
     return;
   }
 
@@ -2971,7 +3198,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.1-ficha-academica-ready',
+        status: 'phase5.2-boletines-menu-rapido-ready',
       });
     }
 
