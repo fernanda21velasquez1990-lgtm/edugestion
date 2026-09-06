@@ -3,6 +3,32 @@ const BOT_API_BASE = 'https://api.telegram.org';
 const MAX_TELEGRAM_MESSAGE = 3900;
 const pendingTextMode = new Map();
 
+
+const closureHistoryState = new Map();
+
+function closureHistoryListKeyboard(items = []) {
+  const rows = items.slice(0, 30).map((item, index) => [{
+    text: `${item.enviado ? '✅' : '🕓'} ${item.lapso || 'Lapso'} · ${item.ano || ''} ${item.seccion || ''}`.slice(0, 60),
+    callback_data: `closureHistory:detail:${index}`,
+  }]);
+  rows.push([{ text: '🔄 Actualizar', callback_data: 'closureHistory:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function closureHistoryDetailKeyboard(index, enviado) {
+  return {
+    inline_keyboard: [
+      [{
+        text: enviado ? '🕓 Marcar pendiente' : '✅ Marcar enviado',
+        callback_data: `closureHistory:toggle:${Number(index)}`,
+      }],
+      [{ text: '⬅️ Volver al historial', callback_data: 'closureHistory:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
 const closureState = new Map();
 
 function closureLapsoKeyboard() {
@@ -389,6 +415,7 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '📦 Cierre de lapso', callback_data: 'closure:menu' },
+      { text: '📚 Historial de cierres', callback_data: 'closureHistory:menu' },
     ]);
     rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
@@ -790,6 +817,117 @@ function gradesBackKeyboard() {
   };
 }
 
+
+
+async function showClosureHistory(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botHistorialCierres', {
+    telegramId,
+    limite: 30,
+  });
+
+  const items = Array.isArray(result.cierres) ? result.cierres : [];
+  closureHistoryState.set(String(chatId), { items });
+
+  if (!items.length) {
+    await sendMessage(
+      chatId,
+      `📚 <b>HISTORIAL DE CIERRES</b>
+
+Todavía no hay cierres registrados para este profesor.`,
+      { reply_markup: mainMenuKeyboard(true) },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📚 <b>HISTORIAL DE CIERRES</b>
+
+Total: <b>${Number(result.total || items.length)}</b>
+✅ Enviados: <b>${Number(result.enviados || 0)}</b>
+🕓 Pendientes: <b>${Number(result.pendientes || 0)}</b>
+
+Selecciona un cierre para ver su detalle:`,
+    { reply_markup: closureHistoryListKeyboard(items) },
+  );
+}
+
+async function showClosureHistoryDetail(chatId, source, index) {
+  let state = closureHistoryState.get(String(chatId));
+  if (!state || !Array.isArray(state.items) || !state.items[Number(index)]) {
+    await showClosureHistory(chatId, source);
+    return;
+  }
+
+  const item = state.items[Number(index)];
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetalleCierre', {
+    telegramId,
+    id: item.id,
+  });
+
+  const cierre = result.cierre || item;
+  state.items[Number(index)] = cierre;
+  closureHistoryState.set(String(chatId), state);
+
+  await sendMessage(
+    chatId,
+    `📚 <b>DETALLE DEL CIERRE</b>
+━━━━━━━━━━━━━━━━━━
+
+Estado: <b>${cierre.enviado ? '✅ ENVIADO' : '🕓 PENDIENTE'}</b>
+Lapso: <b>${escapeHtml(cierre.lapso || 'No registrado')}</b>
+Curso: <b>${escapeHtml(cierre.ano || 'No registrado')} · Sección ${escapeHtml(cierre.seccion || '—')}</b>
+Turno: <b>${escapeHtml(cierre.turno || 'No registrado')}</b>
+
+Docente: <b>${escapeHtml(cierre.docente || 'No registrado')}</b>
+Materia: <b>${escapeHtml(cierre.materia || 'No registrada')}</b>
+
+Acción: ${escapeHtml(cierre.accion || 'Cierre registrado')}
+Medio: ${escapeHtml(cierre.medio || 'No registrado')}
+Fecha: ${escapeHtml(cierre.fecha || cierre.creadoEn || 'No registrada')}
+
+━━━━━━━━━━━━━━━━━━
+Puedes cambiar el estado del cierre desde aquí.`,
+    { reply_markup: closureHistoryDetailKeyboard(Number(index), Boolean(cierre.enviado)) },
+  );
+}
+
+async function toggleClosureHistoryState(chatId, source, index) {
+  const state = closureHistoryState.get(String(chatId));
+  if (!state || !Array.isArray(state.items) || !state.items[Number(index)]) {
+    await showClosureHistory(chatId, source);
+    return;
+  }
+
+  const current = state.items[Number(index)];
+  const telegramId = teacherTelegramId(source);
+
+  const result = await callEduGestion('botActualizarEstadoCierre', {
+    telegramId,
+    id: current.id,
+    enviado: !Boolean(current.enviado),
+  });
+
+  const updated = result.cierre || { ...current, enviado: !Boolean(current.enviado) };
+  state.items[Number(index)] = updated;
+  closureHistoryState.set(String(chatId), state);
+
+  await sendMessage(
+    chatId,
+    `${updated.enviado ? '✅' : '🕓'} <b>ESTADO ACTUALIZADO</b>
+
+El cierre quedó marcado como <b>${updated.enviado ? 'ENVIADO' : 'PENDIENTE'}</b>.`,
+    { reply_markup: closureHistoryDetailKeyboard(Number(index), Boolean(updated.enviado)) },
+  );
+}
 
 async function showClosureMenu(chatId, source) {
   const telegramId = teacherTelegramId(source);
@@ -2915,7 +3053,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -3014,6 +3152,11 @@ async function handleMessage(message) {
 
   if (/^\/cierre(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showClosureMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/(historialcierre|historialcierres)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showClosureHistory(chatId, message);
     return;
   }
 
@@ -3126,6 +3269,21 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'closureHistory:menu') {
+    await showClosureHistory(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('closureHistory:detail:')) {
+    const index = Number(data.split(':')[2]);
+    await showClosureHistoryDetail(chatId, callbackQuery, index);
+    return;
+  }
+  if (data.startsWith('closureHistory:toggle:')) {
+    const index = Number(data.split(':')[2]);
+    await toggleClosureHistoryState(chatId, callbackQuery, index);
     return;
   }
 
@@ -3466,7 +3624,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.3-cierre-lapso-ready',
+        status: 'phase5.4-historial-cierres-ready',
       });
     }
 
