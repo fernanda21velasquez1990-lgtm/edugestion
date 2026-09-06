@@ -9835,3 +9835,515 @@ Archivo enviado directamente desde EduGestión.`);
 })();
 /* EDUGESTION_CHAT_INTERNO_WEB_V1_END */
 
+/* =========================================================
+   EduGestión · FASE 19
+   AGENDA DIGITAL 2026-2027
+   Adaptación web de la Agenda Docente de Educación Física.
+   - Panel principal
+   - Calendario mensual
+   - Agenda semanal
+   - Notas
+   - Bitácora
+   - Juegos Escolares
+   - Inventario deportivo
+   - Préstamos de material
+   - Horario y asistencia conectados a EduGestión
+   ========================================================= */
+(() => {
+  const MARK = 'EDUGESTION_AGENDA_DIGITAL_V1';
+  if (window[MARK]) return;
+  window[MARK] = true;
+
+  const TAB_ID = 'tab-agenda-digital';
+  const SECTION_ID = 'section-agenda-digital';
+  const CICLO = '2026-2027';
+
+  const MESES = [
+    {key:'2026-09',nombre:'Septiembre 2026'},
+    {key:'2026-10',nombre:'Octubre 2026'},
+    {key:'2026-11',nombre:'Noviembre 2026'},
+    {key:'2026-12',nombre:'Diciembre 2026'},
+    {key:'2027-01',nombre:'Enero 2027'},
+    {key:'2027-02',nombre:'Febrero 2027'},
+    {key:'2027-03',nombre:'Marzo 2027'},
+    {key:'2027-04',nombre:'Abril 2027'},
+    {key:'2027-05',nombre:'Mayo 2027'},
+    {key:'2027-06',nombre:'Junio 2027'},
+    {key:'2027-07',nombre:'Julio 2027'}
+  ];
+
+  let contexto = null;
+  let resumen = null;
+  let vista = 'inicio';
+  let mesActual = '2026-09';
+  let eventos = [];
+  let notas = [];
+  let bitacora = [];
+  let inventario = [];
+  let prestamos = [];
+  let juegos = null;
+
+  const esc = v => String(v ?? '').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+
+  const api = async (accion,payload={}) => {
+    if (typeof window.EDUGESTION_API_REQUEST !== 'function') {
+      throw new Error('La conexión con EduGestión todavía no está disponible.');
+    }
+    return window.EDUGESTION_API_REQUEST(accion,payload);
+  };
+
+  function estilos() {
+    if (document.getElementById('edugestion-agenda-styles')) return;
+    const st = document.createElement('style');
+    st.id = 'edugestion-agenda-styles';
+    st.textContent = `
+      .ag-wrap{display:flex;flex-direction:column;gap:18px}
+      .ag-hero{background:linear-gradient(135deg,#1f3b72,#2f6cae);color:#fff;border-radius:24px;padding:24px;display:flex;justify-content:space-between;align-items:center;gap:18px;box-shadow:0 16px 38px rgba(31,59,114,.18)}
+      .ag-hero h2{margin:5px 0 4px;font-size:1.7rem}.ag-hero p{margin:0;opacity:.9}.ag-hero-icon{font-size:3rem;opacity:.9}
+      .ag-cycle{display:inline-flex;gap:7px;align-items:center;background:rgba(255,255,255,.14);padding:7px 11px;border-radius:999px;font-weight:800;font-size:.82rem}
+      .ag-tabs{display:flex;gap:8px;flex-wrap:wrap}
+      .ag-tab{border:1px solid #d5e1ef;background:#fff;color:#2b466f;border-radius:14px;padding:10px 13px;font-weight:800;cursor:pointer}
+      .ag-tab.is-active{background:#245ea8;color:#fff;border-color:#245ea8}
+      .ag-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+      .ag-card{background:#fff;border:1px solid #dce6f2;border-radius:20px;padding:18px;box-shadow:0 8px 20px rgba(35,56,118,.07)}
+      .ag-card h3{margin:0 0 7px;color:#213b65}.ag-card p{margin:0;color:#66758b;font-size:.9rem}
+      .ag-card-icon{width:44px;height:44px;border-radius:13px;background:#e7f0fb;color:#245ea8;display:flex;align-items:center;justify-content:center;font-size:1.2rem;margin-bottom:12px}
+      .ag-metric{font-size:1.8rem;font-weight:900;color:#245ea8;margin-top:8px}
+      .ag-section{background:#fff;border:1px solid #dce6f2;border-radius:20px;padding:18px;box-shadow:0 8px 20px rgba(35,56,118,.07)}
+      .ag-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+      .ag-head h3{margin:0;color:#213b65}.ag-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .ag-btn{border:0;border-radius:12px;background:#245ea8;color:#fff;padding:10px 13px;font-weight:800;cursor:pointer}
+      .ag-btn.secondary{background:#eef4fb;color:#245ea8;border:1px solid #d6e3f2}
+      .ag-btn.danger{background:#fff1f1;color:#9f2f2f;border:1px solid #f0cccc}
+      .ag-list{display:flex;flex-direction:column;gap:10px}.ag-item{border:1px solid #e0e8f2;border-radius:14px;padding:12px 14px;background:#fbfdff}
+      .ag-item-top{display:flex;justify-content:space-between;gap:10px}.ag-item strong{color:#243b60}.ag-item small{color:#76839a}
+      .ag-calendar-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+      .ag-calendar-toolbar select{border:1px solid #d1deed;border-radius:12px;padding:10px 12px;background:#fff}
+      .ag-calendar{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid #dbe5f1;border-radius:16px;overflow:hidden}
+      .ag-day-name{background:#edf4fc;color:#274d83;font-weight:900;text-align:center;padding:9px 5px;border-right:1px solid #dbe5f1}
+      .ag-day{min-height:92px;padding:8px;border-top:1px solid #e3ebf4;border-right:1px solid #e3ebf4;background:#fff;position:relative}
+      .ag-day.empty{background:#f8fafc}.ag-day-num{font-weight:900;color:#243b60;font-size:.85rem}
+      .ag-event-dot{display:block;margin-top:5px;font-size:.72rem;background:#e5f0fb;color:#245ea8;padding:3px 5px;border-radius:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .ag-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ag-field{display:flex;flex-direction:column;gap:6px}.ag-field.full{grid-column:1/-1}
+      .ag-field label{font-weight:800;color:#334b70;font-size:.86rem}.ag-field input,.ag-field select,.ag-field textarea{border:1px solid #d1deed;border-radius:12px;padding:10px 12px;font:inherit;outline:none}
+      .ag-field textarea{min-height:100px;resize:vertical}.ag-field input:focus,.ag-field select:focus,.ag-field textarea:focus{border-color:#316cb0;box-shadow:0 0 0 3px rgba(49,108,176,.12)}
+      .ag-table-wrap{overflow:auto}.ag-table{width:100%;border-collapse:collapse;min-width:760px}.ag-table th,.ag-table td{border-bottom:1px solid #e4ebf3;padding:10px;text-align:left;font-size:.88rem}.ag-table th{background:#f2f6fb;color:#314d76}
+      .ag-badge{display:inline-flex;border-radius:999px;padding:4px 8px;font-size:.75rem;font-weight:900;background:#edf4fc;color:#245ea8}
+      .ag-empty{text-align:center;padding:28px;color:#758198}.ag-empty i{font-size:1.8rem;color:#8aa4c7;margin-bottom:8px}.ag-empty strong{display:block;color:#334b70}
+      .ag-week-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.ag-week{border:1px solid #dce6f2;border-radius:15px;padding:14px;background:#fbfdff}.ag-week h4{margin:0 0 8px;color:#274d83}
+      .ag-note-area{width:100%;min-height:130px;border:1px solid #d1deed;border-radius:13px;padding:12px;font:inherit;resize:vertical}
+      .ag-subtle{font-size:.82rem;color:#738198}
+      @media(max-width:980px){.ag-grid{grid-template-columns:repeat(2,1fr)}.ag-week-grid{grid-template-columns:repeat(2,1fr)}}
+      @media(max-width:700px){.ag-grid,.ag-form,.ag-week-grid{grid-template-columns:1fr}.ag-hero{align-items:flex-start}.ag-hero-icon{font-size:2.2rem}.ag-day{min-height:72px;padding:5px}.ag-day-name{font-size:.72rem}.ag-event-dot{font-size:.65rem}}
+    `;
+    document.head.appendChild(st);
+  }
+
+  function asegurarUI() {
+    estilos();
+    const nav = document.getElementById('app-nav') || document.querySelector('.app-sidebar nav');
+    const main = document.getElementById('app-main') || document.querySelector('main');
+    if (!nav || !main) return;
+
+    let tab = document.getElementById(TAB_ID);
+    if (!tab) {
+      tab = document.createElement('button');
+      tab.id = TAB_ID;
+      tab.type = 'button';
+      tab.className = 'nav-item';
+      tab.setAttribute('aria-selected','false');
+      tab.dataset.title = 'Agenda';
+      tab.dataset.description = 'Agenda docente digital 2026-2027.';
+      tab.innerHTML = '<i class="fa-solid fa-book-open"></i><span>Agenda</span>';
+      nav.appendChild(tab);
+      tab.addEventListener('click', abrir);
+    }
+
+    let sec = document.getElementById(SECTION_ID);
+    if (!sec) {
+      sec = document.createElement('section');
+      sec.id = SECTION_ID;
+      sec.className = 'hidden';
+      sec.innerHTML = '<div id="agenda-root"><div class="ag-empty"><i class="fa-solid fa-book-open"></i><strong>Abre Agenda para cargar tu información.</strong></div></div>';
+      main.appendChild(sec);
+    }
+    actualizarVisibilidad();
+  }
+
+  function actualizarVisibilidad() {
+    const tab = document.getElementById(TAB_ID);
+    if (!tab) return;
+    const conectado = Boolean(window.profesorActual);
+    const director = String(window.profesorActual?.rol || '').toLowerCase() === 'director';
+    tab.classList.toggle('role-hidden', !conectado || director);
+  }
+
+  function activarPestana() {
+    const tab = document.getElementById(TAB_ID);
+    const sec = document.getElementById(SECTION_ID);
+    if (!tab || !sec) return;
+    document.querySelectorAll('#app-nav .nav-item').forEach(x=>{
+      x.classList.toggle('is-active',x===tab);
+      x.setAttribute('aria-selected',x===tab?'true':'false');
+    });
+    document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==sec));
+    const title=document.getElementById('page-title');
+    const desc=document.getElementById('page-description');
+    if(title) title.textContent='Agenda';
+    if(desc) desc.textContent='Organización docente · Ciclo Escolar 2026-2027';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  async function abrir() {
+    if (!window.profesorActual || String(window.profesorActual.rol||'').toLowerCase()==='director') return;
+    activarPestana();
+    await cargarBase();
+  }
+
+  async function cargarBase() {
+    renderLoading();
+    try {
+      contexto = await api('obtenerAgendaContexto');
+      resumen = await api('obtenerAgendaResumen');
+      await Promise.all([
+        cargarEventos(),
+        cargarNotas(),
+        cargarBitacora(),
+        cargarInventario(),
+        cargarPrestamos(),
+        cargarJuegos()
+      ]);
+      render();
+    } catch(err) {
+      renderError(err);
+    }
+  }
+
+  async function cargarEventos(){ const r=await api('listarAgendaEventos'); eventos=Array.isArray(r.eventos)?r.eventos:[]; }
+  async function cargarNotas(){ const r=await api('listarAgendaNotas'); notas=Array.isArray(r.notas)?r.notas:[]; }
+  async function cargarBitacora(){ const r=await api('listarAgendaBitacora'); bitacora=Array.isArray(r.registros)?r.registros:[]; }
+  async function cargarInventario(){ const r=await api('listarInventarioDeportivo'); inventario=Array.isArray(r.inventario)?r.inventario:[]; }
+  async function cargarPrestamos(){ const r=await api('listarPrestamosMaterial'); prestamos=Array.isArray(r.prestamos)?r.prestamos:[]; }
+  async function cargarJuegos(){ const r=await api('obtenerJuegosEscolares',{cicloEscolar:CICLO}); juegos=r.juegos||{}; }
+
+  function renderLoading(){
+    const root=document.getElementById('agenda-root');
+    if(root) root.innerHTML='<div class="ag-empty"><i class="fa-solid fa-spinner fa-spin"></i><strong>Cargando Agenda Digital…</strong></div>';
+  }
+  function renderError(err){
+    const root=document.getElementById('agenda-root');
+    if(root) root.innerHTML=`<div class="ag-empty"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar la Agenda.</strong><span>${esc(err?.message||'Error de conexión.')}</span></div>`;
+  }
+
+  function render(){
+    const root=document.getElementById('agenda-root');
+    if(!root) return;
+    root.innerHTML=`
+      <div class="ag-wrap">
+        <div class="ag-hero">
+          <div>
+            <span class="ag-cycle"><i class="fa-solid fa-calendar-days"></i> Ciclo Escolar ${CICLO}</span>
+            <h2>Agenda Docente Digital</h2>
+            <p>${esc(contexto?.profesor?.nombre || window.profesorActual?.nombre || 'Docente')} · ${esc(contexto?.profesor?.materia || window.profesorActual?.materia || 'Educación Física')}</p>
+          </div>
+          <div class="ag-hero-icon"><i class="fa-solid fa-person-running"></i></div>
+        </div>
+        <div class="ag-tabs">${tabsHtml()}</div>
+        <div id="agenda-view">${renderVista()}</div>
+      </div>`;
+    enlazar();
+  }
+
+  function tabsHtml(){
+    const tabs=[
+      ['inicio','fa-house','Inicio'],
+      ['calendario','fa-calendar-days','Calendario'],
+      ['mensual','fa-list-check','Agenda mensual'],
+      ['notas','fa-note-sticky','Notas'],
+      ['bitacora','fa-clipboard','Bitácora'],
+      ['juegos','fa-trophy','Juegos Escolares'],
+      ['inventario','fa-basketball','Inventario'],
+      ['prestamos','fa-right-left','Préstamos'],
+      ['horario','fa-clock','Horario / Asistencia']
+    ];
+    return tabs.map(([k,i,t])=>`<button class="ag-tab ${vista===k?'is-active':''}" data-ag-view="${k}"><i class="fa-solid ${i}"></i> ${t}</button>`).join('');
+  }
+
+  function renderVista(){
+    if(vista==='calendario') return renderCalendario();
+    if(vista==='mensual') return renderMensual();
+    if(vista==='notas') return renderNotas();
+    if(vista==='bitacora') return renderBitacora();
+    if(vista==='juegos') return renderJuegos();
+    if(vista==='inventario') return renderInventario();
+    if(vista==='prestamos') return renderPrestamos();
+    if(vista==='horario') return renderHorario();
+    return renderInicio();
+  }
+
+  function renderInicio(){
+    const t=resumen?.totales||{};
+    const proximos=resumen?.hoy?.proximos||[];
+    return `
+      <div class="ag-grid">
+        ${metricCard('fa-calendar-check','Eventos pendientes hoy',resumen?.hoy?.eventosPendientes||0,'Organiza tus compromisos del día')}
+        ${metricCard('fa-note-sticky','Notas guardadas',t.notas||0,'Apuntes y recordatorios')}
+        ${metricCard('fa-clipboard','Registros de bitácora',t.bitacora||0,'Seguimiento docente')}
+        ${metricCard('fa-basketball','Materiales inventariados',t.inventario||0,'Control deportivo')}
+        ${metricCard('fa-right-left','Préstamos pendientes',t.prestamosPendientes||0,'Material por devolver')}
+        ${metricCard('fa-triangle-exclamation','Material por reponer',t.materialesReposicion||0,'Revisión de inventario')}
+      </div>
+      <div class="ag-section">
+        <div class="ag-head"><h3>Próximos eventos</h3><button class="ag-btn" data-ag-view="calendario">Abrir calendario</button></div>
+        <div class="ag-list">
+          ${proximos.length?proximos.map(e=>`<div class="ag-item"><div class="ag-item-top"><strong>${esc(e.titulo||'Evento')}</strong><span class="ag-badge">${esc(e.fecha||'')}</span></div><small>${esc(e.tipo||'Actividad')} ${e.hora?'· '+esc(e.hora):''}</small></div>`).join(''):'<div class="ag-empty"><i class="fa-solid fa-calendar-check"></i><strong>No hay eventos próximos.</strong></div>'}
+        </div>
+      </div>`;
+  }
+
+  function metricCard(icon,title,value,desc){
+    return `<div class="ag-card"><div class="ag-card-icon"><i class="fa-solid ${icon}"></i></div><h3>${title}</h3><p>${desc}</p><div class="ag-metric">${Number(value||0)}</div></div>`;
+  }
+
+  function monthParts(key){ const [y,m]=key.split('-').map(Number); return {y,m}; }
+  function renderCalendario(){
+    const {y,m}=monthParts(mesActual);
+    const first=new Date(y,m-1,1);
+    const days=new Date(y,m,0).getDate();
+    const start=first.getDay();
+    const celdas=[];
+    for(let i=0;i<start;i++) celdas.push('<div class="ag-day empty"></div>');
+    for(let d=1;d<=days;d++){
+      const iso=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const ev=eventos.filter(e=>String(e.fecha||'')===iso);
+      celdas.push(`<div class="ag-day"><span class="ag-day-num">${d}</span>${ev.slice(0,3).map(e=>`<span class="ag-event-dot" title="${esc(e.titulo)}">${esc(e.titulo)}</span>`).join('')}</div>`);
+    }
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Calendario escolar ${CICLO}</h3><button class="ag-btn" id="ag-new-event"><i class="fa-solid fa-plus"></i> Nuevo evento</button></div>
+        <div class="ag-calendar-toolbar">
+          <select id="ag-month">${MESES.map(x=>`<option value="${x.key}" ${x.key===mesActual?'selected':''}>${x.nombre}</option>`).join('')}</select>
+        </div>
+        <div class="ag-calendar">
+          ${['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'].map(x=>`<div class="ag-day-name">${x}</div>`).join('')}
+          ${celdas.join('')}
+        </div>
+      </div>
+      <div class="ag-section" style="margin-top:14px">
+        <div class="ag-head"><h3>Eventos del mes</h3></div>
+        ${renderEventosMes()}
+      </div>
+      <div id="ag-event-form"></div>`;
+  }
+
+  function renderEventosMes(){
+    const ev=eventos.filter(e=>String(e.fecha||'').startsWith(mesActual));
+    if(!ev.length) return '<div class="ag-empty"><i class="fa-solid fa-calendar"></i><strong>No hay eventos en este mes.</strong></div>';
+    return `<div class="ag-list">${ev.map(e=>`<div class="ag-item"><div class="ag-item-top"><strong>${esc(e.titulo)}</strong><span class="ag-badge">${esc(e.fecha)} ${esc(e.hora||'')}</span></div><small>${esc(e.tipo||'Actividad')} · ${esc(e.estado||'Pendiente')}</small><p>${esc(e.descripcion||'')}</p></div>`).join('')}</div>`;
+  }
+
+  function renderMensual(){
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Agenda mensual</h3><span class="ag-badge">${MESES.find(x=>x.key===mesActual)?.nombre||''}</span></div>
+        <div class="ag-calendar-toolbar"><select id="ag-month">${MESES.map(x=>`<option value="${x.key}" ${x.key===mesActual?'selected':''}>${x.nombre}</option>`).join('')}</select></div>
+        <div class="ag-week-grid">
+          ${[1,2,3,4].map(n=>`<div class="ag-week"><h4>Semana ${n}</h4><textarea class="ag-note-area" data-week="${n}" placeholder="Escribe actividades, recordatorios o pendientes de la semana...">${esc(notaSemanal(n))}</textarea><button class="ag-btn" data-save-week="${n}" style="margin-top:8px">Guardar</button></div>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  function notaSemanal(n){
+    const found=notas.find(x=>x.mes===mesActual && String(x.semana)===`Semana ${n}` && x.categoria==='Agenda mensual');
+    return found?.contenido||'';
+  }
+
+  function renderNotas(){
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Notas</h3><button class="ag-btn" id="ag-new-note"><i class="fa-solid fa-plus"></i> Nueva nota</button></div>
+        <div class="ag-list">
+          ${notas.length?notas.map(n=>`<div class="ag-item"><div class="ag-item-top"><strong>${esc(n.titulo||'Nota')}</strong><span class="ag-badge">${esc(n.fecha||'')}</span></div><small>${esc(n.categoria||'General')}</small><p>${esc(n.contenido||'')}</p></div>`).join(''):'<div class="ag-empty"><i class="fa-solid fa-note-sticky"></i><strong>No hay notas guardadas.</strong></div>'}
+        </div>
+        <div id="ag-note-form"></div>
+      </div>`;
+  }
+
+  function renderBitacora(){
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Bitácora docente</h3><button class="ag-btn" id="ag-new-log"><i class="fa-solid fa-plus"></i> Nuevo registro</button></div>
+        <div class="ag-list">
+          ${bitacora.length?bitacora.map(b=>`<div class="ag-item"><div class="ag-item-top"><strong>${esc(b.alumno||'Registro general')}</strong><span class="ag-badge">${esc(b.fecha||'')}</span></div><small>${esc(b.sesionActividad||'')}</small><p>${esc(b.situacionObservada||'')}</p></div>`).join(''):'<div class="ag-empty"><i class="fa-solid fa-clipboard"></i><strong>No hay registros de bitácora.</strong></div>'}
+        </div>
+        <div id="ag-log-form"></div>
+      </div>`;
+  }
+
+  function renderJuegos(){
+    const j=juegos||{};
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Juegos Escolares</h3><span class="ag-badge">${CICLO}</span></div>
+        <form id="ag-games-form" class="ag-form">
+          ${['etapaZona','etapaEstatal','etapaRegional','etapaNacional'].map((k,i)=>`<div class="ag-field full"><label>${['Etapa de Zona','Etapa Estatal','Etapa Regional','Etapa Nacional'][i]}</label><textarea name="${k}">${esc(j[k]||'')}</textarea></div>`).join('')}
+          <div class="ag-field full"><label>Notas</label><textarea name="notas">${esc(j.notas||'')}</textarea></div>
+          <div class="ag-field full"><button class="ag-btn" type="submit">Guardar Juegos Escolares</button></div>
+        </form>
+      </div>`;
+  }
+
+  function renderInventario(){
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Inventario deportivo</h3><button class="ag-btn" id="ag-new-inventory"><i class="fa-solid fa-plus"></i> Agregar material</button></div>
+        <div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Material</th><th>Total</th><th>Buen estado</th><th>Regular</th><th>Mal estado</th><th>Reposición</th><th>Observaciones</th></tr></thead><tbody>
+          ${inventario.length?inventario.map(i=>`<tr><td>${esc(i.material||'')}</td><td>${Number(i.cantidadTotal||0)}</td><td>${Number(i.buenEstado||0)}</td><td>${Number(i.regularEstado||0)}</td><td>${Number(i.malEstado||0)}</td><td>${Number(i.necesitaReposicion||0)}</td><td>${esc(i.observaciones||'')}</td></tr>`).join(''):'<tr><td colspan="7">Sin materiales registrados.</td></tr>'}
+        </tbody></table></div>
+        <div id="ag-inventory-form"></div>
+      </div>`;
+  }
+
+  function renderPrestamos(){
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Control de préstamo de material</h3><button class="ag-btn" id="ag-new-loan"><i class="fa-solid fa-plus"></i> Nuevo préstamo</button></div>
+        <div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Fecha</th><th>Material</th><th>Cantidad</th><th>Solicitado por</th><th>Estado</th><th>Devolución</th></tr></thead><tbody>
+          ${prestamos.length?prestamos.map(p=>`<tr><td>${esc(p.fecha||'')}</td><td>${esc(p.material||'')}</td><td>${Number(p.cantidad||0)}</td><td>${esc(p.solicitadoPor||'')}</td><td><span class="ag-badge">${esc(p.estado||'')}</span></td><td>${esc(p.fechaDevolucion||'')}</td></tr>`).join(''):'<tr><td colspan="6">Sin préstamos registrados.</td></tr>'}
+        </tbody></table></div>
+        <div id="ag-loan-form"></div>
+      </div>`;
+  }
+
+  function renderHorario(){
+    const horarios=Array.isArray(contexto?.horarios)?contexto.horarios:[];
+    return `
+      <div class="ag-section">
+        <div class="ag-head"><h3>Horario de Educación Física</h3><span class="ag-badge">Conectado con EduGestión</span></div>
+        ${horarios.length?`<div class="ag-list">${horarios.map(h=>`<div class="ag-item"><strong>${esc(h.dia||h.diaSemana||'Horario')}</strong><p>${esc(h.horaInicio||h.hora||'')} ${h.horaFin?' - '+esc(h.horaFin):''} · ${esc(h.ano||'')} ${esc(h.seccion||'')}</p></div>`).join('')}</div>`:'<div class="ag-empty"><i class="fa-solid fa-clock"></i><strong>No hay horarios cargados.</strong></div>'}
+      </div>
+      <div class="ag-section" style="margin-top:14px">
+        <div class="ag-head"><h3>Lista de asistencia</h3><span class="ag-badge">Usa el módulo existente</span></div>
+        <p class="ag-subtle">La asistencia no se duplica dentro de Agenda. Se mantiene conectada con el módulo principal de EduGestión.</p>
+      </div>`;
+  }
+
+  function enlazar(){
+    document.querySelectorAll('[data-ag-view]').forEach(btn=>btn.addEventListener('click',()=>{
+      vista=btn.dataset.agView; render();
+    }));
+    document.getElementById('ag-month')?.addEventListener('change',e=>{mesActual=e.target.value;render();});
+    document.getElementById('ag-new-event')?.addEventListener('click',mostrarFormEvento);
+    document.getElementById('ag-new-note')?.addEventListener('click',mostrarFormNota);
+    document.getElementById('ag-new-log')?.addEventListener('click',mostrarFormBitacora);
+    document.getElementById('ag-new-inventory')?.addEventListener('click',mostrarFormInventario);
+    document.getElementById('ag-new-loan')?.addEventListener('click',mostrarFormPrestamo);
+    document.querySelectorAll('[data-save-week]').forEach(btn=>btn.addEventListener('click',()=>guardarSemana(Number(btn.dataset.saveWeek))));
+    document.getElementById('ag-games-form')?.addEventListener('submit',guardarJuegos);
+  }
+
+  function mostrarFormEvento(){
+    const box=document.getElementById('ag-event-form'); if(!box)return;
+    box.innerHTML=`<div class="ag-section" style="margin-top:14px"><div class="ag-head"><h3>Nuevo evento</h3></div><form id="ag-event-create" class="ag-form">
+      <div class="ag-field"><label>Fecha</label><input type="date" name="fecha" required></div>
+      <div class="ag-field"><label>Hora</label><input type="time" name="hora"></div>
+      <div class="ag-field"><label>Tipo</label><select name="tipo">${(contexto?.tiposEvento||[]).map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+      <div class="ag-field"><label>Prioridad</label><select name="prioridad">${(contexto?.prioridades||[]).map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+      <div class="ag-field full"><label>Título</label><input name="titulo" required></div>
+      <div class="ag-field full"><label>Descripción</label><textarea name="descripcion"></textarea></div>
+      <div class="ag-field full"><button class="ag-btn" type="submit">Guardar evento</button></div>
+    </form></div>`;
+    box.querySelector('form')?.addEventListener('submit',guardarEvento);
+  }
+
+  async function guardarEvento(e){
+    e.preventDefault(); const f=new FormData(e.currentTarget); const payload=Object.fromEntries(f.entries());
+    await api('guardarAgendaEvento',payload); await cargarEventos(); resumen=await api('obtenerAgendaResumen'); render();
+  }
+
+  function mostrarFormNota(){
+    const box=document.getElementById('ag-note-form');if(!box)return;
+    box.innerHTML=`<div class="ag-section" style="margin-top:14px"><form id="ag-note-create" class="ag-form">
+      <div class="ag-field"><label>Título</label><input name="titulo" value="Nota"></div>
+      <div class="ag-field"><label>Categoría</label><input name="categoria" value="General"></div>
+      <div class="ag-field full"><label>Contenido</label><textarea name="contenido" required></textarea></div>
+      <div class="ag-field full"><button class="ag-btn" type="submit">Guardar nota</button></div>
+    </form></div>`;
+    box.querySelector('form')?.addEventListener('submit',async e=>{e.preventDefault();await api('guardarAgendaNota',Object.fromEntries(new FormData(e.currentTarget).entries()));await cargarNotas();render();});
+  }
+
+  async function guardarSemana(n){
+    const area=document.querySelector(`[data-week="${n}"]`);
+    const contenido=String(area?.value||'').trim();
+    if(!contenido)return;
+    const existente=notas.find(x=>x.mes===mesActual && String(x.semana)===`Semana ${n}` && x.categoria==='Agenda mensual');
+    await api('guardarAgendaNota',{
+      id:existente?.id||'',
+      titulo:`${MESES.find(x=>x.key===mesActual)?.nombre||mesActual} · Semana ${n}`,
+      contenido,
+      categoria:'Agenda mensual',
+      mes:mesActual,
+      semana:`Semana ${n}`
+    });
+    await cargarNotas(); render();
+  }
+
+  function mostrarFormBitacora(){
+    const box=document.getElementById('ag-log-form');if(!box)return;
+    const alumnos=Array.isArray(contexto?.alumnos)?contexto.alumnos:[];
+    box.innerHTML=`<div class="ag-section" style="margin-top:14px"><form class="ag-form">
+      <div class="ag-field"><label>Estudiante</label><select name="idAlumno"><option value="">Registro general</option>${alumnos.map(a=>`<option value="${esc(a.id)}">${esc(a.nombre)} · ${esc(a.ano)} ${esc(a.seccion)}</option>`).join('')}</select></div>
+      <div class="ag-field"><label>Fecha</label><input type="date" name="fecha" required></div>
+      <div class="ag-field full"><label>Sesión / Actividad</label><input name="sesionActividad"></div>
+      <div class="ag-field full"><label>Situación observada</label><textarea name="situacionObservada"></textarea></div>
+      <div class="ag-field full"><label>Acción realizada</label><textarea name="accionRealizada"></textarea></div>
+      <div class="ag-field full"><label>Seguimiento / Acuerdos</label><textarea name="seguimientoAcuerdos"></textarea></div>
+      <div class="ag-field full"><button class="ag-btn" type="submit">Guardar bitácora</button></div>
+    </form></div>`;
+    box.querySelector('form')?.addEventListener('submit',async e=>{e.preventDefault();await api('guardarAgendaBitacora',Object.fromEntries(new FormData(e.currentTarget).entries()));await cargarBitacora();render();});
+  }
+
+  function mostrarFormInventario(){
+    const box=document.getElementById('ag-inventory-form');if(!box)return;
+    box.innerHTML=`<div class="ag-section" style="margin-top:14px"><form class="ag-form">
+      <div class="ag-field full"><label>Material / Equipo</label><input name="material" required></div>
+      ${['cantidadTotal','buenEstado','regularEstado','malEstado','necesitaReposicion'].map(k=>`<div class="ag-field"><label>${({cantidadTotal:'Cantidad total',buenEstado:'Buen estado',regularEstado:'Regular estado',malEstado:'Mal estado',necesitaReposicion:'Necesita reposición'})[k]}</label><input type="number" min="0" name="${k}" value="0"></div>`).join('')}
+      <div class="ag-field full"><label>Observaciones</label><textarea name="observaciones"></textarea></div>
+      <div class="ag-field full"><button class="ag-btn" type="submit">Guardar material</button></div>
+    </form></div>`;
+    box.querySelector('form')?.addEventListener('submit',async e=>{e.preventDefault();await api('guardarInventarioDeportivo',Object.fromEntries(new FormData(e.currentTarget).entries()));await cargarInventario();render();});
+  }
+
+  function mostrarFormPrestamo(){
+    const box=document.getElementById('ag-loan-form');if(!box)return;
+    box.innerHTML=`<div class="ag-section" style="margin-top:14px"><form class="ag-form">
+      <div class="ag-field"><label>Fecha</label><input type="date" name="fecha" required></div>
+      <div class="ag-field"><label>Material</label><input name="material" required></div>
+      <div class="ag-field"><label>Cantidad</label><input type="number" min="1" name="cantidad" value="1"></div>
+      <div class="ag-field"><label>Solicitado por</label><input name="solicitadoPor" required></div>
+      <div class="ag-field full"><label>Observaciones</label><textarea name="observaciones"></textarea></div>
+      <div class="ag-field full"><button class="ag-btn" type="submit">Registrar préstamo</button></div>
+    </form></div>`;
+    box.querySelector('form')?.addEventListener('submit',async e=>{e.preventDefault();await api('guardarPrestamoMaterial',Object.fromEntries(new FormData(e.currentTarget).entries()));await cargarPrestamos();render();});
+  }
+
+  async function guardarJuegos(e){
+    e.preventDefault();
+    const payload=Object.fromEntries(new FormData(e.currentTarget).entries());
+    payload.cicloEscolar=CICLO;
+    await api('guardarJuegosEscolares',payload);
+    await cargarJuegos(); render();
+  }
+
+  function init(){
+    asegurarUI();
+    actualizarVisibilidad();
+  }
+
+  window.addEventListener('edugestion:session',()=>setTimeout(init,80));
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
+})();
+/* EDUGESTION_AGENDA_DIGITAL_V1_END */
