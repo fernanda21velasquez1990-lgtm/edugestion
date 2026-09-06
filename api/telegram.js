@@ -495,6 +495,7 @@ function mainMenuKeyboard(linked = true) {
     ]);
     rows.push([
       { text: '🔔 Alertas', callback_data: 'alerts:menu' },
+          { text: '💬 Chat interno', callback_data: 'chat:menu' },
     ]);
     rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
@@ -6334,7 +6335,13 @@ async function handleMessage(message) {
     return;
   }
 
-  if (/^\/(alertas|alerta|avisos)(?:@\w+)?(?:\s|$)/i.test(text)) {
+  
+  if (/^\/(chat|chatinterno|mensajes)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showChatMenu(chatId, message);
+    return;
+  }
+
+if (/^\/(alertas|alerta|avisos)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showAlertsMenu(chatId, message);
     return;
   }
@@ -6403,7 +6410,18 @@ async function handleMessage(message) {
       }
       return;
     }
-    if (mode === 'record-title') {
+    
+    if (mode === 'chat-reply') {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        clearPendingTextMode(message);
+        await showChatMenu(chatId, message);
+      } else {
+        await sendChatReply(chatId, message, text);
+      }
+      return;
+    }
+
+if (mode === 'record-title') {
       if (String(text).trim().toLowerCase() === 'cancelar') {
         await cancelRecordCreation(chatId, message);
       } else {
@@ -6504,7 +6522,34 @@ async function handleCallbackQuery(callbackQuery) {
     return;
   }
 
-  if (data === 'alerts:menu') {
+  
+  if (data === 'chat:menu') {
+    await showChatMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'chat:list') {
+    await showChatConversations(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'chat:unread') {
+    await showChatUnread(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('chat:open:')) {
+    const index = Number(data.split(':')[2]);
+    await openChatConversation(chatId, callbackQuery, index);
+    return;
+  }
+  if (data === 'chat:reply') {
+    await startChatReply(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'chat:mark') {
+    await markChatRead(chatId, callbackQuery);
+    return;
+  }
+
+if (data === 'alerts:menu') {
     await showAlertsMenu(chatId, callbackQuery);
     return;
   }
@@ -7224,6 +7269,307 @@ async function handleCallbackQuery(callbackQuery) {
   await showMainMenu(chatId, callbackQuery);
 }
 
+
+/* =========================================================
+   EduGestión · FASE 18 · CHAT INTERNO TELEGRAM UI
+   Dirección ↔ Docente usando la misma hoja ChatInterno.
+   ========================================================= */
+
+function chatRoleLabel(role) {
+  return String(role || '').toLowerCase() === 'director' ? 'Dirección' : 'Docente';
+}
+
+function formatChatDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw.slice(0, 19);
+  try {
+    return new Intl.DateTimeFormat('es-VE', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'America/Caracas',
+    }).format(date);
+  } catch (_) {
+    return raw.slice(0, 19);
+  }
+}
+
+function chatMenuKeyboard(role) {
+  const rows = [];
+  if (String(role || '').toLowerCase() === 'director') {
+    rows.push([{ text: '👩‍🏫 Conversaciones', callback_data: 'chat:list' }]);
+  } else {
+    rows.push([{ text: '💬 Abrir conversación', callback_data: 'chat:list' }]);
+  }
+  rows.push([{ text: '🔵 No leídos', callback_data: 'chat:unread' }]);
+  rows.push([{ text: '🔄 Actualizar', callback_data: 'chat:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+async function showChatMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const data = await callEduGestion('botChatContexto', { telegramId });
+  const role = String(data.rol || 'docente').toLowerCase();
+  const unread = Number(data.noLeidos || 0);
+  const account = data.cuenta || {};
+
+  const roleLine = role === 'director'
+    ? 'Puedes conversar con los docentes desde Telegram.'
+    : 'Puedes conversar directamente con Dirección desde Telegram.';
+
+  await sendMessage(
+    chatId,
+    `💬 <b>Chat interno</b>\n\n` +
+    `Cuenta: <b>${escapeHtml(account.nombre || teacherName(source) || 'Usuario')}</b>\n` +
+    `Rol: <b>${escapeHtml(chatRoleLabel(role))}</b>\n` +
+    `Mensajes no leídos: <b>${unread}</b>\n\n` +
+    `${escapeHtml(roleLine)}\n\n` +
+    `Los mensajes se sincronizan con el chat de la plataforma web.`,
+    { reply_markup: chatMenuKeyboard(role) },
+  );
+}
+
+async function showChatConversations(chatId, source, onlyUnread = false) {
+  const telegramId = teacherTelegramId(source);
+  const context = await callEduGestion('botChatContexto', { telegramId });
+  const role = String(context.rol || 'docente').toLowerCase();
+
+  if (role !== 'director') {
+    await openChatConversation(chatId, source, 0, true);
+    return;
+  }
+
+  const data = await callEduGestion('botChatConversaciones', { telegramId });
+  let items = Array.isArray(data.conversaciones) ? data.conversaciones : [];
+  if (onlyUnread) items = items.filter(item => Number(item.noLeidos || 0) > 0);
+
+  setPendingData(source, 'chat-conversations', {
+    role,
+    items,
+  });
+
+  if (!items.length) {
+    await sendMessage(
+      chatId,
+      onlyUnread
+        ? '✅ <b>No tienes mensajes nuevos</b>\n\nNo hay conversaciones pendientes por leer.'
+        : '💬 <b>Conversaciones</b>\n\nAún no hay conversaciones disponibles.',
+      { reply_markup: chatMenuKeyboard(role) },
+    );
+    return;
+  }
+
+  const keyboard = items.slice(0, 40).map((item, index) => {
+    const unread = Number(item.noLeidos || 0);
+    const prefix = unread > 0 ? `🔵 ${unread} · ` : '';
+    const name = String(item.docente || 'Docente').slice(0, 36);
+    return [{
+      text: `${prefix}${name}`,
+      callback_data: `chat:open:${index}`,
+    }];
+  });
+
+  keyboard.push([{ text: '⬅️ Volver', callback_data: 'chat:menu' }]);
+  keyboard.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+
+  await sendMessage(
+    chatId,
+    `${onlyUnread ? '🔵' : '👩‍🏫'} <b>${onlyUnread ? 'Conversaciones con mensajes no leídos' : 'Conversaciones'}</b>\n\n` +
+    `Selecciona un docente para abrir la conversación.`,
+    { reply_markup: { inline_keyboard: keyboard } },
+  );
+}
+
+async function showChatUnread(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const context = await callEduGestion('botChatContexto', { telegramId });
+  const role = String(context.rol || 'docente').toLowerCase();
+
+  if (role === 'director') {
+    await showChatConversations(chatId, source, true);
+    return;
+  }
+
+  if (Number(context.noLeidos || 0) <= 0) {
+    await sendMessage(
+      chatId,
+      '✅ <b>No tienes mensajes nuevos</b>\n\nTu conversación con Dirección está al día.',
+      { reply_markup: chatMenuKeyboard(role) },
+    );
+    return;
+  }
+
+  await openChatConversation(chatId, source, 0, true);
+}
+
+function selectChatConversationFromCache(source, index) {
+  const cached = getPendingData(source, 'chat-conversations');
+  const items = cached && Array.isArray(cached.items) ? cached.items : [];
+  if (!Number.isInteger(index) || index < 0 || index >= items.length) return null;
+  return items[index];
+}
+
+function chatMessagesText(messages, currentRole) {
+  const visible = Array.isArray(messages) ? messages.slice(-12) : [];
+  if (!visible.length) {
+    return 'Aún no hay mensajes en esta conversación.';
+  }
+
+  return visible.map(m => {
+    const role = String(m.rolRemitente || '').toLowerCase();
+    const mine = role === String(currentRole || '').toLowerCase();
+    const who = mine ? 'Tú' : (m.nombreRemitente || chatRoleLabel(role));
+    return `${mine ? '🔵' : '⚪'} <b>${escapeHtml(who)}</b>\n` +
+      `${escapeHtml(String(m.mensaje || ''))}\n` +
+      `<i>${escapeHtml(formatChatDate(m.creadoEn))}</i>`;
+  }).join('\n\n');
+}
+
+async function openChatConversation(chatId, source, index, directTeacher = false) {
+  const telegramId = teacherTelegramId(source);
+  const context = await callEduGestion('botChatContexto', { telegramId });
+  const role = String(context.rol || 'docente').toLowerCase();
+  let idDocente = '';
+
+  if (role === 'director') {
+    let item = selectChatConversationFromCache(source, index);
+
+    if (!item) {
+      const data = await callEduGestion('botChatConversaciones', { telegramId });
+      const items = Array.isArray(data.conversaciones) ? data.conversaciones : [];
+      setPendingData(source, 'chat-conversations', { role, items });
+      item = items[index];
+    }
+
+    if (!item) {
+      await showChatConversations(chatId, source);
+      return;
+    }
+    idDocente = String(item.idDocente || '');
+  }
+
+  const payload = { telegramId };
+  if (role === 'director') payload.idDocente = idDocente;
+
+  const data = await callEduGestion('botChatConversacion', payload);
+  const docente = data.docente || {};
+  const messages = Array.isArray(data.mensajes) ? data.mensajes : [];
+
+  setPendingData(source, 'chat-current', {
+    role,
+    idDocente: role === 'director' ? String(docente.id || idDocente) : '',
+    docente: String(docente.nombre || 'Docente'),
+  });
+
+  if (Number(data.noLeidos || 0) > 0) {
+    await callEduGestion('botChatMarcarLeido', payload);
+  }
+
+  const title = role === 'director'
+    ? `💬 <b>${escapeHtml(docente.nombre || 'Docente')}</b>`
+    : '💬 <b>Conversación con Dirección</b>';
+
+  const keyboard = [
+    [{ text: '✍️ Responder', callback_data: 'chat:reply' }],
+    [{ text: '✅ Marcar leído', callback_data: 'chat:mark' }],
+    [{ text: '🔄 Actualizar', callback_data: `chat:open:${Number.isInteger(index) ? index : 0}` }],
+  ];
+  if (role === 'director') keyboard.push([{ text: '⬅️ Conversaciones', callback_data: 'chat:list' }]);
+  else keyboard.push([{ text: '⬅️ Chat interno', callback_data: 'chat:menu' }]);
+  keyboard.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+
+  await sendMessage(
+    chatId,
+    `${title}\n\n${chatMessagesText(messages, role)}\n\n` +
+    `<i>Mostrando hasta los últimos 12 mensajes.</i>`,
+    { reply_markup: { inline_keyboard: keyboard } },
+  );
+}
+
+async function startChatReply(chatId, source) {
+  const current = getPendingData(source, 'chat-current');
+  if (!current) {
+    await showChatMenu(chatId, source);
+    return;
+  }
+
+  setPendingTextMode(source, 'chat-reply');
+  await sendMessage(
+    chatId,
+    `✍️ <b>Responder mensaje</b>\n\n` +
+    `Escribe tu respuesta y envíala normalmente.\n\n` +
+    `Para salir sin enviar, escribe <code>cancelar</code>.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '⬅️ Cancelar', callback_data: 'chat:menu' }],
+          [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+        ],
+      },
+    },
+  );
+}
+
+async function sendChatReply(chatId, source, messageText) {
+  const current = getPendingData(source, 'chat-current');
+  if (!current) {
+    clearPendingTextMode(source);
+    await showChatMenu(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const payload = {
+    telegramId,
+    mensaje: String(messageText || '').trim(),
+  };
+  if (String(current.role || '') === 'director') {
+    payload.idDocente = String(current.idDocente || '');
+  }
+
+  await callEduGestion('botChatEnviar', payload);
+  clearPendingTextMode(source);
+
+  await sendMessage(
+    chatId,
+    '✅ <b>Mensaje enviado</b>\n\nLa respuesta también aparecerá en el chat de la plataforma web.',
+  );
+
+  await openChatConversation(chatId, source, 0, true);
+}
+
+async function markChatRead(chatId, source) {
+  const current = getPendingData(source, 'chat-current');
+  if (!current) {
+    await showChatMenu(chatId, source);
+    return;
+  }
+
+  const payload = { telegramId: teacherTelegramId(source) };
+  if (String(current.role || '') === 'director') {
+    payload.idDocente = String(current.idDocente || '');
+  }
+
+  const data = await callEduGestion('botChatMarcarLeido', payload);
+  await sendMessage(
+    chatId,
+    `✅ <b>Chat actualizado</b>\n\n${escapeHtml(data.message || 'Mensajes marcados como leídos.')}`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔄 Volver al chat', callback_data: 'chat:menu' }],
+          [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+        ],
+      },
+    },
+  );
+}
+
+/* EDUGESTION_FASE_18_CHAT_INTERNO_TELEGRAM_UI_END */
+
+
 async function reportUserError(update, error) {
   const source = update?.message || update?.callback_query;
   const chatId = update?.message?.chat?.id || update?.callback_query?.message?.chat?.id;
@@ -7245,7 +7591,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase6.6-centro-alertas-ready',
+        status: 'phase6.7-chat-interno-ready',
       });
     }
 
