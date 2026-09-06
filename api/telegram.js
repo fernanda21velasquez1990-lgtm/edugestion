@@ -494,6 +494,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '🏫 Dirección', callback_data: 'director:menu' },
     ]);
     rows.push([
+      { text: '🔔 Alertas', callback_data: 'alerts:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -905,6 +908,138 @@ function gradesBackKeyboard() {
 
 
 
+
+
+function alertPriorityIcon(priority) {
+  const p = String(priority || '').toUpperCase();
+  if (p === 'ALTA') return '🔴';
+  if (p === 'MEDIA') return '🟠';
+  return '🟡';
+}
+
+function alertTypeIcon(type) {
+  return ({
+    EVENTO_HOY: '📅',
+    EVENTO_PROXIMO: '🗓️',
+    CIERRE_PENDIENTE: '📦',
+    ASISTENCIA_ESTUDIANTE: '👨‍🎓',
+  })[String(type || '').toUpperCase()] || '🔔';
+}
+
+function alertsMainKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📋 Ver todas', callback_data: 'alerts:list' }],
+      [{ text: '🔴 Prioridad alta', callback_data: 'alerts:high' }],
+      [{ text: '📊 Resumen', callback_data: 'alerts:summary' }],
+      [{ text: '🔄 Actualizar', callback_data: 'alerts:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function alertsListKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '🔴 Solo prioridad alta', callback_data: 'alerts:high' }],
+      [{ text: '📊 Resumen', callback_data: 'alerts:summary' }],
+      [{ text: '⬅️ Alertas', callback_data: 'alerts:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+async function showAlertsMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botAlertasContexto', { telegramId });
+
+  await sendMessage(
+    chatId,
+    `🔔 <b>CENTRO DE ALERTAS</b>
+━━━━━━━━━━━━━━━━━━
+
+Alertas activas: <b>${Number(result.total || 0)}</b>
+
+🔴 Prioridad alta: <b>${Number(result.altas || 0)}</b>
+🟠 Prioridad media: <b>${Number(result.medias || 0)}</b>
+🟡 Prioridad baja: <b>${Number(result.bajas || 0)}</b>
+
+Se revisan automáticamente:
+• calendario docente;
+• cierres de lapso pendientes;
+• seguimiento de asistencia.`,
+    { reply_markup: alertsMainKeyboard() },
+  );
+}
+
+async function showAlertsList(chatId, source, filter = {}) {
+  const telegramId = teacherTelegramId(source);
+
+  const result = await callEduGestion('botAlertasListar', {
+    telegramId,
+    tipo: filter.tipo || '',
+    prioridad: filter.prioridad || '',
+  });
+
+  const alerts = Array.isArray(result.alertas) ? result.alertas : [];
+
+  if (!alerts.length) {
+    await sendMessage(
+      chatId,
+      filter.prioridad === 'ALTA'
+        ? '✅ No tienes alertas de prioridad alta en este momento.'
+        : '✅ No tienes alertas pendientes en este momento.',
+      { reply_markup: alertsMainKeyboard() },
+    );
+    return;
+  }
+
+  const blocks = alerts.slice(0, 30).map((a, index) => {
+    const fecha = [a.fecha, a.hora].filter(Boolean).join(' · ');
+    const context = [a.grado, a.seccion, a.lapso].filter(Boolean).join(' · ');
+
+    return `${index + 1}. ${alertPriorityIcon(a.prioridad)} ${alertTypeIcon(a.tipo)} <b>${escapeHtml(a.titulo || 'Alerta')}</b>
+${escapeHtml(a.mensaje || '')}${fecha ? `\n📆 ${escapeHtml(fecha)}` : ''}${context ? `\n📚 ${escapeHtml(context)}` : ''}
+<small>Origen: ${escapeHtml(a.origen || 'EduGestión')}</small>`;
+  });
+
+  const title = filter.prioridad === 'ALTA'
+    ? '🔴 <b>ALERTAS DE PRIORIDAD ALTA</b>'
+    : '📋 <b>ALERTAS ACTIVAS</b>';
+
+  await sendLongTelegramText(
+    chatId,
+    `${title}
+━━━━━━━━━━━━━━━━━━
+
+Total: <b>${Number(result.total || alerts.length)}</b>`,
+    blocks.join('\n\n'),
+    alertsListKeyboard(),
+  );
+}
+
+async function showAlertsSummary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botAlertasResumen', { telegramId });
+  const r = result.resumen || {};
+
+  await sendMessage(
+    chatId,
+    `📊 <b>RESUMEN DE ALERTAS</b>
+━━━━━━━━━━━━━━━━━━
+
+Total activas: <b>${Number(r.total || 0)}</b>
+
+🔴 Prioridad alta: <b>${Number(r.altas || 0)}</b>
+🟠 Prioridad media: <b>${Number(r.medias || 0)}</b>
+
+📅 Eventos de hoy: <b>${Number(r.eventosHoy || 0)}</b>
+🗓️ Eventos próximos: <b>${Number(r.eventosProximos || 0)}</b>
+📦 Cierres pendientes: <b>${Number(r.cierresPendientes || 0)}</b>
+👨‍🎓 Seguimientos de asistencia: <b>${Number(r.seguimientoAsistencia || 0)}</b>`,
+    { reply_markup: alertsMainKeyboard() },
+  );
+}
 
 const directorState = new Map();
 
@@ -6027,7 +6162,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• /biblioteca abre la Biblioteca digital.\n• /respuestasia abre las Respuestas IA guardadas.\n• /direccion abre el panel de Dirección (solo director).\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• /seguimiento abre el Seguimiento curricular.\n• /panellapso abre el Panel curricular por lapso.\n• /panelanual abre el Panel curricular anual.\n• /calendario abre el Calendario docente.\n• /biblioteca abre la Biblioteca digital.\n• /respuestasia abre las Respuestas IA guardadas.\n• /direccion abre el panel de Dirección (solo director).\n• /alertas abre el Centro de alertas.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -6199,6 +6334,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/(alertas|alerta|avisos)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showAlertsMenu(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -6361,6 +6501,23 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'alerts:menu') {
+    await showAlertsMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'alerts:list') {
+    await showAlertsList(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'alerts:high') {
+    await showAlertsList(chatId, callbackQuery, { prioridad: 'ALTA' });
+    return;
+  }
+  if (data === 'alerts:summary') {
+    await showAlertsSummary(chatId, callbackQuery);
     return;
   }
 
@@ -7088,7 +7245,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase6.5-direccion-telegram-ready',
+        status: 'phase6.6-centro-alertas-ready',
       });
     }
 
