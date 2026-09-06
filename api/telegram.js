@@ -4,6 +4,51 @@ const MAX_TELEGRAM_MESSAGE = 3900;
 const pendingTextMode = new Map();
 
 
+
+const studyControlState = new Map();
+
+function studyControlLapsoKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '1️⃣ 1er Lapso', callback_data: 'studyControl:lapso:L1' },
+        { text: '2️⃣ 2do Lapso', callback_data: 'studyControl:lapso:L2' },
+      ],
+      [{ text: '3️⃣ 3er Lapso', callback_data: 'studyControl:lapso:L3' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function studyControlCoursesKeyboard(courses = [], lapsoCode = 'L1') {
+  const rows = courses.slice(0, 30).map((course, index) => [{
+    text: `${course.ano || ''} · Sección ${course.seccion || ''}${course.turno ? ` · ${course.turno}` : ''}`.slice(0, 60),
+    callback_data: `studyControl:course:${lapsoCode}:${index}`,
+  }]);
+  rows.push([{ text: '🔄 Cambiar lapso', callback_data: 'studyControl:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function studyControlSectionKeyboard(students = []) {
+  const rows = students.slice(0, 30).map((student, index) => [{
+    text: `${index + 1}. ${student.alumno || 'Estudiante'}${student.notaFinal === null || student.notaFinal === undefined ? '' : ` · ${Number(student.notaFinal).toFixed(2)}/20`}`.slice(0, 60),
+    callback_data: `studyControl:student:${index}`,
+  }]);
+  rows.push([{ text: '🔄 Elegir otro curso', callback_data: 'studyControl:backCourses' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function studyControlStudentKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '⬅️ Volver a la sección', callback_data: 'studyControl:section' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
 const closureHistoryState = new Map();
 
 function closureHistoryListKeyboard(items = []) {
@@ -418,6 +463,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '📚 Historial de cierres', callback_data: 'closureHistory:menu' },
     ]);
     rows.push([
+      { text: '📊 Control de Estudio', callback_data: 'studyControl:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -818,6 +866,227 @@ function gradesBackKeyboard() {
 }
 
 
+
+
+async function showStudyControlMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botControlEstudioContexto', { telegramId });
+  const courses = Array.isArray(result.cursos) ? result.cursos : [];
+
+  studyControlState.set(String(chatId), {
+    courses,
+    lapso: '',
+    lapsoCode: '',
+    course: null,
+    section: null,
+  });
+
+  await sendMessage(
+    chatId,
+    `📊 <b>CONTROL DE ESTUDIO</b>
+
+Docente: <b>${escapeHtml(result.profesor?.nombre || 'Docente')}</b>
+Materia: <b>${escapeHtml(result.profesor?.materia || 'Sin materia asignada')}</b>
+
+Desde aquí puedes revisar el control académico de cada sección y estudiante.
+
+Selecciona el lapso:`,
+    { reply_markup: studyControlLapsoKeyboard() },
+  );
+}
+
+async function chooseStudyControlLapso(chatId, source, lapsoCode) {
+  const telegramId = teacherTelegramId(source);
+  let state = studyControlState.get(String(chatId));
+
+  if (!state || !Array.isArray(state.courses)) {
+    const result = await callEduGestion('botControlEstudioContexto', { telegramId });
+    state = {
+      courses: Array.isArray(result.cursos) ? result.cursos : [],
+      lapso: '',
+      lapsoCode: '',
+      course: null,
+      section: null,
+    };
+  }
+
+  const lapso = gradesLapsoFromCode(lapsoCode);
+  state.lapso = lapso;
+  state.lapsoCode = lapsoCode;
+  state.course = null;
+  state.section = null;
+  studyControlState.set(String(chatId), state);
+
+  if (!state.courses.length) {
+    await sendMessage(
+      chatId,
+      `⚠️ No encontré cursos con estudiantes registrados.`,
+      { reply_markup: studyControlLapsoKeyboard() },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📊 <b>${escapeHtml(lapso)}</b>
+
+Selecciona el curso o sección:`,
+    { reply_markup: studyControlCoursesKeyboard(state.courses, lapsoCode) },
+  );
+}
+
+async function showStudyControlSection(chatId, source, lapsoCode, index) {
+  const state = studyControlState.get(String(chatId));
+  if (!state || !Array.isArray(state.courses)) {
+    await showStudyControlMenu(chatId, source);
+    return;
+  }
+
+  const course = state.courses[Number(index)];
+  if (!course) {
+    await showStudyControlMenu(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const lapso = gradesLapsoFromCode(lapsoCode);
+
+  const result = await callEduGestion('botControlEstudioSeccion', {
+    telegramId,
+    lapso,
+    ano: course.ano,
+    seccion: course.seccion,
+    turno: course.turno || '',
+  });
+
+  state.lapso = result.lapso || lapso;
+  state.lapsoCode = lapsoCode;
+  state.course = course;
+  state.section = result;
+  studyControlState.set(String(chatId), state);
+
+  const avg = result.promedioSeccion === null || result.promedioSeccion === undefined
+    ? 'Sin promedio'
+    : `${Number(result.promedioSeccion).toFixed(2)}/20`;
+
+  const attendance = result.asistencia || {};
+  const students = Array.isArray(result.estudiantes) ? result.estudiantes : [];
+  const closureText = result.cierre
+    ? `${result.cierre.estado === 'ENVIADO' ? '✅' : '🕓'} ${escapeHtml(result.cierre.estado)}${result.cierre.fecha ? ` · ${escapeHtml(result.cierre.fecha)}` : ''}`
+    : 'Sin cierre registrado';
+
+  await sendMessage(
+    chatId,
+    `📊 <b>CONTROL DE ESTUDIO · SECCIÓN</b>
+━━━━━━━━━━━━━━━━━━
+
+Lapso: <b>${escapeHtml(result.lapso || lapso)}</b>
+Curso: <b>${escapeHtml(result.ano || course.ano || '')} · Sección ${escapeHtml(result.seccion || course.seccion || '')}</b>
+Turno: <b>${escapeHtml(result.turno || course.turno || 'No registrado')}</b>
+
+👨‍🎓 <b>RESUMEN ACADÉMICO</b>
+Estudiantes: <b>${Number(result.totalEstudiantes || 0)}</b>
+Actividades: <b>${Number(result.totalActividades || 0)}</b>
+Con nota final: <b>${Number(result.estudiantesConNota || 0)}</b>
+Aprobados: <b>${Number(result.aprobados || 0)}</b>
+Reprobados: <b>${Number(result.reprobados || 0)}</b>
+Promedio de la sección: <b>${avg}</b>
+
+📋 <b>ASISTENCIA ACUMULADA</b>
+Presentes: <b>${Number(attendance.presentes || 0)}</b>
+Ausentes: <b>${Number(attendance.ausentes || 0)}</b>
+Tardanzas: <b>${Number(attendance.tardanzas || 0)}</b>
+Justificadas: <b>${Number(attendance.justificadas || 0)}</b>
+
+📦 <b>CIERRE DEL LAPSO</b>
+${closureText}
+
+━━━━━━━━━━━━━━━━━━
+Selecciona un estudiante para ver su control individual:`,
+    { reply_markup: studyControlSectionKeyboard(students) },
+  );
+}
+
+async function showStudyControlStudent(chatId, source, studentIndex) {
+  const state = studyControlState.get(String(chatId));
+  if (!state?.section || !Array.isArray(state.section.estudiantes)) {
+    await showStudyControlMenu(chatId, source);
+    return;
+  }
+
+  const studentRow = state.section.estudiantes[Number(studentIndex)];
+  if (!studentRow) {
+    await sendMessage(chatId, '⚠️ No encontré ese estudiante en la sección.', {
+      reply_markup: studyControlStudentKeyboard(),
+    });
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botControlEstudioEstudiante', {
+    telegramId,
+    idAlumno: studentRow.idAlumno || '',
+    lapso: state.lapso,
+  });
+
+  const student = result.estudiante || {};
+  const academic = result.resumenAcademico || {};
+  const attendance = result.asistencia || {};
+  const activities = Array.isArray(result.actividades) ? result.actividades : [];
+
+  const avg = academic.promedioLapso === null || academic.promedioLapso === undefined
+    ? 'Sin promedio'
+    : `${Number(academic.promedioLapso).toFixed(2)}/20`;
+
+  const activitiesText = activities.length
+    ? activities.map((item, i) => {
+        const grade = item.nota === null || item.nota === undefined
+          ? 'Sin nota'
+          : `${Number(item.nota).toFixed(2)}/20`;
+        return `${i + 1}. ${item.entrego ? '✅' : '❌'} ${escapeHtml(item.actividad || 'Actividad')}\n   ${Number(item.ponderacion || 0)}% · ${grade}`;
+      }).join('\n')
+    : 'Sin actividades registradas.';
+
+  const statusLabel = result.estadoAcademico === 'APROBADO'
+    ? '✅ APROBADO'
+    : result.estadoAcademico === 'REPROBADO'
+      ? '❌ REPROBADO'
+      : '⚪ SIN NOTA';
+
+  await sendMessage(
+    chatId,
+    `📊 <b>CONTROL INDIVIDUAL</b>
+━━━━━━━━━━━━━━━━━━
+
+👨‍🎓 <b>${escapeHtml(student.nombre || studentRow.alumno || 'Estudiante')}</b>
+Cédula: ${escapeHtml(student.cedula || 'No registrada')}
+Curso: ${escapeHtml(student.ano || state.course?.ano || 'No registrado')} · Sección ${escapeHtml(student.seccion || state.course?.seccion || '—')}
+Lapso: <b>${escapeHtml(result.lapso || state.lapso)}</b>
+
+📋 <b>ASISTENCIA</b>
+Presentes: <b>${Number(attendance.presentes || 0)}</b>
+Ausentes: <b>${Number(attendance.ausentes || 0)}</b>
+Tardanzas: <b>${Number(attendance.tardanzas || 0)}</b>
+Justificadas: <b>${Number(attendance.justificadas || 0)}</b>
+
+📝 <b>RENDIMIENTO</b>
+Actividades: <b>${Number(academic.totalActividades || 0)}</b>
+Entregadas: <b>${Number(academic.entregadas || 0)}</b>
+No entregadas: <b>${Number(academic.noEntregadas || 0)}</b>
+Promedio: <b>${avg}</b>
+Estado: <b>${statusLabel}</b>
+
+📚 <b>DETALLE DE ACTIVIDADES</b>
+${activitiesText}`,
+    { reply_markup: studyControlStudentKeyboard() },
+  );
+}
 
 async function showClosureHistory(chatId, source) {
   const telegramId = teacherTelegramId(source);
@@ -3053,7 +3322,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -3157,6 +3426,11 @@ async function handleMessage(message) {
 
   if (/^\/(historialcierre|historialcierres)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showClosureHistory(chatId, message);
+    return;
+  }
+
+  if (/^\/(controlestudio|control)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showStudyControlMenu(chatId, message);
     return;
   }
 
@@ -3269,6 +3543,46 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'studyControl:menu') {
+    await showStudyControlMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('studyControl:lapso:')) {
+    await chooseStudyControlLapso(chatId, callbackQuery, data.split(':')[2]);
+    return;
+  }
+  if (data.startsWith('studyControl:course:')) {
+    const parts = data.split(':');
+    await showStudyControlSection(chatId, callbackQuery, parts[2], Number(parts[3]));
+    return;
+  }
+  if (data.startsWith('studyControl:student:')) {
+    await showStudyControlStudent(chatId, callbackQuery, Number(data.split(':')[2]));
+    return;
+  }
+  if (data === 'studyControl:section') {
+    const state = studyControlState.get(String(chatId));
+    if (state?.lapsoCode && state?.course && Array.isArray(state.courses)) {
+      const index = state.courses.findIndex((course) =>
+        String(course.ano || '') === String(state.course.ano || '') &&
+        String(course.seccion || '') === String(state.course.seccion || '') &&
+        String(course.turno || '') === String(state.course.turno || '')
+      );
+      if (index >= 0) {
+        await showStudyControlSection(chatId, callbackQuery, state.lapsoCode, index);
+        return;
+      }
+    }
+    await showStudyControlMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'studyControl:backCourses') {
+    const state = studyControlState.get(String(chatId));
+    if (state?.lapsoCode) await chooseStudyControlLapso(chatId, callbackQuery, state.lapsoCode);
+    else await showStudyControlMenu(chatId, callbackQuery);
     return;
   }
 
@@ -3624,7 +3938,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.4-historial-cierres-ready',
+        status: 'phase5.5-control-estudio-ready',
       });
     }
 
