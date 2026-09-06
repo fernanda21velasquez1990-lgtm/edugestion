@@ -469,6 +469,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '👤 Mi perfil docente', callback_data: 'teacherProfile:menu' },
     ]);
     rows.push([
+      { text: '🤖 Asistente IA', callback_data: 'teacherAI:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -871,6 +874,220 @@ function gradesBackKeyboard() {
 
 
 
+
+
+function teacherAIKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '✏️ Consulta libre', callback_data: 'teacherAI:ask:free' }],
+      [{ text: '📋 Ayúdame con una planificación', callback_data: 'teacherAI:ask:planning' }],
+      [{ text: '💡 Crear una actividad de clase', callback_data: 'teacherAI:ask:activity' }],
+      [{ text: '🧾 Redactar observación pedagógica', callback_data: 'teacherAI:ask:observation' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function teacherAIResultKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '✏️ Hacer otra consulta', callback_data: 'teacherAI:ask:free' }],
+      [{ text: '🤖 Volver al Asistente IA', callback_data: 'teacherAI:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function teacherAIModeLabel(mode) {
+  return ({
+    free: 'Consulta libre',
+    planning: 'Planificación',
+    activity: 'Actividad de clase',
+    observation: 'Observación pedagógica',
+  })[mode] || 'Consulta libre';
+}
+
+function teacherAIInstruction(mode) {
+  if (mode === 'planning') {
+    return 'Prepara una planificación docente completa, práctica y aplicable. Incluye objetivo, materiales, inicio, desarrollo, cierre, evaluación formativa y variantes cuando sean pertinentes.';
+  }
+  if (mode === 'activity') {
+    return 'Propón una actividad de clase clara y práctica, con propósito, materiales, pasos, duración aproximada, cierre y forma sencilla de observar el aprendizaje.';
+  }
+  if (mode === 'observation') {
+    return 'Redacta una observación pedagógica profesional, respetuosa, constructiva y lista para copiar. No hagas diagnósticos ni inventes información sobre el estudiante.';
+  }
+  return 'Responde la consulta del docente de forma clara, útil, pedagógica y directamente aplicable.';
+}
+
+function geminiEndpointUrl() {
+  const raw = String(
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    ''
+  ).trim();
+
+  if (!raw) {
+    throw new Error('No pude determinar la URL publicada de EduGestión para consultar el Asistente IA.');
+  }
+
+  const base = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  return `${base.replace(/\/+$/, '')}/api/gemini`;
+}
+
+async function callTeacherGemini(message) {
+  const response = await fetch(geminiEndpointUrl(), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.message || 'No se pudo consultar el Asistente IA.');
+  }
+
+  return String(data.answer || 'La IA no devolvió una respuesta.').trim();
+}
+
+function stripBasicMarkdownForTelegram(value) {
+  return String(value || '')
+    .replace(/```[\s\S]*?```/g, (m) => m.replace(/```[a-z]*\n?/gi, '').replace(/```/g, ''))
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+async function sendLongTelegramText(chatId, title, body, replyMarkup) {
+  const clean = stripBasicMarkdownForTelegram(body);
+  const max = 3300;
+  const parts = [];
+  let remaining = clean;
+
+  while (remaining.length > max) {
+    let cut = remaining.lastIndexOf('\n', max);
+    if (cut < 1800) cut = remaining.lastIndexOf(' ', max);
+    if (cut < 1800) cut = max;
+    parts.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) parts.push(remaining);
+
+  for (let i = 0; i < parts.length; i++) {
+    const prefix = i === 0 ? `${title}\n\n` : `🤖 <b>Continuación</b>\n\n`;
+    await sendMessage(
+      chatId,
+      `${prefix}${escapeHtml(parts[i])}`,
+      i === parts.length - 1 && replyMarkup ? { reply_markup: replyMarkup } : {},
+    );
+  }
+}
+
+async function showTeacherAIMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  pendingTextMode.delete(String(chatId));
+
+  const result = await callEduGestion('botPerfilDocente', { telegramId });
+  const data = result.perfil || {};
+  const grades = Array.isArray(data.grados) ? data.grados : [];
+
+  await sendMessage(
+    chatId,
+    `🤖 <b>ASISTENTE IA · ADAPTADO A TU PERFIL</b>
+━━━━━━━━━━━━━━━━━━
+
+Docente: <b>${escapeHtml(data.nombre || 'Docente')}</b>
+Materia: <b>${escapeHtml(data.materia || 'No registrada')}</b>
+Grados/Años: <b>${escapeHtml(grades.length ? grades.join(', ') : 'No registrados')}</b>
+Año escolar: <b>${escapeHtml(data.anoEscolar || 'No registrado')}</b>
+
+La IA usará automáticamente estos datos como contexto cuando tu consulta sea pedagógica.
+
+Si en tu mensaje indicas otra materia, grado o contexto específico, tendrá prioridad lo que tú escribas.
+
+Selecciona qué deseas hacer:`,
+    { reply_markup: teacherAIKeyboard() },
+  );
+}
+
+async function requestTeacherAIText(chatId, source, mode) {
+  const profile = await linkedProfile(teacherTelegramId(source));
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  pendingTextMode.set(String(chatId), `teacher-ai:${mode}`);
+
+  const examples = {
+    free: 'Ejemplo: Dame ideas para trabajar coordinación óculo-manual con mi grupo.',
+    planning: 'Ejemplo: Equilibrio y coordinación para una clase de 45 minutos.',
+    activity: 'Ejemplo: Una actividad divertida para practicar desplazamientos y cambios de dirección.',
+    observation: 'Ejemplo: Marcos participa activamente, cumple las actividades y debe mejorar el control del balón.',
+  };
+
+  await sendMessage(
+    chatId,
+    `🤖 <b>${escapeHtml(teacherAIModeLabel(mode))}</b>
+
+Escribe ahora lo que necesitas.
+
+${escapeHtml(examples[mode] || examples.free)}
+
+La respuesta se adaptará automáticamente a tu perfil docente.
+
+Escribe <code>cancelar</code> para salir.`,
+    { reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: 'teacherAI:menu' }], [{ text: '☰ Todas las opciones', callback_data: 'menu' }]] } },
+  );
+}
+
+async function answerTeacherAI(chatId, source, userText, mode) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botPerfilDocente', { telegramId });
+  const data = result.perfil || {};
+  const grades = Array.isArray(data.grados) ? data.grados.filter(Boolean) : [];
+  const sections = Array.isArray(data.secciones) ? data.secciones : [];
+
+  const prompt = [
+    'CONTEXTO DEL PERFIL DOCENTE DE EDUGESTIÓN:',
+    `- Docente: ${data.nombre || 'No indicado'}`,
+    `- Área o materia principal: ${data.materia || 'No indicada'}`,
+    `- Grados/Años que atiende: ${grades.length ? grades.join(', ') : 'No indicados'}`,
+    `- Año escolar: ${data.anoEscolar || 'No indicado'}`,
+    `- Cursos/secciones: ${sections.length ? sections.map(x => `${x.ano || ''} ${x.seccion || ''} ${x.turno || ''}`.trim()).join('; ') : 'No indicados'}`,
+    '',
+    'INSTRUCCIONES DE PERSONALIZACIÓN:',
+    '- Adapta la respuesta al área o materia del perfil cuando la consulta sea pedagógica o escolar.',
+    '- Si la consulta indica otra materia, grado, año, tema o contexto específico, respeta primero lo escrito por el docente.',
+    '- No inventes datos institucionales, contenidos oficiales, diagnósticos ni referencias curriculares no proporcionadas.',
+    '- No realices búsqueda web.',
+    '- Usa lenguaje claro, profesional y útil para un docente.',
+    `- Tarea solicitada: ${teacherAIInstruction(mode)}`,
+    '',
+    'CONSULTA DEL DOCENTE:',
+    String(userText || '').trim(),
+  ].join('\n');
+
+  await sendMessage(chatId, '⏳ <b>Consultando al Asistente IA…</b>');
+
+  const answer = await callTeacherGemini(prompt);
+  pendingTextMode.delete(String(chatId));
+
+  await sendLongTelegramText(
+    chatId,
+    '🤖 <b>RESPUESTA DE LA IA</b>',
+    answer,
+    teacherAIResultKeyboard(),
+  );
+}
 
 function teacherProfileKeyboard() {
   return {
@@ -3393,7 +3610,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -3510,6 +3727,11 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/(ia|asistente)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showTeacherAIMenu(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -3585,6 +3807,17 @@ async function handleMessage(message) {
       return;
     }
 
+    if (String(mode || '').startsWith('teacher-ai:')) {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        pendingTextMode.delete(String(chatId));
+        await showTeacherAIMenu(chatId, message);
+      } else {
+        const aiMode = String(mode).split(':')[1] || 'free';
+        await answerTeacherAI(chatId, message, text, aiMode);
+      }
+      return;
+    }
+
     try {
       await previewAttendance(chatId, message, text);
     } catch (error) {
@@ -3619,6 +3852,16 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'teacherAI:menu') {
+    await showTeacherAIMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('teacherAI:ask:')) {
+    const mode = data.split(':')[2] || 'free';
+    await requestTeacherAIText(chatId, callbackQuery, mode);
     return;
   }
 
@@ -4019,7 +4262,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.6-perfil-docente-ready',
+        status: 'phase5.7-ia-perfil-docente-ready',
       });
     }
 
