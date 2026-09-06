@@ -476,6 +476,9 @@ function mainMenuKeyboard(linked = true) {
       { text: '📚 Biblioteca evaluaciones', callback_data: 'evalLibrary:menu' },
     ]);
     rows.push([
+      { text: '📘 Cuadernillo EF', callback_data: 'curriculumEF:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -880,6 +883,200 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const curriculumEFState = new Map();
+
+function curriculumLevelsKeyboard(levels = []) {
+  const rows = levels.map((item) => [{
+    text: `📘 ${item.nivel} · ${Number(item.totalTemas || 0)} tema${Number(item.totalTemas || 0) === 1 ? '' : 's'}`,
+    callback_data: `curriculumEF:level:${encodeURIComponent(item.nivel)}`,
+  }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function curriculumTopicsKeyboard(items = [], level = '') {
+  const rows = items.slice(0, 40).map((item) => [{
+    text: `${Number(item.indice) + 1}. ${item.tema || 'Tema curricular'}`.slice(0, 60),
+    callback_data: `curriculumEF:topic:${encodeURIComponent(level)}:${Number(item.indice)}`,
+  }]);
+  rows.push([{ text: '⬅️ Cambiar grado/año', callback_data: 'curriculumEF:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function curriculumDetailKeyboard(level, index) {
+  return {
+    inline_keyboard: [
+      [{ text: '🤖 Planificar con IA', callback_data: `curriculumEF:plan:${encodeURIComponent(level)}:${Number(index)}` }],
+      [{ text: '🧠 Crear evaluación IA', callback_data: `curriculumEF:eval:${encodeURIComponent(level)}:${Number(index)}` }],
+      [{ text: '⬅️ Volver a los temas', callback_data: `curriculumEF:back:${encodeURIComponent(level)}` }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+async function showCurriculumEFMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botCuadernilloEFContexto', { telegramId });
+  const levels = Array.isArray(result.niveles) ? result.niveles : [];
+  curriculumEFState.set(String(chatId), { levels, level: '', topics: [], selected: null });
+
+  await sendMessage(
+    chatId,
+    `📘 <b>CUADERNILLO CURRICULAR · EDUCACIÓN FÍSICA</b>
+━━━━━━━━━━━━━━━━━━
+
+Fuente: <b>${escapeHtml(result.fuente || 'Ministerio del Poder Popular para la Educación')}</b>
+
+Usa la misma base curricular oficial de Educación Física de EduGestión.
+
+Selecciona el nivel, grado o año:`,
+    { reply_markup: curriculumLevelsKeyboard(levels) },
+  );
+}
+
+async function showCurriculumEFTopics(chatId, source, level) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botCuadernilloEFTemas', { telegramId, nivel: level });
+  const topics = Array.isArray(result.temas) ? result.temas : [];
+  const state = curriculumEFState.get(String(chatId)) || {};
+  state.level = result.nivel || level;
+  state.topics = topics;
+  state.selected = null;
+  curriculumEFState.set(String(chatId), state);
+
+  await sendMessage(
+    chatId,
+    `📘 <b>${escapeHtml(result.nivel || level)}</b>
+
+Temas curriculares disponibles: <b>${Number(result.total || topics.length)}</b>
+
+Selecciona un tema para ver la base curricular completa:`,
+    { reply_markup: curriculumTopicsKeyboard(topics, result.nivel || level) },
+  );
+}
+
+async function showCurriculumEFDetail(chatId, source, level, index) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botCuadernilloEFDetalle', {
+    telegramId,
+    nivel: level,
+    indice: Number(index),
+  });
+
+  const item = result.tema || {};
+  const state = curriculumEFState.get(String(chatId)) || {};
+  state.level = result.nivel || level;
+  state.selected = item;
+  curriculumEFState.set(String(chatId), state);
+
+  const blocks = [];
+  if (item.descripcion && item.descripcion !== item.tema) blocks.push(`📖 <b>Descripción / Tema generador</b>\n${escapeHtml(item.descripcion)}`);
+  if (item.temaIndispensable) blocks.push(`🌎 <b>Tema indispensable</b>\n${escapeHtml(item.temaIndispensable)}`);
+  if (item.intencionalidad) blocks.push(`🎯 <b>Intencionalidad pedagógica</b>\n${escapeHtml(item.intencionalidad)}`);
+  if (item.tejido) blocks.push(`🧩 <b>Tejido temático</b>\n${escapeHtml(item.tejido)}`);
+  if (item.referentes) blocks.push(`📚 <b>Referentes teórico-prácticos</b>\n${escapeHtml(item.referentes)}`);
+
+  await sendMessage(
+    chatId,
+    `📘 <b>BASE CURRICULAR OFICIAL</b>
+━━━━━━━━━━━━━━━━━━
+
+<b>${escapeHtml(item.tema || 'Tema curricular')}</b>
+
+Grado/Año: <b>${escapeHtml(item.grado || item.nivel || result.nivel || level)}</b>
+${item.pagina ? `Página del cuadernillo: <b>${escapeHtml(item.pagina)}</b>\n` : ''}
+${blocks.length ? blocks.join('\n\n') : 'No hay detalle adicional extraído para este tema.'}
+
+━━━━━━━━━━━━━━━━━━
+Fuente: <b>${escapeHtml(result.fuente || item.fuente || 'Cuadernillo Curricular MPPE · Educación Física')}</b>
+
+La IA debe usar esta base como referencia principal y no sustituirla por otro currículo.`,
+    { reply_markup: curriculumDetailKeyboard(result.nivel || level, Number(index)) },
+  );
+}
+
+async function curriculumPlanWithAI(chatId, source, level, index) {
+  const telegramId = teacherTelegramId(source);
+  const detail = await callEduGestion('botCuadernilloEFDetalle', { telegramId, nivel: level, indice: Number(index) });
+  const item = detail.tema || {};
+
+  const prompt = [
+    'Actúa como asistente docente de Educación Física y prepara una planificación completa y práctica en español.',
+    'No realices búsqueda web.',
+    '',
+    'BASE CURRICULAR OBLIGATORIA - Cuadernillo Curricular MPPE · Educación Física:',
+    `- Grado/Año curricular: ${item.grado || item.nivel || level || 'No indicado'}`,
+    `- Tema generador: ${item.tema || 'No indicado'}`,
+    item.temaIndispensable ? `- Tema indispensable: ${item.temaIndispensable}` : '',
+    item.intencionalidad ? `- Intencionalidad pedagógica: ${item.intencionalidad}` : '',
+    item.tejido ? `- Tejido temático: ${item.tejido}` : '',
+    item.referentes ? `- Referentes teórico-prácticos: ${item.referentes}` : '',
+    item.pagina ? `- Fuente: Cuadernillo Curricular MPPE · Educación Física, página ${item.pagina}` : '- Fuente: Cuadernillo Curricular MPPE · Educación Física',
+    '',
+    'REGLA: usa esta base curricular como referencia principal. No la sustituyas por otro currículo ni inventes referentes oficiales.',
+    '',
+    'Organiza con: Título, Objetivo, Aprendizajes esperados, Materiales, Inicio, Desarrollo, Cierre, Evaluación formativa, Adaptaciones y Observaciones.'
+  ].filter(Boolean).join('\n');
+
+  await sendMessage(chatId, '⏳ <b>Preparando planificación con IA…</b>');
+  const answer = await callTeacherGemini(prompt);
+  await sendLongTelegramText(
+    chatId,
+    '🤖 <b>PLANIFICACIÓN BASADA EN EL CUADERNILLO</b>',
+    answer,
+    curriculumDetailKeyboard(level, Number(index))
+  );
+}
+
+async function curriculumEvalWithAI(chatId, source, level, index) {
+  const telegramId = teacherTelegramId(source);
+  const detail = await callEduGestion('botCuadernilloEFDetalle', { telegramId, nivel: level, indice: Number(index) });
+  const item = detail.tema || {};
+
+  const prompt = [
+    'Actúa como asistente docente de Educación Física y crea una evaluación práctica y formativa en español.',
+    'No realices búsqueda web.',
+    '',
+    'BASE CURRICULAR OBLIGATORIA - Cuadernillo Curricular MPPE · Educación Física:',
+    `- Grado/Año curricular: ${item.grado || item.nivel || level || 'No indicado'}`,
+    `- Tema generador: ${item.tema || 'No indicado'}`,
+    item.intencionalidad ? `- Intencionalidad pedagógica: ${item.intencionalidad}` : '',
+    item.tejido ? `- Tejido temático: ${item.tejido}` : '',
+    item.referentes ? `- Referentes teórico-prácticos: ${item.referentes}` : '',
+    '',
+    'No inventes contenidos oficiales. Incluye propósito, actividad, técnica, instrumento, criterios observables, ponderación sugerida y recomendaciones.'
+  ].filter(Boolean).join('\n');
+
+  await sendMessage(chatId, '⏳ <b>Generando evaluación basada en el cuadernillo…</b>');
+  const answer = await callTeacherGemini(prompt);
+
+  evalAIState.set(String(chatId), {
+    typeCode: 'curriculum',
+    type: 'Evaluación curricular',
+    generated: answer,
+    saved: false,
+    title: `Evaluación curricular · ${item.tema || 'Tema'}`.slice(0, 100),
+    topic: item.tema || '',
+    matter: 'Educación Física',
+    grade: item.grado || item.nivel || level || '',
+  });
+
+  await sendLongTelegramText(
+    chatId,
+    '🧠 <b>EVALUACIÓN BASADA EN EL CUADERNILLO</b>',
+    answer,
+    evalAIResultKeyboard(false)
+  );
+}
 
 const evalAIState = new Map();
 const evalLibraryState = new Map();
@@ -4011,7 +4208,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• /cuadernillo abre el Cuadernillo Curricular de Educación Física.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -4140,6 +4337,11 @@ async function handleMessage(message) {
 
   if (/^\/(bibliotecaeval|bibliotecaevaluaciones)(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showEvalLibrary(chatId, message);
+    return;
+  }
+
+  if (/^\/(cuadernillo|curriculo|curriculum)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showCurriculumEFMenu(chatId, message);
     return;
   }
 
@@ -4284,6 +4486,35 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'curriculumEF:menu') {
+    await showCurriculumEFMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('curriculumEF:level:')) {
+    const level = decodeURIComponent(data.slice('curriculumEF:level:'.length));
+    await showCurriculumEFTopics(chatId, callbackQuery, level);
+    return;
+  }
+  if (data.startsWith('curriculumEF:topic:')) {
+    const parts = data.split(':');
+    await showCurriculumEFDetail(chatId, callbackQuery, decodeURIComponent(parts[2] || ''), Number(parts[3]));
+    return;
+  }
+  if (data.startsWith('curriculumEF:back:')) {
+    await showCurriculumEFTopics(chatId, callbackQuery, decodeURIComponent(data.slice('curriculumEF:back:'.length)));
+    return;
+  }
+  if (data.startsWith('curriculumEF:plan:')) {
+    const parts = data.split(':');
+    await curriculumPlanWithAI(chatId, callbackQuery, decodeURIComponent(parts[2] || ''), Number(parts[3]));
+    return;
+  }
+  if (data.startsWith('curriculumEF:eval:')) {
+    const parts = data.split(':');
+    await curriculumEvalWithAI(chatId, callbackQuery, decodeURIComponent(parts[2] || ''), Number(parts[3]));
     return;
   }
 
@@ -4723,7 +4954,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.8-evaluaciones-ia-ready',
+        status: 'phase5.9-cuadernillo-ef-ready',
       });
     }
 
