@@ -472,6 +472,10 @@ function mainMenuKeyboard(linked = true) {
       { text: '🤖 Asistente IA', callback_data: 'teacherAI:menu' },
     ]);
     rows.push([
+      { text: '🧠 Evaluaciones IA', callback_data: 'evalAI:menu' },
+      { text: '📚 Biblioteca evaluaciones', callback_data: 'evalLibrary:menu' },
+    ]);
+    rows.push([
       { text: 'ℹ️ Ayuda', callback_data: 'help' },
     ]);
   } else {
@@ -875,6 +879,403 @@ function gradesBackKeyboard() {
 
 
 
+
+
+const evalAIState = new Map();
+const evalLibraryState = new Map();
+
+function evalAIMenuKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: '📝 Prueba corta', callback_data: 'evalAI:type:short' }],
+      [{ text: '✍️ Preguntas abiertas', callback_data: 'evalAI:type:open' }],
+      [{ text: '🔘 Selección simple', callback_data: 'evalAI:type:choice' }],
+      [{ text: '✅ Lista de cotejo', callback_data: 'evalAI:type:checklist' }],
+      [{ text: '📏 Rúbrica', callback_data: 'evalAI:type:rubric' }],
+      [{ text: '🎯 Actividad evaluativa', callback_data: 'evalAI:type:activity' }],
+      [{ text: '📚 Biblioteca de evaluaciones', callback_data: 'evalLibrary:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function evalAIResultKeyboard(saved = false) {
+  const rows = [];
+  if (!saved) rows.push([{ text: '💾 Guardar en biblioteca', callback_data: 'evalAI:save' }]);
+  rows.push([{ text: '🔄 Crear otra evaluación', callback_data: 'evalAI:menu' }]);
+  rows.push([{ text: '📚 Ver biblioteca', callback_data: 'evalLibrary:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function evalLibraryKeyboard(items = []) {
+  const rows = items.slice(0, 30).map((item, index) => [{
+    text: `${index + 1}. ${item.titulo || 'Evaluación'} · ${item.tipo || ''}`.slice(0, 60),
+    callback_data: `evalLibrary:detail:${index}`,
+  }]);
+  rows.push([{ text: '🔄 Actualizar', callback_data: 'evalLibrary:menu' }]);
+  rows.push([{ text: '🧠 Crear evaluación IA', callback_data: 'evalAI:menu' }]);
+  rows.push([{ text: '☰ Todas las opciones', callback_data: 'menu' }]);
+  return { inline_keyboard: rows };
+}
+
+function evalLibraryDetailKeyboard(index) {
+  return {
+    inline_keyboard: [
+      [{ text: '♻️ Reutilizar con IA', callback_data: `evalLibrary:reuse:${Number(index)}` }],
+      [{ text: '🗑️ Eliminar', callback_data: `evalLibrary:delete:${Number(index)}` }],
+      [{ text: '⬅️ Volver a biblioteca', callback_data: 'evalLibrary:menu' }],
+      [{ text: '☰ Todas las opciones', callback_data: 'menu' }],
+    ],
+  };
+}
+
+function evalTypeLabel(code) {
+  return ({
+    short: 'Prueba corta',
+    open: 'Preguntas abiertas',
+    choice: 'Selección simple',
+    checklist: 'Lista de cotejo',
+    rubric: 'Rúbrica',
+    activity: 'Actividad evaluativa',
+  })[code] || 'Evaluación IA';
+}
+
+function evalTypeInstruction(code) {
+  if (code === 'short') return 'Crea una prueba corta con preguntas variadas, instrucciones claras y clave de respuestas al final.';
+  if (code === 'open') return 'Crea preguntas abiertas con criterios orientativos de respuesta o indicadores de logro.';
+  if (code === 'choice') return 'Crea preguntas de selección simple con 4 opciones cada una e indica la respuesta correcta al final.';
+  if (code === 'checklist') return 'Crea una lista de cotejo clara con indicadores observables, organizada en una tabla de Sí/No o Logrado/En proceso.';
+  if (code === 'rubric') return 'Crea una rúbrica con criterios claros y niveles de desempeño apropiados para el grado o año.';
+  if (code === 'activity') return 'Crea una actividad evaluativa práctica con propósito, consignas, materiales, criterios e instrumento de evaluación.';
+  return 'Crea una evaluación clara, útil y apropiada para el perfil docente.';
+}
+
+async function showEvalAIMenu(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  pendingTextMode.delete(String(chatId));
+  const result = await callEduGestion('botEvaluacionesIAContexto', { telegramId });
+  const data = result.perfil || {};
+  const grades = Array.isArray(data.grados) ? data.grados : [];
+
+  await sendMessage(
+    chatId,
+    `🧠 <b>EVALUACIONES IA</b>
+━━━━━━━━━━━━━━━━━━
+
+Docente: <b>${escapeHtml(data.nombre || 'Docente')}</b>
+Materia: <b>${escapeHtml(data.materia || 'No registrada')}</b>
+Grados/Años: <b>${escapeHtml(grades.length ? grades.join(', ') : 'No registrados')}</b>
+
+La evaluación se adaptará automáticamente a tu perfil docente.
+
+Selecciona el tipo de evaluación:`,
+    { reply_markup: evalAIMenuKeyboard() },
+  );
+}
+
+async function startEvalAI(chatId, source, typeCode) {
+  const profile = await linkedProfile(teacherTelegramId(source));
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  evalAIState.set(String(chatId), {
+    typeCode,
+    type: evalTypeLabel(typeCode),
+    generated: null,
+    saved: false,
+  });
+  pendingTextMode.set(String(chatId), `eval-ai:${typeCode}`);
+
+  await sendMessage(
+    chatId,
+    `🧠 <b>${escapeHtml(evalTypeLabel(typeCode))}</b>
+
+Escribe el <b>tema</b> o contenido que deseas evaluar.
+
+Ejemplo:
+<code>Coordinación y equilibrio para 1ero</code>
+
+También puedes incluir cantidad de preguntas, tiempo o cualquier indicación especial.
+
+Escribe <code>cancelar</code> para salir.`,
+    { reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: 'evalAI:menu' }], [{ text: '☰ Todas las opciones', callback_data: 'menu' }]] } },
+  );
+}
+
+async function generateEvalAI(chatId, source, userText, typeCode) {
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botEvaluacionesIAContexto', { telegramId });
+  const data = result.perfil || {};
+  const grades = Array.isArray(data.grados) ? data.grados.filter(Boolean) : [];
+
+  const prompt = [
+    'CONTEXTO DEL PERFIL DOCENTE DE EDUGESTIÓN:',
+    `- Docente: ${data.nombre || 'No indicado'}`,
+    `- Área o materia principal: ${data.materia || 'No indicada'}`,
+    `- Grados/Años que atiende: ${grades.length ? grades.join(', ') : 'No indicados'}`,
+    `- Año escolar: ${data.anoEscolar || 'No indicado'}`,
+    '',
+    'INSTRUCCIONES:',
+    '- No realices búsqueda web.',
+    '- No inventes contenidos oficiales ni referencias curriculares que no hayan sido proporcionadas.',
+    '- Si el docente escribe un grado, materia o contexto específico, eso tiene prioridad.',
+    '- Usa lenguaje claro, profesional y apropiado al nivel.',
+    `- Tipo solicitado: ${evalTypeLabel(typeCode)}.`,
+    `- Tarea específica: ${evalTypeInstruction(typeCode)}`,
+    '- Presenta el material listo para usar por el docente.',
+    '',
+    'SOLICITUD DEL DOCENTE:',
+    String(userText || '').trim(),
+  ].join('\n');
+
+  await sendMessage(chatId, '⏳ <b>Generando evaluación con IA…</b>');
+
+  const answer = await callTeacherGemini(prompt);
+
+  const titleBase = String(userText || '').trim().split('\n')[0].slice(0, 70);
+  const state = {
+    typeCode,
+    type: evalTypeLabel(typeCode),
+    generated: answer,
+    saved: false,
+    title: `${evalTypeLabel(typeCode)} · ${titleBase || 'Evaluación'}`.slice(0, 100),
+    topic: titleBase,
+    matter: data.materia || '',
+    grade: grades.length === 1 ? grades[0] : '',
+  };
+  evalAIState.set(String(chatId), state);
+  pendingTextMode.delete(String(chatId));
+
+  await sendLongTelegramText(
+    chatId,
+    `🧠 <b>${escapeHtml(evalTypeLabel(typeCode))}</b>`,
+    answer,
+    evalAIResultKeyboard(false),
+  );
+}
+
+async function saveGeneratedEval(chatId, source) {
+  const state = evalAIState.get(String(chatId));
+  if (!state?.generated) {
+    await showEvalAIMenu(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botGuardarEvaluacionIA', {
+    telegramId,
+    titulo: state.title || state.type || 'Evaluación IA',
+    tipo: state.type || 'Evaluación IA',
+    materia: state.matter || '',
+    grado: state.grade || '',
+    tema: state.topic || '',
+    contenido: state.generated,
+  });
+
+  state.saved = true;
+  state.savedId = result.evaluacion?.id || '';
+  evalAIState.set(String(chatId), state);
+
+  await sendMessage(
+    chatId,
+    `💾 <b>EVALUACIÓN GUARDADA</b>
+
+La evaluación quedó guardada en tu Biblioteca de evaluaciones.`,
+    { reply_markup: evalAIResultKeyboard(true) },
+  );
+}
+
+async function showEvalLibrary(chatId, source) {
+  const telegramId = teacherTelegramId(source);
+  const profile = await linkedProfile(telegramId);
+  if (!profile) {
+    await showLinkInstructions(chatId);
+    return;
+  }
+
+  const result = await callEduGestion('botListarEvaluacionesIA', {
+    telegramId,
+    limite: 30,
+  });
+
+  const items = Array.isArray(result.evaluaciones) ? result.evaluaciones : [];
+  evalLibraryState.set(String(chatId), { items });
+
+  if (!items.length) {
+    await sendMessage(
+      chatId,
+      `📚 <b>BIBLIOTECA DE EVALUACIONES</b>
+
+Todavía no tienes evaluaciones guardadas.`,
+      { reply_markup: { inline_keyboard: [[{ text: '🧠 Crear evaluación IA', callback_data: 'evalAI:menu' }], [{ text: '☰ Todas las opciones', callback_data: 'menu' }]] } },
+    );
+    return;
+  }
+
+  await sendMessage(
+    chatId,
+    `📚 <b>BIBLIOTECA DE EVALUACIONES</b>
+
+Total guardadas: <b>${Number(result.total || items.length)}</b>
+
+Selecciona una evaluación para abrirla:`,
+    { reply_markup: evalLibraryKeyboard(items) },
+  );
+}
+
+async function showEvalLibraryDetail(chatId, source, index) {
+  const state = evalLibraryState.get(String(chatId));
+  if (!state || !Array.isArray(state.items) || !state.items[Number(index)]) {
+    await showEvalLibrary(chatId, source);
+    return;
+  }
+
+  const item = state.items[Number(index)];
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetalleEvaluacionIA', {
+    telegramId,
+    id: item.id,
+  });
+
+  const detail = result.evaluacion || item;
+  state.items[Number(index)] = { ...item, ...detail };
+  evalLibraryState.set(String(chatId), state);
+
+  const header = [
+    `📚 <b>${escapeHtml(detail.titulo || 'Evaluación')}</b>`,
+    '',
+    `Tipo: <b>${escapeHtml(detail.tipo || 'Evaluación IA')}</b>`,
+    `Materia: <b>${escapeHtml(detail.materia || 'No registrada')}</b>`,
+    `Grado/Año: <b>${escapeHtml(detail.grado || 'No registrado')}</b>`,
+    `Tema: <b>${escapeHtml(detail.tema || 'No registrado')}</b>`,
+  ].join('\n');
+
+  await sendLongTelegramText(
+    chatId,
+    header,
+    detail.contenido || 'Sin contenido.',
+    evalLibraryDetailKeyboard(Number(index)),
+  );
+}
+
+async function reuseEvalLibrary(chatId, source, index) {
+  const state = evalLibraryState.get(String(chatId));
+  if (!state || !Array.isArray(state.items) || !state.items[Number(index)]) {
+    await showEvalLibrary(chatId, source);
+    return;
+  }
+
+  const item = state.items[Number(index)];
+  const telegramId = teacherTelegramId(source);
+  const result = await callEduGestion('botDetalleEvaluacionIA', {
+    telegramId,
+    id: item.id,
+  });
+  const detail = result.evaluacion || item;
+
+  evalAIState.set(String(chatId), {
+    typeCode: 'reuse',
+    type: detail.tipo || 'Evaluación IA',
+    generated: detail.contenido || '',
+    saved: true,
+    title: detail.titulo || 'Evaluación reutilizada',
+    topic: detail.tema || '',
+    matter: detail.materia || '',
+    grade: detail.grado || '',
+  });
+
+  pendingTextMode.set(String(chatId), 'eval-ai-reuse');
+
+  await sendMessage(
+    chatId,
+    `♻️ <b>REUTILIZAR EVALUACIÓN</b>
+
+Escribe cómo quieres modificarla.
+
+Ejemplos:
+<code>Hazla más corta</code>
+<code>Adáptala a 2do grado</code>
+<code>Cambia a 10 preguntas</code>
+
+Escribe <code>cancelar</code> para salir.`,
+    { reply_markup: { inline_keyboard: [[{ text: '❌ Cancelar', callback_data: 'evalLibrary:menu' }], [{ text: '☰ Todas las opciones', callback_data: 'menu' }]] } },
+  );
+}
+
+async function regenerateEvalFromLibrary(chatId, source, userText) {
+  const state = evalAIState.get(String(chatId));
+  if (!state?.generated) {
+    await showEvalLibrary(chatId, source);
+    return;
+  }
+
+  const telegramId = teacherTelegramId(source);
+  const context = await callEduGestion('botEvaluacionesIAContexto', { telegramId });
+  const data = context.perfil || {};
+
+  const prompt = [
+    'Eres un asistente pedagógico de EduGestión.',
+    `Docente: ${data.nombre || 'No indicado'}`,
+    `Materia: ${data.materia || 'No indicada'}`,
+    '',
+    'EVALUACIÓN ORIGINAL:',
+    state.generated,
+    '',
+    'CAMBIO SOLICITADO POR EL DOCENTE:',
+    String(userText || '').trim(),
+    '',
+    'Devuelve la evaluación completa ya modificada, lista para usar. No hagas búsqueda web y no inventes referencias oficiales.',
+  ].join('\n');
+
+  await sendMessage(chatId, '⏳ <b>Adaptando evaluación con IA…</b>');
+  const answer = await callTeacherGemini(prompt);
+
+  state.generated = answer;
+  state.saved = false;
+  state.title = `${state.type || 'Evaluación IA'} · Adaptada`.slice(0, 100);
+  evalAIState.set(String(chatId), state);
+  pendingTextMode.delete(String(chatId));
+
+  await sendLongTelegramText(
+    chatId,
+    '♻️ <b>EVALUACIÓN ADAPTADA</b>',
+    answer,
+    evalAIResultKeyboard(false),
+  );
+}
+
+async function deleteEvalLibrary(chatId, source, index) {
+  const state = evalLibraryState.get(String(chatId));
+  if (!state || !Array.isArray(state.items) || !state.items[Number(index)]) {
+    await showEvalLibrary(chatId, source);
+    return;
+  }
+
+  const item = state.items[Number(index)];
+  const telegramId = teacherTelegramId(source);
+
+  await callEduGestion('botEliminarEvaluacionIA', {
+    telegramId,
+    id: item.id,
+  });
+
+  await sendMessage(
+    chatId,
+    `🗑️ <b>EVALUACIÓN ELIMINADA</b>
+
+La evaluación fue retirada de tu biblioteca.`,
+    { reply_markup: { inline_keyboard: [[{ text: '📚 Volver a biblioteca', callback_data: 'evalLibrary:menu' }], [{ text: '☰ Todas las opciones', callback_data: 'menu' }]] } },
+  );
+}
 
 function teacherAIKeyboard() {
   return {
@@ -3610,7 +4011,7 @@ async function showHelp(chatId, source) {
   const profile = await linkedProfile(teacherTelegramId(source));
   const linked = Boolean(profile);
   const text = linked
-    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
+    ? 'ℹ️ <b>Ayuda de EduGestión</b>\n\n• /menu abre el menú principal.\n• /hoy muestra las clases del día.\n• /asistencia inicia el registro.\n• /consultar muestra el detalle de asistencia del día.\n• /estudiantes abre la consulta de estudiantes.\n• /ficha abre la ficha académica completa.\n• /boletin abre los boletines por estudiante.\n• /cierre abre el cierre de lapso.\n• /historialcierre abre el historial de cierres.\n• /controlestudio abre Control de Estudio.\n• /perfil abre Mi perfil docente.\n• /ia abre el Asistente IA adaptado a tu perfil.\n• /evaluacion abre Evaluaciones IA.\n• /bibliotecaeval abre la Biblioteca de evaluaciones.\n• Toca ☰ TODAS LAS OPCIONES para abrir el menú completo sin escribir comandos.\n• /planificacion muestra próximas evaluaciones.\n• /estadisticas muestra resúmenes de asistencia.\n• /informe genera un PDF de asistencia.\n• /actas consulta las actas académicas.\n• /estado muestra la cuenta vinculada.\n• /jornada abre tu asistencia laboral.\n• /ausencia MOTIVO registra una ausencia.\n\nPara pasar o corregir asistencia, abre una clase y escribe:\n<code>A: 2,5; T: 3; J: 4</code>\n\nA = ausente · T = tardanza · J = justificada. Los demás quedan presentes.'
     : 'ℹ️ <b>Ayuda de EduGestión</b>\n\nPrimero vincula tu Telegram con una cuenta docente. Genera un código temporal en EduGestión y envíalo así:\n<code>/vincular 123456</code>';
   await sendMessage(chatId, text, { reply_markup: mainMenuKeyboard(linked) });
 }
@@ -3732,6 +4133,16 @@ async function handleMessage(message) {
     return;
   }
 
+  if (/^\/(evaluacion|evaluaciones|evaluacionia)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showEvalAIMenu(chatId, message);
+    return;
+  }
+
+  if (/^\/(bibliotecaeval|bibliotecaevaluaciones)(?:@\w+)?(?:\s|$)/i.test(text)) {
+    await showEvalLibrary(chatId, message);
+    return;
+  }
+
   if (/^\/diagnostico(?:@\w+)?(?:\s|$)/i.test(text)) {
     await showSystemDiagnostic(chatId, message);
     return;
@@ -3818,6 +4229,27 @@ async function handleMessage(message) {
       return;
     }
 
+    if (String(mode || '').startsWith('eval-ai:')) {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        pendingTextMode.delete(String(chatId));
+        await showEvalAIMenu(chatId, message);
+      } else {
+        const typeCode = String(mode).split(':')[1] || 'short';
+        await generateEvalAI(chatId, message, text, typeCode);
+      }
+      return;
+    }
+
+    if (String(mode || '') === 'eval-ai-reuse') {
+      if (String(text).trim().toLowerCase() === 'cancelar') {
+        pendingTextMode.delete(String(chatId));
+        await showEvalLibrary(chatId, message);
+      } else {
+        await regenerateEvalFromLibrary(chatId, message, text);
+      }
+      return;
+    }
+
     try {
       await previewAttendance(chatId, message, text);
     } catch (error) {
@@ -3852,6 +4284,35 @@ async function handleCallbackQuery(callbackQuery) {
   if (data === 'menu') {
     pendingTextMode.delete(String(chatId));
     await showMainMenu(chatId, callbackQuery);
+    return;
+  }
+
+  if (data === 'evalAI:menu') {
+    await showEvalAIMenu(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('evalAI:type:')) {
+    await startEvalAI(chatId, callbackQuery, data.split(':')[2] || 'short');
+    return;
+  }
+  if (data === 'evalAI:save') {
+    await saveGeneratedEval(chatId, callbackQuery);
+    return;
+  }
+  if (data === 'evalLibrary:menu') {
+    await showEvalLibrary(chatId, callbackQuery);
+    return;
+  }
+  if (data.startsWith('evalLibrary:detail:')) {
+    await showEvalLibraryDetail(chatId, callbackQuery, Number(data.split(':')[2]));
+    return;
+  }
+  if (data.startsWith('evalLibrary:reuse:')) {
+    await reuseEvalLibrary(chatId, callbackQuery, Number(data.split(':')[2]));
+    return;
+  }
+  if (data.startsWith('evalLibrary:delete:')) {
+    await deleteEvalLibrary(chatId, callbackQuery, Number(data.split(':')[2]));
     return;
   }
 
@@ -4262,7 +4723,7 @@ export default {
       return jsonResponse({
         ok: true,
         service: 'EduGestion Telegram webhook',
-        status: 'phase5.7-ia-perfil-docente-ready',
+        status: 'phase5.8-evaluaciones-ia-ready',
       });
     }
 
