@@ -2875,24 +2875,38 @@ const SESSION_KEY = 'edugestion_session_v2';
         </div>
       </section>
 
-      <nav class="director-view-tabs" aria-label="Vistas del panel director">
-        <button class="is-active" data-director-view="resumen" type="button"><i class="fa-solid fa-gauge-high"></i><span>Resumen</span></button>
-        <button data-director-view="docentes" type="button"><i class="fa-solid fa-chalkboard-user"></i><span>Docentes</span></button>
-        <button data-director-view="asistencia" type="button"><i class="fa-solid fa-user-check"></i><span>Asistencia</span></button>
-        <button data-director-view="notas" type="button"><i class="fa-solid fa-square-poll-vertical"></i><span>Notas y evaluaciones</span></button>
-        <button data-director-view="estudiantes" type="button"><i class="fa-solid fa-users"></i><span>Estudiantes</span></button>
-        <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span></button>
-        <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
-        <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span></button>
-        <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
-      </nav>
+      <div class="director-workspace">
+        <aside class="director-side-menu" aria-label="Menú institucional">
+          <div class="director-side-menu__header">
+            <span class="director-side-menu__icon"><i class="fa-solid fa-building-columns"></i></span>
+            <div>
+              <strong>Menú institucional</strong>
+              <small>Panel de dirección</small>
+            </div>
+          </div>
 
-      <div id="director-loading" class="director-state">
-        <i class="fa-solid fa-circle-notch fa-spin"></i>
-        <strong>Cargando información institucional…</strong>
-        <span>Consultando los registros de todos los docentes.</span>
+          <nav class="director-view-tabs" aria-label="Vistas del panel director">
+            <button class="is-active" data-director-view="resumen" type="button"><i class="fa-solid fa-gauge-high"></i><span>Resumen</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="docentes" type="button"><i class="fa-solid fa-chalkboard-user"></i><span>Docentes</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="asistencia" type="button"><i class="fa-solid fa-user-check"></i><span>Asistencia</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="notas" type="button"><i class="fa-solid fa-square-poll-vertical"></i><span>Notas y evaluaciones</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="estudiantes" type="button"><i class="fa-solid fa-users"></i><span>Estudiantes</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+            <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
+          </nav>
+        </aside>
+
+        <div class="director-workspace__main">
+          <div id="director-loading" class="director-state">
+            <i class="fa-solid fa-circle-notch fa-spin"></i>
+            <strong>Cargando información institucional…</strong>
+            <span>Consultando los registros de todos los docentes.</span>
+          </div>
+          <div id="director-content" class="director-content hidden"></div>
+        </div>
       </div>
-      <div id="director-content" class="director-content hidden"></div>
     `;
     main.appendChild(section);
 
@@ -11380,4 +11394,209 @@ Archivo enviado directamente desde EduGestión.`);
   document.head.appendChild(style);
 })();
 /* EDUGESTION_FASE_21F_CONSTANCIA_ESTUDIO_END */
+
+
+
+/* =========================================================
+   EduGestión · FASE 21G
+   MENÚ LATERAL INSTITUCIONAL — DIRECCIÓN / CONTROL
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21G_MENU_LATERAL_DIRECTOR) return;
+  window.EDUGESTION_FASE21G_MENU_LATERAL_DIRECTOR = true;
+
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21g-menu-lateral-director-style';
+  style.textContent = `
+    #section-historial-administrativo .director-workspace{
+      display:grid;
+      grid-template-columns:250px minmax(0,1fr);
+      gap:20px;
+      align-items:start;
+      margin-top:18px
+    }
+
+    #section-historial-administrativo .director-side-menu{
+      position:sticky;
+      top:18px;
+      background:#ffffff;
+      border:1px solid #d7e4f2;
+      border-radius:18px;
+      padding:14px;
+      box-shadow:0 10px 28px rgba(31,79,132,.08);
+      overflow:hidden
+    }
+
+    #section-historial-administrativo .director-side-menu__header{
+      display:flex;
+      align-items:center;
+      gap:11px;
+      padding:8px 8px 14px;
+      margin-bottom:8px;
+      border-bottom:1px solid #e6eef7
+    }
+
+    #section-historial-administrativo .director-side-menu__icon{
+      width:42px;
+      height:42px;
+      flex:0 0 42px;
+      border-radius:12px;
+      display:grid;
+      place-items:center;
+      background:#eaf3fc;
+      color:#1f5da8;
+      font-size:17px
+    }
+
+    #section-historial-administrativo .director-side-menu__header strong{
+      display:block;
+      color:#173a65;
+      font-size:.92rem;
+      line-height:1.15
+    }
+
+    #section-historial-administrativo .director-side-menu__header small{
+      display:block;
+      margin-top:3px;
+      color:#8093aa;
+      font-size:.72rem
+    }
+
+    #section-historial-administrativo .director-view-tabs{
+      display:flex !important;
+      flex-direction:column !important;
+      align-items:stretch !important;
+      gap:6px !important;
+      width:100% !important;
+      min-width:0 !important;
+      padding:0 !important;
+      margin:0 !important;
+      border:0 !important;
+      background:transparent !important;
+      box-shadow:none !important;
+      overflow:visible !important
+    }
+
+    #section-historial-administrativo .director-view-tabs button{
+      width:100% !important;
+      min-height:46px;
+      display:grid !important;
+      grid-template-columns:28px minmax(0,1fr) 16px;
+      align-items:center;
+      gap:9px;
+      text-align:left !important;
+      justify-content:stretch !important;
+      padding:9px 10px !important;
+      border:1px solid transparent !important;
+      border-radius:11px !important;
+      background:transparent !important;
+      color:#5e728c !important;
+      font-size:.82rem !important;
+      font-weight:750 !important;
+      line-height:1.15;
+      white-space:normal !important;
+      cursor:pointer;
+      transition:.18s ease
+    }
+
+    #section-historial-administrativo .director-view-tabs button > i:first-child{
+      width:28px;
+      height:28px;
+      border-radius:8px;
+      display:grid;
+      place-items:center;
+      background:#f1f6fb;
+      color:#5e7897;
+      font-size:.82rem
+    }
+
+    #section-historial-administrativo .director-view-tabs button > span{
+      min-width:0;
+      overflow-wrap:anywhere
+    }
+
+    #section-historial-administrativo .director-view-tabs button .director-menu-arrow{
+      font-size:.65rem;
+      color:#9bacc0;
+      justify-self:end
+    }
+
+    #section-historial-administrativo .director-view-tabs button:hover{
+      background:#f5f9fe !important;
+      color:#1f5da8 !important;
+      border-color:#dbe8f5 !important
+    }
+
+    #section-historial-administrativo .director-view-tabs button.is-active{
+      background:#edf5ff !important;
+      color:#15569e !important;
+      border-color:#c8def6 !important;
+      box-shadow:inset 3px 0 0 #1f5da8
+    }
+
+    #section-historial-administrativo .director-view-tabs button.is-active > i:first-child{
+      background:#1f5da8;
+      color:#fff
+    }
+
+    #section-historial-administrativo .director-view-tabs button.is-active .director-menu-arrow{
+      color:#1f5da8
+    }
+
+    #section-historial-administrativo .director-workspace__main{
+      min-width:0
+    }
+
+    #section-historial-administrativo .director-content{
+      margin-top:0 !important
+    }
+
+    @media(max-width:980px){
+      #section-historial-administrativo .director-workspace{
+        grid-template-columns:210px minmax(0,1fr);
+        gap:14px
+      }
+      #section-historial-administrativo .director-side-menu{
+        padding:10px
+      }
+      #section-historial-administrativo .director-view-tabs button{
+        font-size:.76rem !important;
+        padding:8px !important
+      }
+    }
+
+    @media(max-width:760px){
+      #section-historial-administrativo .director-workspace{
+        grid-template-columns:1fr
+      }
+
+      #section-historial-administrativo .director-side-menu{
+        position:static;
+        padding:10px
+      }
+
+      #section-historial-administrativo .director-side-menu__header{
+        margin-bottom:6px
+      }
+
+      #section-historial-administrativo .director-view-tabs{
+        display:grid !important;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:7px !important
+      }
+
+      #section-historial-administrativo .director-view-tabs button{
+        grid-template-columns:26px minmax(0,1fr);
+        min-height:44px;
+        font-size:.74rem !important
+      }
+
+      #section-historial-administrativo .director-view-tabs button .director-menu-arrow{
+        display:none
+      }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+/* EDUGESTION_FASE_21G_MENU_LATERAL_DIRECTOR_END */
 
