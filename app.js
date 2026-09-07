@@ -2845,6 +2845,26 @@ const SESSION_KEY = 'edugestion_session_v2';
     tab.innerHTML = '<i class="fa-solid fa-building-shield"></i><span>Historial administrativo</span>';
     nav.appendChild(tab);
 
+    const menuInstitucional = document.createElement('div');
+    menuInstitucional.id = 'director-sidebar-menu';
+    menuInstitucional.className = 'director-sidebar-menu director-only-nav';
+    menuInstitucional.innerHTML = `
+      <div class="director-sidebar-menu__title">
+        <i class="fa-solid fa-building-columns"></i>
+        <span>Menú institucional</span>
+      </div>
+      <button class="is-active" data-director-view="resumen" type="button"><i class="fa-solid fa-gauge-high"></i><span>Resumen</span></button>
+      <button data-director-view="docentes" type="button"><i class="fa-solid fa-chalkboard-user"></i><span>Docentes</span></button>
+      <button data-director-view="asistencia" type="button"><i class="fa-solid fa-user-check"></i><span>Asistencia</span></button>
+      <button data-director-view="notas" type="button"><i class="fa-solid fa-square-poll-vertical"></i><span>Notas y evaluaciones</span></button>
+      <button data-director-view="estudiantes" type="button"><i class="fa-solid fa-users"></i><span>Estudiantes</span></button>
+      <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span></button>
+      <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
+      <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span></button>
+      <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
+    `;
+    nav.appendChild(menuInstitucional);
+
     const section = document.createElement('section');
     section.id = DIRECTOR_IDS.section;
     section.className = 'hidden director-dashboard';
@@ -2875,29 +2895,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         </div>
       </section>
 
-      <div class="director-workspace">
-        <aside class="director-side-menu" aria-label="Menú institucional">
-          <div class="director-side-menu__header">
-            <span class="director-side-menu__icon"><i class="fa-solid fa-building-columns"></i></span>
-            <div>
-              <strong>Menú institucional</strong>
-              <small>Panel de dirección</small>
-            </div>
-          </div>
-
-          <nav class="director-view-tabs" aria-label="Vistas del panel director">
-            <button class="is-active" data-director-view="resumen" type="button"><i class="fa-solid fa-gauge-high"></i><span>Resumen</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="docentes" type="button"><i class="fa-solid fa-chalkboard-user"></i><span>Docentes</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="asistencia" type="button"><i class="fa-solid fa-user-check"></i><span>Asistencia</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="notas" type="button"><i class="fa-solid fa-square-poll-vertical"></i><span>Notas y evaluaciones</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="estudiantes" type="button"><i class="fa-solid fa-users"></i><span>Estudiantes</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-            <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span><i class="fa-solid fa-chevron-right director-menu-arrow"></i></button>
-          </nav>
-        </aside>
-
+      <div class="director-workspace director-workspace--full">
         <div class="director-workspace__main">
           <div id="director-loading" class="director-state">
             <i class="fa-solid fa-circle-notch fa-spin"></i>
@@ -2925,11 +2923,14 @@ const SESSION_KEY = 'edugestion_session_v2';
       busquedaDirector = String(event.target.value || '').trim().toLowerCase();
       renderPanelDirector();
     });
-    section.querySelectorAll('[data-director-view]').forEach(button => {
+    menuInstitucional.querySelectorAll('[data-director-view]').forEach(button => {
       button.addEventListener('click', () => {
-        vistaDirector = button.dataset.directorView;
-        section.querySelectorAll('[data-director-view]').forEach(b => b.classList.toggle('is-active', b === button));
-        renderPanelDirector();
+        vistaDirector = button.dataset.directorView || 'resumen';
+        menuInstitucional.querySelectorAll('[data-director-view]').forEach(b => {
+          b.classList.toggle('is-active', b.dataset.directorView === vistaDirector);
+        });
+        if (section.classList.contains('hidden')) abrirPanelDirector();
+        else renderPanelDirector();
       });
     });
   }
@@ -2966,7 +2967,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     const identityLabel = document.querySelector(`#${DIRECTOR_IDS.section} .director-toolbar__identity small`);
     if (identityLabel) identityLabel.textContent = controlEstudio ? 'Cuenta Control de Estudio' : 'Cuenta autorizada';
 
-    const constanciaTab = document.querySelector('[data-director-view="constancia"]');
+    const constanciaTab = document.querySelector('#director-sidebar-menu [data-director-view="constancia"]');
     if (constanciaTab) constanciaTab.classList.toggle('hidden', controlEstudio);
     if (controlEstudio && vistaDirector === 'constancia') vistaDirector = 'resumen';
 
@@ -3654,6 +3655,9 @@ const SESSION_KEY = 'edugestion_session_v2';
   }
 
   function renderPanelDirector() {
+    document.querySelectorAll('#director-sidebar-menu [data-director-view]').forEach(b => {
+      b.classList.toggle('is-active', b.dataset.directorView === vistaDirector);
+    });
     const content = document.getElementById('director-content');
     if (!content || !datosDirector) return;
     content.classList.remove('hidden');
@@ -11599,4 +11603,146 @@ Archivo enviado directamente desde EduGestión.`);
   document.head.appendChild(style);
 })();
 /* EDUGESTION_FASE_21G_MENU_LATERAL_DIRECTOR_END */
+
+
+
+/* =========================================================
+   EduGestión · FASE 21H
+   MENÚ INSTITUCIONAL EN BARRA LATERAL PRINCIPAL
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21H_MENU_SIDEBAR_PRINCIPAL) return;
+  window.EDUGESTION_FASE21H_MENU_SIDEBAR_PRINCIPAL = true;
+
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21h-menu-sidebar-principal-style';
+  style.textContent = `
+    #section-historial-administrativo .director-workspace,
+    #section-historial-administrativo .director-workspace--full{
+      display:block !important;
+      margin-top:18px !important
+    }
+
+    #section-historial-administrativo .director-workspace__main,
+    #section-historial-administrativo .director-content{
+      width:100% !important;
+      min-width:0 !important
+    }
+
+    #section-historial-administrativo .director-content{
+      margin-top:0 !important
+    }
+
+    #director-sidebar-menu{
+      display:flex;
+      flex-direction:column;
+      gap:5px;
+      margin:10px 8px 18px;
+      padding:10px 8px 12px;
+      border-top:1px solid rgba(255,255,255,.08);
+      border-bottom:1px solid rgba(255,255,255,.08)
+    }
+
+    #director-sidebar-menu.role-hidden{
+      display:none !important
+    }
+
+    #director-sidebar-menu .director-sidebar-menu__title{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:4px 8px 8px;
+      color:#7f95ad;
+      font-size:.68rem;
+      font-weight:900;
+      letter-spacing:.08em;
+      text-transform:uppercase
+    }
+
+    #director-sidebar-menu .director-sidebar-menu__title i{
+      width:20px;
+      text-align:center
+    }
+
+    #director-sidebar-menu button{
+      width:100%;
+      min-height:39px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:8px 10px;
+      border:0;
+      border-radius:10px;
+      background:transparent;
+      color:#b8c6d6;
+      text-align:left;
+      font:inherit;
+      font-size:.78rem;
+      font-weight:800;
+      cursor:pointer;
+      transition:.18s ease
+    }
+
+    #director-sidebar-menu button i{
+      width:22px;
+      height:22px;
+      display:grid;
+      place-items:center;
+      flex:0 0 22px;
+      border-radius:7px;
+      background:rgba(255,255,255,.06);
+      color:#9eb5cb;
+      font-size:.72rem
+    }
+
+    #director-sidebar-menu button span{
+      min-width:0;
+      line-height:1.15
+    }
+
+    #director-sidebar-menu button:hover{
+      background:rgba(64,138,212,.15);
+      color:#fff
+    }
+
+    #director-sidebar-menu button.is-active{
+      background:#1d4f82;
+      color:#fff;
+      box-shadow:inset 3px 0 0 #68d7c3
+    }
+
+    #director-sidebar-menu button.is-active i{
+      background:rgba(255,255,255,.12);
+      color:#fff
+    }
+
+    @media(max-width:760px){
+      #director-sidebar-menu{
+        margin:8px 6px 14px
+      }
+      #director-sidebar-menu button{
+        min-height:38px;
+        font-size:.76rem
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  function ajustarMenuInstitucionalPorRol() {
+    const rol = String(window.profesorActual?.rol || '').toLowerCase();
+    const institucional = rol === 'director' || rol === 'control_estudio';
+    const menu = document.getElementById('director-sidebar-menu');
+    if (!menu) return;
+
+    menu.classList.toggle('role-hidden', !institucional);
+
+    const constancia = menu.querySelector('[data-director-view="constancia"]');
+    if (constancia) constancia.classList.toggle('hidden', rol === 'control_estudio');
+  }
+
+  window.addEventListener('edugestion:session', () => setTimeout(ajustarMenuInstitucionalPorRol, 80));
+  document.addEventListener('DOMContentLoaded', () => setTimeout(ajustarMenuInstitucionalPorRol, 300));
+  setTimeout(ajustarMenuInstitucionalPorRol, 500);
+})();
+/* EDUGESTION_FASE_21H_MENU_SIDEBAR_PRINCIPAL_END */
 
