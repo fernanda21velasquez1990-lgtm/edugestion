@@ -2883,6 +2883,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         <button data-director-view="estudiantes" type="button"><i class="fa-solid fa-users"></i><span>Estudiantes</span></button>
         <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span></button>
         <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
+        <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span></button>
         <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
       </nav>
 
@@ -2951,10 +2952,59 @@ const SESSION_KEY = 'edugestion_session_v2';
     const identityLabel = document.querySelector(`#${DIRECTOR_IDS.section} .director-toolbar__identity small`);
     if (identityLabel) identityLabel.textContent = controlEstudio ? 'Cuenta Control de Estudio' : 'Cuenta autorizada';
 
+    const constanciaTab = document.querySelector('[data-director-view="constancia"]');
+    if (constanciaTab) constanciaTab.classList.toggle('hidden', controlEstudio);
+    if (controlEstudio && vistaDirector === 'constancia') vistaDirector = 'resumen';
+
     if (institucional) {
       const nombreCuenta = document.getElementById('director-account-name');
       if (nombreCuenta) nombreCuenta.textContent = profesorActual?.nombre || rolTexto;
       abrirPanelDirector();
+    } else {
+      // Al salir de Dirección/Control y entrar como docente,
+      // restauramos completamente el portal docente.
+      const panelInstitucional = document.getElementById(DIRECTOR_IDS.section);
+      const tabInstitucional = document.getElementById(DIRECTOR_IDS.tab);
+      if (panelInstitucional) panelInstitucional.classList.add('hidden');
+      if (tabInstitucional) {
+        tabInstitucional.classList.add('role-hidden');
+        tabInstitucional.classList.remove('is-active');
+        tabInstitucional.setAttribute('aria-selected', 'false');
+      }
+
+      document.querySelectorAll('#app-nav .nav-item').forEach(item => {
+        if (item.id !== DIRECTOR_IDS.tab) item.classList.remove('role-hidden');
+      });
+
+      document.querySelectorAll('#app-main > section').forEach(section => {
+        section.classList.add('hidden');
+      });
+
+      const tabDocente = document.getElementById('tab-asistencia')
+        || document.querySelector('#app-nav .nav-item:not(.role-hidden)');
+      const sectionDocente = document.getElementById('section-asistencia');
+
+      if (tabDocente) {
+        document.querySelectorAll('#app-nav .nav-item').forEach(item => {
+          item.classList.remove('is-active');
+          item.setAttribute('aria-selected', 'false');
+        });
+        tabDocente.classList.add('is-active');
+        tabDocente.setAttribute('aria-selected', 'true');
+      }
+
+      if (sectionDocente) sectionDocente.classList.remove('hidden');
+
+      if (pageTitle) {
+        pageTitle.textContent = tabDocente?.dataset?.title || 'Asistencia';
+      }
+      if (pageDescription) {
+        pageDescription.textContent = tabDocente?.dataset?.description || 'Control de asistencia de tus estudiantes.';
+      }
+
+      if (sidebarLabel) sidebarLabel.textContent = 'Espacio de trabajo';
+      if (portalLabel) portalLabel.textContent = 'Portal docente';
+      if (profesorMateria) profesorMateria.textContent = profesorActual?.materia || 'Sin materia asignada';
     }
   }
 
@@ -3317,6 +3367,278 @@ const SESSION_KEY = 'edugestion_session_v2';
     </section>`;
   }
 
+
+  const MESES_CONSTANCIA = [
+    'enero','febrero','marzo','abril','mayo','junio',
+    'julio','agosto','septiembre','octubre','noviembre','diciembre'
+  ];
+
+  function fechaConstanciaPartes(fechaIso) {
+    const f = fechaIso ? new Date(`${fechaIso}T12:00:00`) : new Date();
+    return {
+      dia: String(f.getDate()),
+      mes: MESES_CONSTANCIA[f.getMonth()],
+      ano: String(f.getFullYear())
+    };
+  }
+
+  function estudianteConstanciaPorClave(clave) {
+    const todos = Array.isArray(datosDirector?.estudiantes) ? datosDirector.estudiantes : [];
+    return todos.find(a => normalizarClaveAlumno(a) === clave) || null;
+  }
+
+  function escapeAttrConstancia(valor='') {
+    return h(valor).replace(/"/g, '&quot;');
+  }
+
+  function constanciaEstudioHtml() {
+    const alumnos = filtrar(
+      Array.isArray(datosDirector?.estudiantes) ? datosDirector.estudiantes : [],
+      ['nombre','cedula','ano','seccion','turno','docente']
+    ).sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+
+    const anoEscolar = '2026-2027';
+    const hoy = new Date();
+    const fechaIso = [
+      hoy.getFullYear(),
+      String(hoy.getMonth()+1).padStart(2,'0'),
+      String(hoy.getDate()).padStart(2,'0')
+    ].join('-');
+
+    return `
+      <section class="director-card constancia-tool">
+        <header>
+          <div>
+            <span><i class="fa-solid fa-file-circle-check"></i></span>
+            <div>
+              <h3>Constancia de estudio</h3>
+              <p>Selecciona al estudiante y EduGestión completa automáticamente la constancia oficial.</p>
+            </div>
+          </div>
+          <small>Dirección</small>
+        </header>
+
+        <div class="constancia-form-grid">
+          <label class="constancia-field constancia-field--wide">
+            <span>Estudiante</span>
+            <select id="constancia-estudiante">
+              <option value="">Selecciona un estudiante</option>
+              ${alumnos.map(a => `
+                <option value="${escapeAttrConstancia(normalizarClaveAlumno(a))}">
+                  ${h(a.nombre)} · ${h(a.ano)} ${h(a.seccion)} · ${h(a.turno)}
+                </option>`).join('')}
+            </select>
+          </label>
+
+          <label class="constancia-field">
+            <span>Año escolar</span>
+            <input id="constancia-ano-escolar" value="${anoEscolar}" maxlength="20">
+          </label>
+
+          <label class="constancia-field">
+            <span>Fecha de expedición</span>
+            <input id="constancia-fecha" type="date" value="${fechaIso}">
+          </label>
+
+          <label class="constancia-field constancia-field--wide">
+            <span>Director que firma</span>
+            <input id="constancia-director" value="${escapeAttrConstancia(profesorActual?.nombre || 'Rangel Cartaya Cheaufer Gamaliel')}" maxlength="120">
+          </label>
+        </div>
+
+        <div id="constancia-preview" class="constancia-preview">
+          <div class="director-empty">
+            <i class="fa-solid fa-user-graduate"></i>
+            <span>Selecciona un estudiante para preparar la constancia.</span>
+          </div>
+        </div>
+
+        <div class="constancia-actions">
+          <button type="button" id="constancia-vista-previa" class="director-back-button">
+            <i class="fa-solid fa-eye"></i> Vista previa
+          </button>
+          <button type="button" id="constancia-imprimir" class="constancia-primary" disabled>
+            <i class="fa-solid fa-print"></i> Imprimir / Guardar PDF
+          </button>
+        </div>
+      </section>`;
+  }
+
+  function plantillaConstanciaEstudio(alumno, opciones = {}) {
+    const director = String(opciones.director || profesorActual?.nombre || 'Director').trim();
+    const anoEscolar = String(opciones.anoEscolar || '2026-2027').trim();
+    const fecha = fechaConstanciaPartes(opciones.fecha);
+    const nombre = String(alumno?.nombre || '').trim();
+    const cedula = String(alumno?.cedula || '').trim();
+    const turno = String(alumno?.turno || '').trim();
+    const ano = String(alumno?.ano || '').trim();
+    const seccion = String(alumno?.seccion || '').trim();
+
+    return `
+      <article class="constancia-documento" id="constancia-documento">
+        <div class="constancia-membrete">
+          <div class="constancia-membrete__logos">
+            <strong>Gobierno Bolivariano<br>de Venezuela</strong>
+            <strong>Ministerio del Poder Popular<br>para la Educación</strong>
+            <strong>Zona Educativa<br>Distrito Capital</strong>
+            <strong>UEN Miguel Ángel<br>López Cárdenas</strong>
+          </div>
+          <div class="constancia-membrete__lineas">
+            <div>REPÚBLICA BOLIVARIANA DE VENEZUELA</div>
+            <div>U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS</div>
+            <div>CÓDIGO DEA: S157600105</div>
+            <div>URB. RAÚL LEONI, CASALTA III ENTRE LOS BLOQUES 5 Y 6</div>
+            <div>CONSEJO EDUCATIVO PARROQUIAL SUCRE-CARACAS</div>
+          </div>
+        </div>
+
+        <h1>CONSTANCIA DE ESTUDIO</h1>
+
+        <div class="constancia-cuerpo">
+          <p>
+            Quien suscribe, Prof. <strong>${h(director)}</strong> Director (e) de la unidad
+          </p>
+
+          <p class="constancia-institucion">
+            <strong>U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS</strong>, hace constar que el (la) Estudiante
+          </p>
+
+          <p>
+            <span class="constancia-dato constancia-dato--nombre">${h(nombre)}</span>
+            titular de la Cédula de Identidad
+          </p>
+
+          <p>
+            <strong>N° V.-</strong>
+            <span class="constancia-dato">${h(cedula || '________________')}</span>
+            cursa Estudios en este plantel en el turno de la
+            <span class="constancia-dato">${h(turno || '________')}</span>
+          </p>
+
+          <p>
+            el &nbsp; en
+            <span class="constancia-dato">${h(ano || '________')}</span>
+            &nbsp; Sección
+            <span class="constancia-dato">${h(seccion || '____')}</span>
+            &nbsp; durante el año escolar
+            <span class="constancia-dato">${h(anoEscolar)}</span>.
+          </p>
+
+          <p class="constancia-expedicion">
+            Constancia que se expide a petición de parte interesada, en la ciudad de Caracas a
+            los <span class="constancia-dato">${h(fecha.dia)}</span>
+            días del mes de <span class="constancia-dato">${h(fecha.mes)}</span>
+            del año <span class="constancia-dato">${h(fecha.ano)}</span>.
+          </p>
+        </div>
+
+        <div class="constancia-atentamente">ATENTAMENTE</div>
+
+        <div class="constancia-firma">
+          <div class="constancia-firma__linea"></div>
+          <strong>Prof. ${h(director).toUpperCase()}</strong>
+          <span>DIRECTOR</span>
+        </div>
+
+        <footer>
+          Dirección: Urb. Raúl Leoni av. principal entre los bloques 5 y 6 Casalta 3,
+          telf.: 0212-8717856 correo: uenlopezcmigueladireccion@gmail.com
+        </footer>
+      </article>`;
+  }
+
+  function actualizarVistaConstancia() {
+    const select = document.getElementById('constancia-estudiante');
+    const preview = document.getElementById('constancia-preview');
+    const imprimir = document.getElementById('constancia-imprimir');
+    if (!select || !preview || !imprimir) return;
+
+    const alumno = estudianteConstanciaPorClave(select.value);
+    if (!alumno) {
+      preview.innerHTML = '<div class="director-empty"><i class="fa-solid fa-user-graduate"></i><span>Selecciona un estudiante para preparar la constancia.</span></div>';
+      imprimir.disabled = true;
+      return;
+    }
+
+    const opciones = {
+      director: document.getElementById('constancia-director')?.value || '',
+      anoEscolar: document.getElementById('constancia-ano-escolar')?.value || '2026-2027',
+      fecha: document.getElementById('constancia-fecha')?.value || ''
+    };
+
+    preview.innerHTML = plantillaConstanciaEstudio(alumno, opciones);
+    imprimir.disabled = false;
+  }
+
+  function imprimirConstanciaEstudio() {
+    const select = document.getElementById('constancia-estudiante');
+    const alumno = estudianteConstanciaPorClave(select?.value || '');
+    if (!alumno) return;
+
+    const opciones = {
+      director: document.getElementById('constancia-director')?.value || '',
+      anoEscolar: document.getElementById('constancia-ano-escolar')?.value || '2026-2027',
+      fecha: document.getElementById('constancia-fecha')?.value || ''
+    };
+
+    const contenido = plantillaConstanciaEstudio(alumno, opciones);
+    const ventana = window.open('', '_blank', 'width=900,height=1100');
+    if (!ventana) {
+      alert('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para EduGestión.');
+      return;
+    }
+
+    ventana.document.open();
+    ventana.document.write(`<!doctype html>
+      <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>Constancia de estudio - ${h(alumno.nombre || '')}</title>
+        <style>
+          @page{size:Letter;margin:12mm 15mm}
+          *{box-sizing:border-box}
+          body{margin:0;background:#fff;color:#1c1c1c;font-family:Arial,Helvetica,sans-serif}
+          .constancia-documento{width:100%;max-width:780px;margin:0 auto;padding:8px 0 0;font-size:15px;line-height:1.65}
+          .constancia-membrete{border-bottom:2px solid #222;padding-bottom:9px;margin-bottom:24px}
+          .constancia-membrete__logos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-items:center;text-align:center;font-size:10px;line-height:1.15;margin-bottom:12px}
+          .constancia-membrete__lineas{font-size:11px;line-height:1.55}
+          h1{text-align:center;text-decoration:underline;font-size:20px;margin:40px 0 38px}
+          .constancia-cuerpo p{text-align:justify;margin:18px 0}
+          .constancia-institucion strong{font-size:17px}
+          .constancia-dato{display:inline-block;min-width:120px;padding:0 5px;border-bottom:1.4px solid #222;text-align:center;font-weight:700}
+          .constancia-dato--nombre{min-width:355px}
+          .constancia-expedicion{margin-top:35px!important}
+          .constancia-atentamente{text-align:center;font-weight:700;font-size:17px;margin:55px 0 80px}
+          .constancia-firma{text-align:center;width:320px;margin:0 auto 30px;line-height:1.25}
+          .constancia-firma__linea{border-top:1.5px solid #222;margin-bottom:8px}
+          .constancia-firma strong{display:block;font-size:17px}
+          .constancia-firma span{display:block;font-size:16px;font-weight:700}
+          footer{font-size:9.5px;line-height:1.35;margin-top:25px}
+          @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+        </style>
+      </head>
+      <body>${contenido}<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body>
+      </html>`);
+    ventana.document.close();
+  }
+
+  function enlazarConstanciaEstudio() {
+    if (vistaDirector !== 'constancia') return;
+    const select = document.getElementById('constancia-estudiante');
+    const btnPreview = document.getElementById('constancia-vista-previa');
+    const btnPrint = document.getElementById('constancia-imprimir');
+    const fecha = document.getElementById('constancia-fecha');
+    const ano = document.getElementById('constancia-ano-escolar');
+    const director = document.getElementById('constancia-director');
+
+    select?.addEventListener('change', actualizarVistaConstancia);
+    btnPreview?.addEventListener('click', actualizarVistaConstancia);
+    btnPrint?.addEventListener('click', imprimirConstanciaEstudio);
+    [fecha, ano, director].forEach(el => el?.addEventListener('input', () => {
+      if (select?.value) actualizarVistaConstancia();
+    }));
+  }
+
   function renderPanelDirector() {
     const content = document.getElementById('director-content');
     if (!content || !datosDirector) return;
@@ -3470,6 +3792,10 @@ const SESSION_KEY = 'edugestion_session_v2';
       ${tabla(['Fecha','Docente','Estudiante','Tipo','Título'], items.slice(0,500).map(x => `<tr><td>${h(x.fecha)}</td><td>${h(x.docente)}</td><td>${h(x.alumno)}</td><td><span class="director-status is-info">${h(x.tipo)}</span></td><td>${h(x.titulo)}</td></tr>`))}</section>`;
     }
 
+    if (vistaDirector === 'constancia') {
+      html = constanciaEstudioHtml();
+    }
+
     if (vistaDirector === 'auditoria') {
       const items = filtrar(datosDirector.auditoria, ['docente','actorNombre','alumno','accion','origen','estadoAnterior','estadoNuevo']);
       html = `<section class="director-card"><header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Auditoría administrativa</h3><p>Cambios de asistencia realizados desde la web y Telegram.</p></div></div><small>${items.length} movimientos</small></header>
@@ -3477,6 +3803,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     content.innerHTML = contexto + html;
+    enlazarConstanciaEstudio();
 
     content.querySelectorAll('[data-director-section]').forEach(button => {
       button.addEventListener('click', () => {
@@ -10854,7 +11181,27 @@ Archivo enviado directamente desde EduGestión.`);
 
     const rol = String(p.rol || '').toLowerCase();
     const institucional = rol === 'director' || rol === 'control_estudio';
-    if (!institucional) return;
+
+    if (!institucional) {
+      document.body.classList.remove('director-session', 'control-estudio-session');
+
+      const tabInstitucional = document.getElementById('tab-historial-administrativo');
+      const sectionInstitucional = document.getElementById('section-historial-administrativo');
+      if (tabInstitucional) {
+        tabInstitucional.classList.add('role-hidden');
+        tabInstitucional.classList.remove('is-active');
+        tabInstitucional.setAttribute('aria-selected', 'false');
+      }
+      if (sectionInstitucional) sectionInstitucional.classList.add('hidden');
+
+      const portal = document.querySelector('.sidebar-brand__text small');
+      if (portal) portal.textContent = 'Portal docente';
+
+      const materia = document.getElementById('profesor-materia');
+      if (materia) materia.textContent = p.materia || 'Sin materia asignada';
+
+      return;
+    }
 
     const control = rol === 'control_estudio';
     const nombre = String(p.nombre || (control ? 'Control de Estudio' : 'Dirección')).trim();
@@ -10892,4 +11239,145 @@ Archivo enviado directamente desde EduGestión.`);
   setTimeout(aplicarIdentidadInstitucional, 400);
 })();
 /* EDUGESTION_FASE_21C_IDENTIDAD_INSTITUCIONAL_END */
+/* EDUGESTION_FASE_21D_RESTAURAR_PORTAL_DOCENTE_END */
+
+
+
+/* =========================================================
+   EduGestión · FASE 21F
+   CONSTANCIA DE ESTUDIO — PANEL DE DIRECCIÓN
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21F_CONSTANCIA_ESTUDIO) return;
+  window.EDUGESTION_FASE21F_CONSTANCIA_ESTUDIO = true;
+
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21f-constancia-style';
+  style.textContent = `
+    .constancia-tool{overflow:hidden}
+    .constancia-form-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+      margin:18px 0 22px;
+      padding:18px;
+      background:#f6f9fd;
+      border:1px solid #dce8f5;
+      border-radius:16px
+    }
+    .constancia-field{display:flex;flex-direction:column;gap:7px}
+    .constancia-field--wide{grid-column:1/-1}
+    .constancia-field span{
+      font-size:.78rem;
+      font-weight:800;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+      color:#5d7290
+    }
+    .constancia-field input,
+    .constancia-field select{
+      width:100%;
+      min-height:46px;
+      padding:10px 12px;
+      border:1px solid #cddbee;
+      border-radius:11px;
+      background:#fff;
+      color:#173a65;
+      font:inherit
+    }
+    .constancia-preview{
+      background:#eef5fc;
+      border:1px solid #d6e5f5;
+      border-radius:18px;
+      padding:20px;
+      overflow:auto
+    }
+    .constancia-documento{
+      width:100%;
+      max-width:760px;
+      margin:0 auto;
+      background:#fff;
+      color:#202020;
+      padding:30px 38px;
+      border:1px solid #d8e0ea;
+      box-shadow:0 12px 35px rgba(24,61,105,.08);
+      font-family:Arial,Helvetica,sans-serif;
+      font-size:14px;
+      line-height:1.6
+    }
+    .constancia-membrete{
+      border-bottom:2px solid #333;
+      padding-bottom:10px;
+      margin-bottom:24px
+    }
+    .constancia-membrete__logos{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:7px;
+      text-align:center;
+      font-size:9px;
+      line-height:1.2;
+      margin-bottom:12px
+    }
+    .constancia-membrete__lineas{font-size:10px;line-height:1.5}
+    .constancia-documento h1{
+      text-align:center;
+      text-decoration:underline;
+      font-size:19px;
+      margin:36px 0 32px
+    }
+    .constancia-cuerpo p{text-align:justify;margin:17px 0}
+    .constancia-institucion strong{font-size:16px}
+    .constancia-dato{
+      display:inline-block;
+      min-width:105px;
+      padding:0 4px;
+      border-bottom:1px solid #333;
+      text-align:center;
+      font-weight:700
+    }
+    .constancia-dato--nombre{min-width:330px}
+    .constancia-expedicion{margin-top:32px!important}
+    .constancia-atentamente{
+      text-align:center;
+      font-size:16px;
+      font-weight:800;
+      margin:50px 0 70px
+    }
+    .constancia-firma{
+      width:300px;
+      margin:0 auto 26px;
+      text-align:center;
+      line-height:1.25
+    }
+    .constancia-firma__linea{border-top:1px solid #333;margin-bottom:7px}
+    .constancia-firma strong,.constancia-firma span{display:block;font-weight:800}
+    .constancia-documento footer{font-size:9px;line-height:1.3;margin-top:24px}
+    .constancia-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      margin-top:16px
+    }
+    .constancia-primary{
+      border:0;
+      border-radius:11px;
+      min-height:44px;
+      padding:0 18px;
+      background:#1f5da8;
+      color:#fff;
+      font-weight:800;
+      cursor:pointer
+    }
+    .constancia-primary:disabled{opacity:.45;cursor:not-allowed}
+    @media(max-width:800px){
+      .constancia-form-grid{grid-template-columns:1fr}
+      .constancia-field--wide{grid-column:auto}
+      .constancia-documento{padding:20px;min-width:680px}
+      .constancia-actions{flex-direction:column}
+    }
+  `;
+  document.head.appendChild(style);
+})();
+/* EDUGESTION_FASE_21F_CONSTANCIA_ESTUDIO_END */
 
