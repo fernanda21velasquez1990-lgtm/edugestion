@@ -2819,7 +2819,12 @@ const SESSION_KEY = 'edugestion_session_v2';
   }
 
   function esDirector() {
-    return String(profesorActual?.rol || '').toLowerCase() === 'director';
+    const rol = String(profesorActual?.rol || '').toLowerCase();
+    return rol === 'director' || rol === 'control_estudio';
+  }
+
+  function esControlEstudio() {
+    return String(profesorActual?.rol || '').toLowerCase() === 'control_estudio';
   }
 
   function crearPanelDirector() {
@@ -2916,22 +2921,39 @@ const SESSION_KEY = 'edugestion_session_v2';
 
   function aplicarAccesoPorRol() {
     crearPanelDirector();
-    const director = esDirector();
-    document.body.classList.toggle('director-session', director);
+    const institucional = esDirector();
+    const controlEstudio = esControlEstudio();
+    const rolTexto = controlEstudio ? 'Control de Estudio' : 'Dirección';
+
+    document.body.classList.toggle('director-session', institucional);
+    document.body.classList.toggle('control-estudio-session', controlEstudio);
+
     document.querySelectorAll('#app-nav .nav-item').forEach(item => {
-      const soloDirector = item.id === DIRECTOR_IDS.tab;
-      item.classList.toggle('role-hidden', director ? !soloDirector : soloDirector);
+      const soloInstitucional = item.id === DIRECTOR_IDS.tab;
+      item.classList.toggle('role-hidden', institucional ? !soloInstitucional : soloInstitucional);
     });
+
     document.querySelectorAll('#app-main > section').forEach(section => {
-      if (director && section.id !== DIRECTOR_IDS.section) section.classList.add('hidden');
+      if (institucional && section.id !== DIRECTOR_IDS.section) section.classList.add('hidden');
     });
+
     const sidebarLabel = document.querySelector('.sidebar-label');
     const portalLabel = document.querySelector('.sidebar-brand__text small');
-    if (sidebarLabel) sidebarLabel.textContent = director ? 'Supervisión institucional' : 'Espacio de trabajo';
-    if (portalLabel) portalLabel.textContent = director ? 'Panel de dirección' : 'Portal docente';
-    if (profesorMateria) profesorMateria.textContent = director ? 'Acceso institucional · Solo lectura' : (profesorActual?.materia || 'Sin materia asignada');
-    if (director) {
-      document.getElementById('director-account-name').textContent = profesorActual?.nombre || 'Dirección';
+    if (sidebarLabel) sidebarLabel.textContent = institucional ? 'Supervisión institucional' : 'Espacio de trabajo';
+    if (portalLabel) portalLabel.textContent = controlEstudio ? 'Control de Estudio' : (institucional ? 'Panel de dirección' : 'Portal docente');
+    if (profesorMateria) profesorMateria.textContent = institucional ? `${rolTexto} · Solo lectura` : (profesorActual?.materia || 'Sin materia asignada');
+
+    const eyebrow = document.querySelector(`#${DIRECTOR_IDS.section} .platform-hero__eyebrow`);
+    if (eyebrow) eyebrow.innerHTML = controlEstudio
+      ? '<i class="fa-solid fa-lock"></i> Acceso institucional · Control de Estudio'
+      : '<i class="fa-solid fa-lock"></i> Acceso exclusivo de dirección';
+
+    const identityLabel = document.querySelector(`#${DIRECTOR_IDS.section} .director-toolbar__identity small`);
+    if (identityLabel) identityLabel.textContent = controlEstudio ? 'Cuenta Control de Estudio' : 'Cuenta autorizada';
+
+    if (institucional) {
+      const nombreCuenta = document.getElementById('director-account-name');
+      if (nombreCuenta) nombreCuenta.textContent = profesorActual?.nombre || rolTexto;
       abrirPanelDirector();
     }
   }
@@ -2949,8 +2971,13 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById(DIRECTOR_IDS.tab)?.classList.add('is-active');
     document.getElementById(DIRECTOR_IDS.tab)?.setAttribute('aria-selected', 'true');
     document.getElementById(DIRECTOR_IDS.section)?.classList.remove('hidden');
-    if (pageTitle) pageTitle.textContent = 'Panel de dirección';
-    if (pageDescription) pageDescription.textContent = 'Consulta consolidada de todos los docentes · acceso de solo lectura.';
+    const controlEstudio = esControlEstudio();
+    if (pageTitle) pageTitle.textContent = controlEstudio ? 'Panel de Control de Estudio' : 'Panel de dirección';
+    if (pageDescription) pageDescription.textContent = controlEstudio
+      ? 'Consulta académica institucional · acceso de solo lectura.'
+      : 'Consulta consolidada de todos los docentes · acceso de solo lectura.';
+    const nombreCuenta = document.getElementById('director-account-name');
+    if (nombreCuenta) nombreCuenta.textContent = profesorActual?.nombre || (controlEstudio ? 'Control de Estudio' : 'Dirección');
     window.scrollTo({top: 0, behavior: 'smooth'});
     await cargarPanelDirector(false);
   }
@@ -3712,7 +3739,7 @@ const SESSION_KEY = 'edugestion_session_v2';
   }
 
   async function abrirBiblioteca() {
-    if (String(profesorActual?.rol || '').toLowerCase() === 'director') {
+    if (['director','control_estudio'].includes(String(profesorActual?.rol || '').toLowerCase())) {
       mostrarToast('La biblioteca digital pertenece a las cuentas docentes.', 'warning', 'Acceso docente');
       return;
     }
@@ -4155,7 +4182,7 @@ ${recurso.apunte}`);
   }
 
   async function abrir() {
-    if (String(profesorActual?.rol || '').toLowerCase() === 'director') return;
+    if (['director','control_estudio'].includes(String(profesorActual?.rol || '').toLowerCase())) return;
     document.querySelectorAll('.nav-item').forEach(i => { i.classList.remove('is-active'); i.setAttribute('aria-selected','false'); });
     document.querySelectorAll('#app-main > section').forEach(s => s.classList.add('hidden'));
     document.getElementById(IDS.tab)?.classList.add('is-active');
@@ -8984,7 +9011,7 @@ Archivo enviado directamente desde EduGestión.`);
 
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const rol=()=>String(window.profesorActual?.rol||'').toLowerCase();
-  const esDirector=()=>rol()==='director';
+  const esDirector=()=>['director','control_estudio'].includes(rol());
 
   function estilos(){
     if(document.getElementById('edu-admin-teachers-styles')) return;
@@ -9611,7 +9638,9 @@ Archivo enviado directamente desde EduGestión.`);
     const tab = document.getElementById(TAB_ID);
     if (!tab) return;
     const conectado = Boolean(window.profesorActual);
-    tab.classList.toggle('role-hidden', !conectado);
+    const rolActual = String(window.profesorActual?.rol || '').toLowerCase();
+    const controlEstudio = rolActual === 'control_estudio';
+    tab.classList.toggle('role-hidden', !conectado || controlEstudio);
   }
 
   function activarPestana() {
@@ -10042,7 +10071,7 @@ Archivo enviado directamente desde EduGestión.`);
     const tab = document.getElementById(TAB_ID);
     if (!tab) return;
     const conectado = Boolean(window.profesorActual);
-    const director = String(window.profesorActual?.rol || '').toLowerCase() === 'director';
+    const director = ['director','control_estudio'].includes(String(window.profesorActual?.rol || '').toLowerCase());
     tab.classList.toggle('role-hidden', !conectado || director);
   }
 
@@ -10063,7 +10092,7 @@ Archivo enviado directamente desde EduGestión.`);
   }
 
   async function abrir() {
-    if (!window.profesorActual || String(window.profesorActual.rol||'').toLowerCase()==='director') return;
+    if (!window.profesorActual || ['director','control_estudio'].includes(String(window.profesorActual.rol||'').toLowerCase())) return;
     activarPestana();
     await cargarBase();
   }
@@ -10808,4 +10837,59 @@ Archivo enviado directamente desde EduGestión.`);
   document.head.appendChild(s);
 })();
 /* EDUGESTION_BIBLIOTECA_GEMINI_LEGIBLE_V1_END */
+
+
+
+/* =========================================================
+   EduGestión · FASE 21C
+   IDENTIDAD INSTITUCIONAL — DIRECTOR / CONTROL DE ESTUDIO
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21C_IDENTIDAD_INSTITUCIONAL) return;
+  window.EDUGESTION_FASE21C_IDENTIDAD_INSTITUCIONAL = true;
+
+  function aplicarIdentidadInstitucional() {
+    const p = window.profesorActual;
+    if (!p) return;
+
+    const rol = String(p.rol || '').toLowerCase();
+    const institucional = rol === 'director' || rol === 'control_estudio';
+    if (!institucional) return;
+
+    const control = rol === 'control_estudio';
+    const nombre = String(p.nombre || (control ? 'Control de Estudio' : 'Dirección')).trim();
+
+    const account = document.getElementById('director-account-name');
+    if (account) account.textContent = nombre;
+
+    const portal = document.querySelector('.sidebar-brand__text small');
+    if (portal) portal.textContent = control ? 'Control de Estudio' : 'Panel de dirección';
+
+    const materia = document.getElementById('profesor-materia');
+    if (materia) materia.textContent = control ? 'Control de Estudio · Solo lectura' : 'Dirección · Solo lectura';
+
+    const eyebrow = document.querySelector('#section-historial-administrativo .platform-hero__eyebrow');
+    if (eyebrow) eyebrow.innerHTML = control
+      ? '<i class="fa-solid fa-lock"></i> Acceso institucional · Control de Estudio'
+      : '<i class="fa-solid fa-lock"></i> Acceso exclusivo de dirección';
+
+    const identityLabel = document.querySelector('#section-historial-administrativo .director-toolbar__identity small');
+    if (identityLabel) identityLabel.textContent = control ? 'Cuenta Control de Estudio' : 'Cuenta autorizada';
+
+    // Control de Estudio nunca debe mostrar herramientas privadas de docente.
+    if (control) {
+      document.querySelectorAll('#app-nav .nav-item').forEach(item => {
+        const permitido = ['tab-historial-administrativo','tab-gestion-profesores'].includes(item.id);
+        item.classList.toggle('role-hidden', !permitido);
+      });
+      const chat = document.getElementById('tab-chat-interno');
+      if (chat) chat.classList.add('role-hidden');
+    }
+  }
+
+  window.addEventListener('edugestion:session', () => setTimeout(aplicarIdentidadInstitucional, 60));
+  document.addEventListener('DOMContentLoaded', () => setTimeout(aplicarIdentidadInstitucional, 250));
+  setTimeout(aplicarIdentidadInstitucional, 400);
+})();
+/* EDUGESTION_FASE_21C_IDENTIDAD_INSTITUCIONAL_END */
 
