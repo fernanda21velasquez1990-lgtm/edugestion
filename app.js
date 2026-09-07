@@ -3457,7 +3457,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
           <label class="constancia-field constancia-field--wide">
             <span>Director que firma</span>
-            <input id="constancia-director" value="${escapeAttrConstancia(profesorActual?.nombre || 'Rangel Cartaya Cheaufer Gamaliel')}" maxlength="120">
+            <input id="constancia-director" value="Rangel Cartaya Cheaufer Gamaliel" maxlength="120">
           </label>
         </div>
 
@@ -3480,7 +3480,7 @@ const SESSION_KEY = 'edugestion_session_v2';
   }
 
   function plantillaConstanciaEstudio(alumno, opciones = {}) {
-    const director = String(opciones.director || profesorActual?.nombre || 'Director').trim();
+    const director = String(opciones.director || 'Rangel Cartaya Cheaufer Gamaliel').trim();
     const anoEscolar = String(opciones.anoEscolar || '2026-2027').trim();
     const fecha = fechaConstanciaPartes(opciones.fecha);
     const nombre = String(alumno?.nombre || '').trim();
@@ -3490,60 +3490,81 @@ const SESSION_KEY = 'edugestion_session_v2';
     const seccion = String(alumno?.seccion || '').trim();
 
     return `
-      <article class="constancia-documento" id="constancia-documento">
-        <div class="constancia-membrete">
-          <div class="constancia-membrete__logos">
-            <strong>Gobierno Bolivariano<br>de Venezuela</strong>
-            <strong>Ministerio del Poder Popular<br>para la Educación</strong>
-            <strong>Zona Educativa<br>Distrito Capital</strong>
-            <strong>UEN Miguel Ángel<br>López Cárdenas</strong>
+      <article class="constancia-documento constancia-documento--oficial" id="constancia-documento">
+        <div class="constancia-watermark" aria-hidden="true">
+          <div class="constancia-watermark__shield"><i class="fa-solid fa-school"></i></div>
+          <div>U.E.N. MIGUEL ÁNGEL<br>LÓPEZ CÁRDENAS</div>
+        </div>
+
+        <header class="constancia-cabecera-oficial">
+          <div class="constancia-cabecera-logos">
+            <div class="constancia-logo-box">
+              <strong>Gobierno<br>Bolivariano</strong>
+              <span>de Venezuela</span>
+            </div>
+            <div class="constancia-logo-box">
+              <strong>Ministerio</strong>
+              <span>del Poder Popular<br>para la Educación</span>
+            </div>
+            <div class="constancia-logo-box constancia-logo-box--zona">
+              <strong>Zona Educativa</strong>
+              <span>Distrito Capital</span>
+            </div>
+            <div class="constancia-logo-box">
+              <strong>UEN Miguel Ángel</strong>
+              <span>López Cárdenas</span>
+            </div>
           </div>
-          <div class="constancia-membrete__lineas">
+
+          <div class="constancia-cabecera-datos">
             <div>REPÚBLICA BOLIVARIANA DE VENEZUELA</div>
             <div>U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS</div>
             <div>CÓDIGO DEA: S157600105</div>
             <div>URB. RAÚL LEONI, CASALTA III ENTRE LOS BLOQUES 5 Y 6</div>
             <div>CONSEJO EDUCATIVO PARROQUIAL SUCRE-CARACAS</div>
           </div>
-        </div>
+        </header>
 
         <h1>CONSTANCIA DE ESTUDIO</h1>
 
-        <div class="constancia-cuerpo">
-          <p>
+        <div class="constancia-cuerpo constancia-cuerpo--oficial">
+          <p class="constancia-parrafo">
             Quien suscribe, Prof. <strong>${h(director)}</strong> Director (e) de la unidad
           </p>
 
-          <p class="constancia-institucion">
+          <p class="constancia-parrafo constancia-institucion">
             <strong>U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS</strong>, hace constar que el (la) Estudiante
           </p>
 
-          <p>
+          <p class="constancia-linea-larga">
             <span class="constancia-dato constancia-dato--nombre">${h(nombre)}</span>
-            titular de la Cédula de Identidad
+            <span>titular de la Cédula de Identidad</span>
           </p>
 
-          <p>
+          <p class="constancia-parrafo">
             <strong>N° V.-</strong>
-            <span class="constancia-dato">${h(cedula || '________________')}</span>
+            <span class="constancia-dato constancia-dato--cedula">${h(cedula || '')}</span>
             cursa Estudios en este plantel en el turno de la
-            <span class="constancia-dato">${h(turno || '________')}</span>
+            <span class="constancia-dato constancia-dato--turno">${h(turno || '')}</span>
           </p>
 
-          <p>
+          <p class="constancia-parrafo">
             el &nbsp; en
-            <span class="constancia-dato">${h(ano || '________')}</span>
+            <span class="constancia-dato constancia-dato--ano">${h(ano || '')}</span>
             &nbsp; Sección
-            <span class="constancia-dato">${h(seccion || '____')}</span>
+            <span class="constancia-dato constancia-dato--seccion">${h(seccion || '')}</span>
             &nbsp; durante el año escolar
-            <span class="constancia-dato">${h(anoEscolar)}</span>.
+            <span class="constancia-dato constancia-dato--escolar">${h(anoEscolar)}</span>.
           </p>
 
-          <p class="constancia-expedicion">
+          <p class="constancia-parrafo constancia-expedicion">
             Constancia que se expide a petición de parte interesada, en la ciudad de Caracas a
-            los <span class="constancia-dato">${h(fecha.dia)}</span>
-            días del mes de <span class="constancia-dato">${h(fecha.mes)}</span>
-            del año <span class="constancia-dato">${h(fecha.ano)}</span>.
+          </p>
+
+          <p class="constancia-parrafo constancia-fecha-linea">
+            los <span class="constancia-dato constancia-dato--dia">${h(fecha.dia)}</span>
+            días del mes de <span class="constancia-dato constancia-dato--mes">${h(fecha.mes)}</span>
+            del año <span class="constancia-dato constancia-dato--year">${h(fecha.ano)}</span>.
           </p>
         </div>
 
@@ -3555,9 +3576,10 @@ const SESSION_KEY = 'edugestion_session_v2';
           <span>DIRECTOR</span>
         </div>
 
-        <footer>
+        <footer class="constancia-footer-oficial">
           Dirección: Urb. Raúl Leoni av. principal entre los bloques 5 y 6 Casalta 3,
-          telf.: 0212-8717856 correo: uenlopezcmigueladireccion@gmail.com
+          telf.: 0212-8717856 correo:<br>
+          uenlopezcmigueladireccion@gmail.com
         </footer>
       </article>`;
   }
@@ -3610,25 +3632,112 @@ const SESSION_KEY = 'edugestion_session_v2';
         <meta charset="utf-8">
         <title>Constancia de estudio - ${h(alumno.nombre || '')}</title>
         <style>
-          @page{size:Letter;margin:12mm 15mm}
+          @page{size:Letter;margin:9mm 12mm}
           *{box-sizing:border-box}
-          body{margin:0;background:#fff;color:#1c1c1c;font-family:Arial,Helvetica,sans-serif}
-          .constancia-documento{width:100%;max-width:780px;margin:0 auto;padding:8px 0 0;font-size:15px;line-height:1.65}
-          .constancia-membrete{border-bottom:2px solid #222;padding-bottom:9px;margin-bottom:24px}
-          .constancia-membrete__logos{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-items:center;text-align:center;font-size:10px;line-height:1.15;margin-bottom:12px}
-          .constancia-membrete__lineas{font-size:11px;line-height:1.55}
-          h1{text-align:center;text-decoration:underline;font-size:20px;margin:40px 0 38px}
-          .constancia-cuerpo p{text-align:justify;margin:18px 0}
+          html,body{margin:0;padding:0;background:#fff;color:#181818;font-family:Arial,Helvetica,sans-serif}
+          .constancia-documento{
+            position:relative;
+            width:100%;
+            max-width:780px;
+            min-height:980px;
+            margin:0 auto;
+            padding:0 12px 5px;
+            font-size:15px;
+            line-height:1.58;
+            overflow:hidden
+          }
+          .constancia-watermark{
+            position:absolute;
+            inset:210px 90px 155px;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            text-align:center;
+            color:rgba(35,35,35,.045);
+            font-size:27px;
+            font-weight:800;
+            transform:rotate(-6deg);
+            z-index:0;
+            pointer-events:none
+          }
+          .constancia-watermark__shield{
+            width:300px;height:300px;border:10px solid rgba(35,35,35,.04);
+            border-radius:26% 26% 35% 35%;display:grid;place-items:center;
+            font-size:110px;margin-bottom:15px
+          }
+          .constancia-documento>*:not(.constancia-watermark){position:relative;z-index:1}
+          .constancia-cabecera-oficial{
+            border-bottom:2px solid #222;
+            padding:0 0 10px;
+            margin-bottom:34px
+          }
+          .constancia-cabecera-logos{
+            display:grid;
+            grid-template-columns:1.05fr 1.25fr 1.35fr 1.25fr;
+            align-items:center;
+            gap:9px;
+            min-height:55px;
+            margin-bottom:8px
+          }
+          .constancia-logo-box{
+            text-align:center;
+            line-height:1.03;
+            font-size:10px
+          }
+          .constancia-logo-box strong{display:block;font-size:11px}
+          .constancia-logo-box--zona strong{font-size:16px}
+          .constancia-logo-box--zona span{font-size:12px;font-weight:700}
+          .constancia-cabecera-datos{font-size:10.5px;line-height:1.48}
+          h1{
+            margin:44px 0 46px;
+            text-align:center;
+            font-size:19px;
+            text-decoration:underline;
+            letter-spacing:.01em
+          }
+          .constancia-cuerpo{font-size:15px}
+          .constancia-parrafo{margin:21px 0;text-align:justify}
           .constancia-institucion strong{font-size:17px}
-          .constancia-dato{display:inline-block;min-width:120px;padding:0 5px;border-bottom:1.4px solid #222;text-align:center;font-weight:700}
-          .constancia-dato--nombre{min-width:355px}
-          .constancia-expedicion{margin-top:35px!important}
-          .constancia-atentamente{text-align:center;font-weight:700;font-size:17px;margin:55px 0 80px}
-          .constancia-firma{text-align:center;width:320px;margin:0 auto 30px;line-height:1.25}
-          .constancia-firma__linea{border-top:1.5px solid #222;margin-bottom:8px}
+          .constancia-linea-larga{
+            display:flex;align-items:flex-end;gap:8px;margin:23px 0;text-align:justify
+          }
+          .constancia-dato{
+            display:inline-block;
+            min-height:22px;
+            padding:0 5px 1px;
+            border-bottom:1.35px solid #222;
+            text-align:center;
+            font-weight:700;
+            vertical-align:baseline
+          }
+          .constancia-dato--nombre{min-width:355px;flex:1}
+          .constancia-dato--cedula{min-width:165px}
+          .constancia-dato--turno{min-width:125px}
+          .constancia-dato--ano{min-width:135px}
+          .constancia-dato--seccion{min-width:115px}
+          .constancia-dato--escolar{min-width:135px}
+          .constancia-dato--dia{min-width:92px}
+          .constancia-dato--mes{min-width:185px}
+          .constancia-dato--year{min-width:145px}
+          .constancia-expedicion{margin-top:38px}
+          .constancia-fecha-linea{margin-top:21px}
+          .constancia-atentamente{
+            text-align:center;
+            font-size:17px;
+            font-weight:800;
+            margin:72px 0 100px
+          }
+          .constancia-firma{
+            width:330px;
+            margin:0 auto 34px;
+            text-align:center;
+            line-height:1.22
+          }
+          .constancia-firma__linea{border-top:1.45px solid #222;margin-bottom:8px}
           .constancia-firma strong{display:block;font-size:17px}
-          .constancia-firma span{display:block;font-size:16px;font-weight:700}
-          footer{font-size:9.5px;line-height:1.35;margin-top:25px}
+          .constancia-firma span{display:block;font-size:16px;font-weight:800;margin-top:4px}
+          .constancia-footer-oficial{font-size:9.5px;line-height:1.35;margin-top:26px}
           @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
         </style>
       </head>
@@ -11745,4 +11854,160 @@ Archivo enviado directamente desde EduGestión.`);
   setTimeout(ajustarMenuInstitucionalPorRol, 500);
 })();
 /* EDUGESTION_FASE_21H_MENU_SIDEBAR_PRINCIPAL_END */
+
+/* =========================================================
+   EduGestión · FASE 21I
+   CONSTANCIA OFICIAL + LEGIBILIDAD GENERAL
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21I_CONSTANCIA_LEGIBILIDAD) return;
+  window.EDUGESTION_FASE21I_CONSTANCIA_LEGIBILIDAD = true;
+
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21i-constancia-legibilidad-style';
+  style.textContent = `
+    /* Legibilidad general del sistema */
+    body{font-size:16px !important}
+    button,input,select,textarea{font-size:15px !important}
+    .app-sidebar .nav-item,
+    #app-nav .nav-item,
+    #director-sidebar-menu button{font-size:14px !important}
+    .app-sidebar small,
+    .topbar small,
+    .director-toolbar small,
+    .director-card small{font-size:12.5px !important}
+    .topbar h1,.topbar h2{font-size:24px !important}
+    .section-title,.section-header h2,.director-card h3{font-size:18px !important}
+    .director-card p,.director-state span,.director-toolbar label,
+    .stat-card,.summary-card,.student-card,.teacher-card{font-size:14.5px !important}
+    label{font-size:14px}
+    table{font-size:14px !important}
+
+    /* Formulario de constancia */
+    .constancia-tool header h3{font-size:20px !important}
+    .constancia-tool header p{font-size:14px !important}
+    .constancia-field span{font-size:13px !important}
+    .constancia-field input,
+    .constancia-field select{
+      min-height:50px !important;
+      font-size:16px !important
+    }
+
+    /* Vista previa del documento */
+    .constancia-preview{padding:24px !important}
+    .constancia-documento--oficial{
+      position:relative;
+      width:100%;
+      max-width:790px;
+      min-height:1020px;
+      margin:0 auto;
+      padding:28px 44px 24px;
+      overflow:hidden;
+      font-size:15px !important;
+      line-height:1.58 !important
+    }
+    .constancia-documento--oficial .constancia-watermark{
+      position:absolute;
+      inset:245px 100px 160px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      text-align:center;
+      color:rgba(32,57,79,.045);
+      font-size:27px;
+      font-weight:900;
+      transform:rotate(-6deg);
+      pointer-events:none;
+      z-index:0
+    }
+    .constancia-documento--oficial .constancia-watermark__shield{
+      width:320px;
+      height:320px;
+      border:11px solid rgba(32,57,79,.04);
+      border-radius:26% 26% 35% 35%;
+      display:grid;
+      place-items:center;
+      margin-bottom:12px;
+      font-size:110px
+    }
+    .constancia-documento--oficial>*:not(.constancia-watermark){
+      position:relative;
+      z-index:1
+    }
+    .constancia-cabecera-oficial{
+      border-bottom:2px solid #252525;
+      padding-bottom:10px;
+      margin-bottom:34px
+    }
+    .constancia-cabecera-logos{
+      display:grid;
+      grid-template-columns:1.05fr 1.25fr 1.35fr 1.25fr;
+      gap:9px;
+      align-items:center;
+      min-height:58px;
+      margin-bottom:10px
+    }
+    .constancia-logo-box{
+      text-align:center;
+      color:#202020;
+      font-size:10px !important;
+      line-height:1.06
+    }
+    .constancia-logo-box strong{display:block;font-size:11px !important}
+    .constancia-logo-box--zona strong{font-size:17px !important}
+    .constancia-logo-box--zona span{font-size:12px !important;font-weight:800}
+    .constancia-cabecera-datos{
+      font-size:11px !important;
+      line-height:1.5
+    }
+    .constancia-documento--oficial h1{
+      font-size:20px !important;
+      margin:46px 0 46px !important
+    }
+    .constancia-cuerpo--oficial{font-size:15.5px !important}
+    .constancia-parrafo{margin:22px 0 !important}
+    .constancia-linea-larga{
+      display:flex;
+      align-items:flex-end;
+      gap:8px;
+      margin:24px 0
+    }
+    .constancia-documento--oficial .constancia-dato{
+      min-height:23px;
+      padding:0 5px 1px;
+      border-bottom:1.35px solid #222;
+      font-weight:700
+    }
+    .constancia-documento--oficial .constancia-dato--nombre{min-width:355px;flex:1}
+    .constancia-documento--oficial .constancia-dato--cedula{min-width:165px}
+    .constancia-documento--oficial .constancia-dato--turno{min-width:125px}
+    .constancia-documento--oficial .constancia-dato--ano{min-width:135px}
+    .constancia-documento--oficial .constancia-dato--seccion{min-width:115px}
+    .constancia-documento--oficial .constancia-dato--escolar{min-width:135px}
+    .constancia-documento--oficial .constancia-dato--dia{min-width:92px}
+    .constancia-documento--oficial .constancia-dato--mes{min-width:185px}
+    .constancia-documento--oficial .constancia-dato--year{min-width:145px}
+    .constancia-documento--oficial .constancia-expedicion{margin-top:40px !important}
+    .constancia-documento--oficial .constancia-atentamente{
+      font-size:17px !important;
+      margin:74px 0 100px !important
+    }
+    .constancia-documento--oficial .constancia-firma{
+      width:330px;
+      margin:0 auto 34px
+    }
+    .constancia-documento--oficial .constancia-firma strong{font-size:17px !important}
+    .constancia-documento--oficial .constancia-firma span{font-size:16px !important}
+    .constancia-footer-oficial{font-size:10px !important;line-height:1.35}
+
+    @media(max-width:900px){
+      .constancia-documento--oficial{
+        min-width:760px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+/* EDUGESTION_FASE_21I_CONSTANCIA_LEGIBILIDAD_END */
 
