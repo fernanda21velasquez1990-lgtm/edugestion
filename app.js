@@ -4915,9 +4915,9 @@ const SESSION_KEY = 'edugestion_session_v2';
           <i class="fa-solid fa-link"></i>
           <div>
             <strong>Encuesta individual para el personal</strong>
-            <span>La próxima fase permitirá generar un enlace para que cada trabajador complete su propia ficha desde el teléfono y la información llegue automáticamente a EduGestión.</span>
+            <span>Cada trabajador tiene un enlace único. Usa el botón de enlace en la columna “Acciones” para copiarlo y enviarlo por WhatsApp.</span>
           </div>
-          <button type="button" disabled title="Se activará en la fase de encuesta">Próxima fase</button>
+          <span class="rp-badge">Activa</span>
         </div>
       </section>`;
   }
@@ -5129,6 +5129,7 @@ const SESSION_KEY = 'edugestion_session_v2';
                 <td>${h(p.antiguedad || calcularAntiguedadRegistroPersonal(p.ingresoPlantel) || '—')}</td>
                 <td>
                   <div class="rp-actions-row">
+                    <button type="button" data-rp-encuesta="${h(p.id)}" title="Copiar enlace de encuesta"><i class="fa-solid fa-link"></i></button>
                     <button type="button" data-rp-editar="${h(p.id)}" title="Editar"><i class="fa-solid fa-pen"></i></button>
                     <button type="button" data-rp-imprimir="${h(p.id)}" title="Imprimir ficha"><i class="fa-solid fa-print"></i></button>
                     <button type="button" data-rp-eliminar="${h(p.id)}" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
@@ -5371,7 +5372,77 @@ const SESSION_KEY = 'edugestion_session_v2';
     ventana.document.close();
   }
 
+  async function copiarTextoRegistroPersonal(texto) {
+    const valor = String(texto || '').trim();
+    if (!valor) throw new Error('No hay enlace para copiar.');
+
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(valor);
+      return true;
+    }
+
+    const area = document.createElement('textarea');
+    area.value = valor;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (!ok) throw new Error('No se pudo copiar automáticamente.');
+    return true;
+  }
+
+  async function obtenerEnlaceEncuestaRegistroPersonal(id, boton = null) {
+    const persona = personaRegistroPersonalPorId(id);
+    if (!persona) return;
+
+    const original = boton?.innerHTML || '';
+    if (boton) {
+      boton.disabled = true;
+      boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+    }
+
+    try {
+      const respuesta = await apiRequest('obtenerUrlEncuestaRegistroPersonal', { id });
+      const url = String(
+        respuesta?.urlEncuesta ||
+        respuesta?.data?.urlEncuesta ||
+        respuesta?.resultado?.urlEncuesta ||
+        ''
+      ).trim();
+
+      if (!url) throw new Error('El servidor no devolvió el enlace de la encuesta.');
+
+      try {
+        await copiarTextoRegistroPersonal(url);
+        mostrarToast(
+          `Enlace de ${persona.nombre} copiado. Ya puedes pegarlo en WhatsApp.`,
+          'success',
+          'Encuesta individual'
+        );
+      } catch (_) {
+        window.prompt(`Enlace individual de ${persona.nombre}. Cópialo para enviarlo por WhatsApp:`, url);
+      }
+    } catch (error) {
+      mostrarToast(
+        error.message || 'No se pudo obtener el enlace individual.',
+        'error',
+        'Encuesta individual'
+      );
+    } finally {
+      if (boton && document.body.contains(boton)) {
+        boton.disabled = false;
+        boton.innerHTML = original;
+      }
+    }
+  }
+
   function enlazarAccionesListadoRegistroPersonal() {
+    document.querySelectorAll('[data-rp-encuesta]').forEach(btn => btn.addEventListener('click', () => {
+      obtenerEnlaceEncuestaRegistroPersonal(btn.dataset.rpEncuesta, btn);
+    }));
     document.querySelectorAll('[data-rp-editar]').forEach(btn => btn.addEventListener('click', () => {
       const p = personaRegistroPersonalPorId(btn.dataset.rpEditar);
       if (p) mostrarFormularioRegistroPersonal(p);
@@ -14346,4 +14417,5 @@ Archivo enviado directamente desde EduGestión.`);
 })();
 /* EDUGESTION_FASE_21Q_REGISTRO_PERSONAL_END */
 /* EDUGESTION_FASE_21R_C_REGISTRO_PERSONAL_SHEETS_FRONTEND_END */
+/* EDUGESTION_FASE_21S_C_ENLACE_ENCUESTA_PERSONAL_FRONTEND_END */
 
