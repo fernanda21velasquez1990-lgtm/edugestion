@@ -3687,8 +3687,8 @@ const SESSION_KEY = 'edugestion_session_v2';
           .constancia-watermark img{
             width:88%;
             max-width:640px;
-            opacity:.20;
-            filter:grayscale(1) contrast(1.08)
+            opacity:.26;
+            filter:grayscale(1) contrast(1.10)
           }
           .constancia-documento>*:not(.constancia-watermark){position:relative;z-index:1}
           .constancia-cabecera-oficial{
@@ -11952,8 +11952,8 @@ Archivo enviado directamente desde EduGestión.`);
     .constancia-documento--oficial .constancia-watermark img{
       width:88%;
       max-width:640px;
-      opacity:.22;
-      filter:grayscale(1) contrast(1.08)
+      opacity:.28;
+      filter:grayscale(1) contrast(1.10)
     }
     .constancia-documento--oficial>*:not(.constancia-watermark){
       position:relative;
@@ -12101,3 +12101,5 @@ Archivo enviado directamente desde EduGestión.`);
 
 
 /* EDUGESTION_FASE_21K_CONSTANCIA_LOGO_PREVIEW_FIX_END */
+
+/* EDUGESTION_FASE_21L_LOGO_DIRECCION_MAS_VISIBLE_END */
