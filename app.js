@@ -4236,7 +4236,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
 
 
-  const DIRECTOR_FICHA_TECNICA_STORAGE = 'edugestion:director:ficha-tecnica:v1';
+  const DIRECTOR_FICHA_TECNICA_STORAGE = 'edugestion:director:ficha-tecnica-personal:v2';
 
   function cargarFichasTecnicasDirector() {
     try {
@@ -4251,30 +4251,62 @@ const SESSION_KEY = 'edugestion_session_v2';
     localStorage.setItem(DIRECTOR_FICHA_TECNICA_STORAGE, JSON.stringify(data));
   }
 
-  function fichaTecnicaAlumnoClave(alumno) {
-    return String(normalizarClaveAlumno(alumno) || alumno?.cedula || alumno?.nombre || '').trim();
+  function cargarPersonalFichaDirector() {
+    try {
+      const raw = localStorage.getItem('edugestion:director:personal-ficha:v1');
+      return raw ? JSON.parse(raw) : {Administrativo:[], Obrero:[]};
+    } catch (_) {
+      return {Administrativo:[], Obrero:[]};
+    }
   }
 
-  function fichaTecnicaActualPorAlumno(alumno) {
-    if (!alumno) return null;
+  function guardarPersonalFichaDirector(data) {
+    localStorage.setItem('edugestion:director:personal-ficha:v1', JSON.stringify(data));
+  }
+
+  function listaDocentesFichaDirector() {
+    const lista = Array.isArray(datosDirector?.docentes) ? datosDirector.docentes : [];
+    return lista
+      .map((d, i) => ({
+        id: String(d.idProfesor || d.id || d.correo || d.usuario || `docente-${i}`),
+        nombre: String(d.nombre || d.docente || d.nombreCompleto || d.correo || '').trim(),
+        cedula: String(d.cedula || d.identificacion || '').trim(),
+        cargo: String(d.materia || d.especialidad || 'Docente').trim(),
+        telefono: String(d.telefono || d.whatsapp || '').trim(),
+        correo: String(d.correo || d.email || '').trim(),
+        tipo: 'Docente'
+      }))
+      .filter(x => x.nombre);
+  }
+
+  function personalFichaPorTipo(tipo) {
+    if (tipo === 'Docente') return listaDocentesFichaDirector();
+    const store = cargarPersonalFichaDirector();
+    return Array.isArray(store[tipo]) ? store[tipo] : [];
+  }
+
+  function claveFichaPersonal(persona) {
+    return [
+      String(persona?.tipo || ''),
+      String(persona?.id || persona?.cedula || persona?.nombre || '')
+    ].join('|').toLowerCase();
+  }
+
+  function fichaTecnicaActualPersonal(persona) {
+    if (!persona) return null;
     const fichas = cargarFichasTecnicasDirector();
-    return fichas[fichaTecnicaAlumnoClave(alumno)] || null;
+    return fichas[claveFichaPersonal(persona)] || null;
   }
 
   function fichaTecnicaHtml() {
-    const alumnos = filtrar(
-      Array.isArray(datosDirector?.estudiantes) ? datosDirector.estudiantes : [],
-      ['nombre','cedula','ano','seccion','turno','docente']
-    ).sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
-
     return `
       <section class="director-card ficha-tecnica-tool">
         <header>
           <div>
             <span><i class="fa-solid fa-notes-medical"></i></span>
             <div>
-              <h3>Ficha técnica del estudiante</h3>
-              <p>Registro básico de salud, contacto de emergencia y datos importantes para la atención del estudiante.</p>
+              <h3>Ficha técnica del personal</h3>
+              <p>Registro básico de salud y emergencia para personal docente, administrativo y obrero.</p>
             </div>
           </div>
           <small>Dirección</small>
@@ -4282,29 +4314,56 @@ const SESSION_KEY = 'edugestion_session_v2';
 
         <div class="ficha-tecnica-aviso">
           <i class="fa-solid fa-shield-heart"></i>
-          <span>Registra solo la información necesaria para la seguridad y atención del estudiante. Estos datos son sensibles y deben mantenerse con acceso restringido.</span>
+          <span>Esta ficha es exclusiva para el personal de la institución. La información de salud es confidencial y debe utilizarse únicamente para atención y situaciones de emergencia.</span>
         </div>
 
-        <div class="ficha-tecnica-selector">
+        <div class="ficha-personal-selector-grid">
           <label>
-            <span>Estudiante</span>
-            <select id="ficha-tecnica-estudiante">
-              <option value="">Selecciona un estudiante</option>
-              ${alumnos.map(a => `
-                <option value="${escapeAttrConstancia(normalizarClaveAlumno(a))}">
-                  ${h(a.nombre)} · ${h(a.ano)} ${h(a.seccion)} · ${h(a.turno)}
-                </option>`).join('')}
+            <span>Tipo de personal</span>
+            <select id="ficha-personal-tipo">
+              <option value="Docente">Docente</option>
+              <option value="Administrativo">Administrativo</option>
+              <option value="Obrero">Obrero</option>
             </select>
           </label>
+
+          <label>
+            <span>Persona</span>
+            <select id="ficha-personal-persona">
+              <option value="">Selecciona una persona</option>
+            </select>
+          </label>
+
+          <button type="button" id="ficha-personal-agregar" class="director-back-button">
+            <i class="fa-solid fa-user-plus"></i> Agregar personal
+          </button>
+        </div>
+
+        <div id="ficha-personal-alta" class="ficha-personal-alta hidden">
+          <h4><i class="fa-solid fa-user-plus"></i> Registrar persona</h4>
+          <div class="ficha-grid ficha-grid-3">
+            <label><span>Nombre completo</span><input id="ficha-alta-nombre" placeholder="Nombre y apellido"></label>
+            <label><span>Cédula / Identificación</span><input id="ficha-alta-cedula" placeholder="Cédula"></label>
+            <label><span>Cargo / Función</span><input id="ficha-alta-cargo" placeholder="Cargo"></label>
+            <label><span>Teléfono</span><input id="ficha-alta-telefono" inputmode="tel" placeholder="Teléfono"></label>
+            <label><span>Correo</span><input id="ficha-alta-correo" inputmode="email" placeholder="Correo"></label>
+            <div class="ficha-alta-actions">
+              <button type="button" id="ficha-alta-cancelar" class="director-back-button">Cancelar</button>
+              <button type="button" id="ficha-alta-guardar" class="constancia-primary">Guardar persona</button>
+            </div>
+          </div>
         </div>
 
         <form id="ficha-tecnica-form" class="ficha-tecnica-form">
           <section class="ficha-bloque">
-            <h4><i class="fa-solid fa-user"></i> Datos básicos</h4>
+            <h4><i class="fa-solid fa-id-card"></i> Datos del personal</h4>
             <div class="ficha-grid ficha-grid-3">
               <label><span>Nombre completo</span><input id="ficha-nombre" readonly></label>
               <label><span>Cédula / Identificación</span><input id="ficha-cedula" readonly></label>
-              <label><span>Grado / Año y sección</span><input id="ficha-grado" readonly></label>
+              <label><span>Tipo de personal</span><input id="ficha-tipo" readonly></label>
+              <label><span>Cargo / Función</span><input id="ficha-cargo" readonly></label>
+              <label><span>Teléfono</span><input id="ficha-telefono" readonly></label>
+              <label><span>Correo</span><input id="ficha-correo" readonly></label>
             </div>
           </section>
 
@@ -4324,21 +4383,21 @@ const SESSION_KEY = 'edugestion_session_v2';
                 <select id="ficha-alergias"><option value="No">No</option><option value="Sí">Sí</option></select>
               </label>
               <label class="ficha-pregunta">
-                <span>¿Tiene alguna limitación física o recomendación especial?</span>
-                <select id="ficha-limitacion"><option value="No">No</option><option value="Sí">Sí</option></select>
+                <span>¿Tiene alguna condición que requiera atención especial?</span>
+                <select id="ficha-condicion-especial"><option value="No">No</option><option value="Sí">Sí</option></select>
               </label>
             </div>
 
             <div class="ficha-grid ficha-grid-2 ficha-detalles">
-              <label><span>Enfermedad / condición</span><textarea id="ficha-enfermedad-detalle" rows="3" placeholder="Ej.: asma, diabetes, epilepsia..."></textarea></label>
-              <label><span>Medicamentos</span><textarea id="ficha-medicamentos-detalle" rows="3" placeholder="Nombre del medicamento, horario o indicación relevante"></textarea></label>
+              <label><span>Enfermedad / condición</span><textarea id="ficha-enfermedad-detalle" rows="3" placeholder="Indica solo lo necesario"></textarea></label>
+              <label><span>Medicamentos</span><textarea id="ficha-medicamentos-detalle" rows="3" placeholder="Nombre, horario o indicación relevante"></textarea></label>
               <label><span>Alergias</span><textarea id="ficha-alergias-detalle" rows="3" placeholder="Medicamentos, alimentos, picaduras u otras"></textarea></label>
-              <label><span>Limitación o recomendación</span><textarea id="ficha-limitacion-detalle" rows="3" placeholder="Ej.: evitar esfuerzo intenso, usar lentes, etc."></textarea></label>
+              <label><span>Atención o recomendación especial</span><textarea id="ficha-condicion-detalle" rows="3" placeholder="Información importante para una emergencia"></textarea></label>
             </div>
           </section>
 
           <section class="ficha-bloque">
-            <h4><i class="fa-solid fa-house-medical"></i> Antecedentes familiares y observaciones</h4>
+            <h4><i class="fa-solid fa-house-medical"></i> Antecedentes familiares</h4>
             <div class="ficha-grid ficha-grid-2">
               <label class="ficha-pregunta">
                 <span>¿Tiene un familiar directo con una enfermedad importante?</span>
@@ -4348,14 +4407,6 @@ const SESSION_KEY = 'edugestion_session_v2';
                 <span>Detalle del antecedente familiar</span>
                 <textarea id="ficha-familiar-detalle" rows="3" placeholder="Indica solo lo necesario"></textarea>
               </label>
-              <label class="ficha-pregunta">
-                <span>¿Usa lentes, audífonos u otro apoyo?</span>
-                <select id="ficha-apoyo"><option value="No">No</option><option value="Sí">Sí</option></select>
-              </label>
-              <label>
-                <span>Detalle</span>
-                <textarea id="ficha-apoyo-detalle" rows="3" placeholder="Indica el apoyo que utiliza"></textarea>
-              </label>
             </div>
           </section>
 
@@ -4363,28 +4414,22 @@ const SESSION_KEY = 'edugestion_session_v2';
             <h4><i class="fa-solid fa-phone-volume"></i> Contacto de emergencia</h4>
             <div class="ficha-grid ficha-grid-3">
               <label><span>Nombre del contacto</span><input id="ficha-emergencia-nombre" placeholder="Nombre y apellido"></label>
-              <label><span>Parentesco</span><input id="ficha-emergencia-parentesco" placeholder="Madre, padre, representante..."></label>
+              <label><span>Parentesco</span><input id="ficha-emergencia-parentesco" placeholder="Esposo/a, madre, hijo/a..."></label>
               <label><span>Teléfono principal</span><input id="ficha-emergencia-telefono" inputmode="tel" placeholder="Número de contacto"></label>
               <label><span>Teléfono alternativo</span><input id="ficha-emergencia-telefono2" inputmode="tel" placeholder="Opcional"></label>
-              <label><span>Persona autorizada para retirar al estudiante</span><input id="ficha-autorizado" placeholder="Nombre completo"></label>
-              <label><span>Teléfono de la persona autorizada</span><input id="ficha-autorizado-telefono" inputmode="tel" placeholder="Número de contacto"></label>
+              <label><span>Grupo sanguíneo</span><input id="ficha-grupo-sanguineo" placeholder="Opcional"></label>
+              <label><span>Centro de salud de preferencia</span><input id="ficha-centro-salud" placeholder="Opcional"></label>
             </div>
           </section>
 
           <section class="ficha-bloque">
             <h4><i class="fa-solid fa-clipboard"></i> Información adicional</h4>
             <div class="ficha-grid ficha-grid-2">
-              <label>
-                <span>Centro de salud de preferencia</span>
-                <input id="ficha-centro-salud" placeholder="Opcional">
-              </label>
-              <label>
-                <span>Seguro médico / institución</span>
-                <input id="ficha-seguro" placeholder="Opcional">
-              </label>
+              <label><span>Seguro médico / institución</span><input id="ficha-seguro" placeholder="Opcional"></label>
+              <label><span>Restricción alimentaria importante</span><input id="ficha-restriccion" placeholder="Opcional"></label>
               <label class="ficha-col-completa">
                 <span>Observaciones importantes</span>
-                <textarea id="ficha-observaciones" rows="4" placeholder="Cualquier información necesaria para la atención y seguridad del estudiante"></textarea>
+                <textarea id="ficha-observaciones" rows="4" placeholder="Cualquier información necesaria para la atención y seguridad del trabajador"></textarea>
               </label>
             </div>
           </section>
@@ -4398,9 +4443,20 @@ const SESSION_KEY = 'edugestion_session_v2';
       </section>`;
   }
 
-  function obtenerAlumnoFichaTecnica() {
-    const select = document.getElementById('ficha-tecnica-estudiante');
-    return estudianteConstanciaPorClave(select?.value || '');
+  function personaFichaSeleccionada() {
+    const tipo = document.getElementById('ficha-personal-tipo')?.value || 'Docente';
+    const id = document.getElementById('ficha-personal-persona')?.value || '';
+    return personalFichaPorTipo(tipo).find(p => String(p.id) === String(id)) || null;
+  }
+
+  function llenarSelectorPersonalFicha() {
+    const tipo = document.getElementById('ficha-personal-tipo')?.value || 'Docente';
+    const select = document.getElementById('ficha-personal-persona');
+    if (!select) return;
+    const lista = personalFichaPorTipo(tipo);
+    select.innerHTML = `<option value="">Selecciona una persona</option>` +
+      lista.map(p => `<option value="${escapeAttrConstancia(p.id)}">${h(p.nombre)}${p.cargo ? ` · ${h(p.cargo)}` : ''}</option>`).join('');
+    llenarFichaTecnicaPersonal(null, null);
   }
 
   function valorFicha(id) {
@@ -4408,202 +4464,232 @@ const SESSION_KEY = 'edugestion_session_v2';
     return String(el?.value || '').trim();
   }
 
-  function llenarFichaTecnica(alumno, ficha = null) {
+  function llenarFichaTecnicaPersonal(persona, ficha = null) {
     const set = (id, valor='') => {
       const el = document.getElementById(id);
       if (el) el.value = valor ?? '';
     };
 
-    set('ficha-nombre', alumno?.nombre || '');
-    set('ficha-cedula', alumno?.cedula || '');
-    set('ficha-grado', alumno ? `${alumno.ano || ''} ${alumno.seccion || ''} · ${alumno.turno || ''}`.trim() : '');
+    set('ficha-nombre', persona?.nombre || '');
+    set('ficha-cedula', persona?.cedula || '');
+    set('ficha-tipo', persona?.tipo || '');
+    set('ficha-cargo', persona?.cargo || '');
+    set('ficha-telefono', persona?.telefono || '');
+    set('ficha-correo', persona?.correo || '');
 
     const data = ficha || {};
     set('ficha-enfermedad', data.enfermedad || 'No');
     set('ficha-medicamentos', data.medicamentos || 'No');
     set('ficha-alergias', data.alergias || 'No');
-    set('ficha-limitacion', data.limitacion || 'No');
+    set('ficha-condicion-especial', data.condicionEspecial || 'No');
     set('ficha-enfermedad-detalle', data.enfermedadDetalle || '');
     set('ficha-medicamentos-detalle', data.medicamentosDetalle || '');
     set('ficha-alergias-detalle', data.alergiasDetalle || '');
-    set('ficha-limitacion-detalle', data.limitacionDetalle || '');
+    set('ficha-condicion-detalle', data.condicionDetalle || '');
     set('ficha-familiar-enfermo', data.familiarEnfermo || 'No');
     set('ficha-familiar-detalle', data.familiarDetalle || '');
-    set('ficha-apoyo', data.apoyo || 'No');
-    set('ficha-apoyo-detalle', data.apoyoDetalle || '');
     set('ficha-emergencia-nombre', data.emergenciaNombre || '');
     set('ficha-emergencia-parentesco', data.emergenciaParentesco || '');
     set('ficha-emergencia-telefono', data.emergenciaTelefono || '');
     set('ficha-emergencia-telefono2', data.emergenciaTelefono2 || '');
-    set('ficha-autorizado', data.autorizado || '');
-    set('ficha-autorizado-telefono', data.autorizadoTelefono || '');
+    set('ficha-grupo-sanguineo', data.grupoSanguineo || '');
     set('ficha-centro-salud', data.centroSalud || '');
     set('ficha-seguro', data.seguro || '');
+    set('ficha-restriccion', data.restriccion || '');
     set('ficha-observaciones', data.observaciones || '');
 
     const guardar = document.getElementById('ficha-tecnica-guardar');
     const imprimir = document.getElementById('ficha-tecnica-imprimir');
-    if (guardar) guardar.disabled = !alumno;
-    if (imprimir) imprimir.disabled = !alumno;
+    if (guardar) guardar.disabled = !persona;
+    if (imprimir) imprimir.disabled = !persona;
   }
 
-  function leerFichaTecnicaFormulario(alumno) {
+  function leerFichaTecnicaFormulario(persona) {
     return {
-      alumnoClave: fichaTecnicaAlumnoClave(alumno),
-      nombre: alumno?.nombre || '',
-      cedula: alumno?.cedula || '',
-      ano: alumno?.ano || '',
-      seccion: alumno?.seccion || '',
-      turno: alumno?.turno || '',
+      personaClave: claveFichaPersonal(persona),
+      tipo: persona?.tipo || '',
+      id: persona?.id || '',
+      nombre: persona?.nombre || '',
+      cedula: persona?.cedula || '',
+      cargo: persona?.cargo || '',
+      telefono: persona?.telefono || '',
+      correo: persona?.correo || '',
       enfermedad: valorFicha('ficha-enfermedad'),
       medicamentos: valorFicha('ficha-medicamentos'),
       alergias: valorFicha('ficha-alergias'),
-      limitacion: valorFicha('ficha-limitacion'),
+      condicionEspecial: valorFicha('ficha-condicion-especial'),
       enfermedadDetalle: valorFicha('ficha-enfermedad-detalle'),
       medicamentosDetalle: valorFicha('ficha-medicamentos-detalle'),
       alergiasDetalle: valorFicha('ficha-alergias-detalle'),
-      limitacionDetalle: valorFicha('ficha-limitacion-detalle'),
+      condicionDetalle: valorFicha('ficha-condicion-detalle'),
       familiarEnfermo: valorFicha('ficha-familiar-enfermo'),
       familiarDetalle: valorFicha('ficha-familiar-detalle'),
-      apoyo: valorFicha('ficha-apoyo'),
-      apoyoDetalle: valorFicha('ficha-apoyo-detalle'),
       emergenciaNombre: valorFicha('ficha-emergencia-nombre'),
       emergenciaParentesco: valorFicha('ficha-emergencia-parentesco'),
       emergenciaTelefono: valorFicha('ficha-emergencia-telefono'),
       emergenciaTelefono2: valorFicha('ficha-emergencia-telefono2'),
-      autorizado: valorFicha('ficha-autorizado'),
-      autorizadoTelefono: valorFicha('ficha-autorizado-telefono'),
+      grupoSanguineo: valorFicha('ficha-grupo-sanguineo'),
       centroSalud: valorFicha('ficha-centro-salud'),
       seguro: valorFicha('ficha-seguro'),
+      restriccion: valorFicha('ficha-restriccion'),
       observaciones: valorFicha('ficha-observaciones'),
       actualizadoEn: new Date().toISOString()
     };
   }
 
   function guardarFichaTecnicaDirector() {
-    const alumno = obtenerAlumnoFichaTecnica();
-    if (!alumno) {
-      alert('Primero selecciona un estudiante.');
+    const persona = personaFichaSeleccionada();
+    if (!persona) {
+      alert('Primero selecciona una persona.');
       return;
     }
-
-    const ficha = leerFichaTecnicaFormulario(alumno);
+    const ficha = leerFichaTecnicaFormulario(persona);
     if (!ficha.emergenciaNombre || !ficha.emergenciaTelefono) {
       alert('Completa al menos el nombre y teléfono del contacto de emergencia.');
       return;
     }
-
     const fichas = cargarFichasTecnicasDirector();
-    fichas[ficha.alumnoClave] = ficha;
+    fichas[ficha.personaClave] = ficha;
     guardarFichasTecnicasDirector(fichas);
-    alert(`Ficha técnica de ${alumno.nombre} guardada correctamente.`);
+    alert(`Ficha técnica de ${persona.nombre} guardada correctamente.`);
   }
 
   function limpiarFichaTecnicaDirector() {
-    const alumno = obtenerAlumnoFichaTecnica();
-    if (!alumno) {
-      llenarFichaTecnica(null, null);
+    const persona = personaFichaSeleccionada();
+    llenarFichaTecnicaPersonal(persona, null);
+  }
+
+  function guardarAltaPersonalFicha() {
+    const tipo = document.getElementById('ficha-personal-tipo')?.value || 'Administrativo';
+    if (tipo === 'Docente') {
+      alert('Los docentes se cargan desde los docentes registrados en EduGestión.');
       return;
     }
-    llenarFichaTecnica(alumno, null);
+    const nombre = valorFicha('ficha-alta-nombre');
+    if (!nombre) {
+      alert('Indica el nombre de la persona.');
+      return;
+    }
+    const cedula = valorFicha('ficha-alta-cedula');
+    const persona = {
+      id: `personal-${Date.now()}`,
+      nombre,
+      cedula,
+      cargo: valorFicha('ficha-alta-cargo'),
+      telefono: valorFicha('ficha-alta-telefono'),
+      correo: valorFicha('ficha-alta-correo'),
+      tipo
+    };
+    const store = cargarPersonalFichaDirector();
+    if (!Array.isArray(store[tipo])) store[tipo] = [];
+    store[tipo].push(persona);
+    guardarPersonalFichaDirector(store);
+    document.getElementById('ficha-personal-alta')?.classList.add('hidden');
+    llenarSelectorPersonalFicha();
+    const select = document.getElementById('ficha-personal-persona');
+    if (select) {
+      select.value = persona.id;
+      llenarFichaTecnicaPersonal(persona, fichaTecnicaActualPersonal(persona));
+    }
   }
 
   function imprimirFichaTecnicaDirector() {
-    const alumno = obtenerAlumnoFichaTecnica();
-    if (!alumno) return;
-
-    const ficha = leerFichaTecnicaFormulario(alumno);
+    const persona = personaFichaSeleccionada();
+    if (!persona) return;
+    const ficha = leerFichaTecnicaFormulario(persona);
     const ventana = window.open('', '_blank', 'width=900,height=1100');
     if (!ventana) {
       alert('Permite ventanas emergentes para imprimir la ficha.');
       return;
     }
-
     const fila = (titulo, valor) => `<tr><th>${h(titulo)}</th><td>${h(valor || 'No indicado')}</td></tr>`;
     ventana.document.write(`<!doctype html>
-      <html lang="es">
-      <head>
-        <meta charset="utf-8">
-        <title>Ficha técnica - ${h(alumno.nombre || '')}</title>
-        <style>
-          @page{size:Letter;margin:12mm}
-          *{box-sizing:border-box}
-          body{font-family:Arial,Helvetica,sans-serif;color:#1d2f45;margin:0}
-          h1{text-align:center;font-size:22px;margin:0 0 4px}
-          .sub{text-align:center;color:#66798f;margin:0 0 22px;font-size:12px}
-          .datos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
-          .datos div{border:1px solid #ccd8e5;border-radius:8px;padding:9px;text-align:center}
-          .datos strong{display:block;font-size:11px;color:#63778e;text-transform:uppercase;margin-bottom:3px}
-          h2{font-size:15px;background:#eef5fb;padding:8px 10px;margin:18px 0 8px;border-radius:7px}
-          table{width:100%;border-collapse:collapse;font-size:11px}
-          th,td{border:1px solid #cbd7e3;padding:7px;vertical-align:top;text-align:left}
-          th{width:34%;background:#f8fbfe}
-          .nota{margin-top:18px;font-size:9px;color:#697b8e}
-        </style>
-      </head>
-      <body>
-        <h1>FICHA TÉCNICA DEL ESTUDIANTE</h1>
+      <html lang="es"><head><meta charset="utf-8"><title>Ficha técnica - ${h(persona.nombre || '')}</title>
+      <style>
+        @page{size:Letter;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1d2f45;margin:0}
+        h1{text-align:center;font-size:22px;margin:0 0 4px}.sub{text-align:center;color:#66798f;margin:0 0 22px;font-size:12px}
+        .datos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}.datos div{border:1px solid #ccd8e5;border-radius:8px;padding:9px;text-align:center}
+        .datos strong{display:block;font-size:11px;color:#63778e;text-transform:uppercase;margin-bottom:3px}h2{font-size:15px;background:#eef5fb;padding:8px 10px;margin:18px 0 8px;border-radius:7px}
+        table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #cbd7e3;padding:7px;vertical-align:top;text-align:left}th{width:34%;background:#f8fbfe}
+        .nota{margin-top:18px;font-size:9px;color:#697b8e}
+      </style></head><body>
+        <h1>FICHA TÉCNICA DEL PERSONAL</h1>
         <p class="sub">U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS · Uso interno de Dirección</p>
-
         <div class="datos">
-          <div><strong>Estudiante</strong>${h(alumno.nombre || '')}</div>
-          <div><strong>Cédula</strong>${h(alumno.cedula || '')}</div>
-          <div><strong>Grado / Sección</strong>${h(`${alumno.ano || ''} ${alumno.seccion || ''}`)}</div>
+          <div><strong>Nombre</strong>${h(persona.nombre || '')}</div>
+          <div><strong>Tipo de personal</strong>${h(persona.tipo || '')}</div>
+          <div><strong>Cargo</strong>${h(persona.cargo || '')}</div>
         </div>
 
-        <h2>Información de salud</h2>
-        <table>
+        <h2>Información de salud</h2><table>
           ${fila('¿Sufre de alguna enfermedad?', ficha.enfermedad)}
           ${fila('Detalle', ficha.enfermedadDetalle)}
           ${fila('¿Toma medicamentos?', ficha.medicamentos)}
           ${fila('Medicamentos / indicación', ficha.medicamentosDetalle)}
           ${fila('¿Tiene alergias?', ficha.alergias)}
           ${fila('Detalle de alergias', ficha.alergiasDetalle)}
-          ${fila('¿Tiene limitación o recomendación especial?', ficha.limitacion)}
-          ${fila('Detalle', ficha.limitacionDetalle)}
-          ${fila('¿Usa lentes, audífonos u otro apoyo?', ficha.apoyo)}
-          ${fila('Detalle del apoyo', ficha.apoyoDetalle)}
+          ${fila('¿Requiere atención especial?', ficha.condicionEspecial)}
+          ${fila('Detalle', ficha.condicionDetalle)}
         </table>
 
-        <h2>Antecedentes familiares</h2>
-        <table>
+        <h2>Antecedentes familiares</h2><table>
           ${fila('¿Familiar directo con enfermedad importante?', ficha.familiarEnfermo)}
           ${fila('Detalle', ficha.familiarDetalle)}
         </table>
 
-        <h2>Contacto de emergencia</h2>
-        <table>
+        <h2>Contacto de emergencia</h2><table>
           ${fila('Nombre', ficha.emergenciaNombre)}
           ${fila('Parentesco', ficha.emergenciaParentesco)}
           ${fila('Teléfono principal', ficha.emergenciaTelefono)}
           ${fila('Teléfono alternativo', ficha.emergenciaTelefono2)}
-          ${fila('Persona autorizada para retirar', ficha.autorizado)}
-          ${fila('Teléfono de persona autorizada', ficha.autorizadoTelefono)}
+          ${fila('Grupo sanguíneo', ficha.grupoSanguineo)}
+          ${fila('Centro de salud de preferencia', ficha.centroSalud)}
         </table>
 
-        <h2>Información adicional</h2>
-        <table>
-          ${fila('Centro de salud de preferencia', ficha.centroSalud)}
+        <h2>Información adicional</h2><table>
           ${fila('Seguro médico / institución', ficha.seguro)}
+          ${fila('Restricción alimentaria', ficha.restriccion)}
           ${fila('Observaciones', ficha.observaciones)}
         </table>
-
-        <p class="nota">Documento de uso interno. La información contenida en esta ficha debe manejarse de forma confidencial y únicamente para fines de seguridad, atención y emergencia del estudiante.</p>
+        <p class="nota">Documento confidencial de uso interno. La información contenida debe utilizarse únicamente para seguridad, atención y emergencias del trabajador.</p>
         <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
-      </body>
-      </html>`);
+      </body></html>`);
     ventana.document.close();
   }
 
   function enlazarFichaTecnicaDirector() {
     if (vistaDirector !== 'ficha-tecnica') return;
-    const select = document.getElementById('ficha-tecnica-estudiante');
+
+    const tipo = document.getElementById('ficha-personal-tipo');
+    const personaSelect = document.getElementById('ficha-personal-persona');
     const form = document.getElementById('ficha-tecnica-form');
 
-    select?.addEventListener('change', () => {
-      const alumno = obtenerAlumnoFichaTecnica();
-      llenarFichaTecnica(alumno, fichaTecnicaActualPorAlumno(alumno));
+    llenarSelectorPersonalFicha();
+
+    tipo?.addEventListener('change', () => {
+      llenarSelectorPersonalFicha();
+      const botonAgregar = document.getElementById('ficha-personal-agregar');
+      if (botonAgregar) botonAgregar.disabled = tipo.value === 'Docente';
     });
+
+    personaSelect?.addEventListener('change', () => {
+      const persona = personaFichaSeleccionada();
+      llenarFichaTecnicaPersonal(persona, fichaTecnicaActualPersonal(persona));
+    });
+
+    document.getElementById('ficha-personal-agregar')?.addEventListener('click', () => {
+      const t = tipo?.value || 'Docente';
+      if (t === 'Docente') {
+        alert('Los docentes se cargan automáticamente desde EduGestión. Selecciona Administrativo u Obrero para registrar una persona manualmente.');
+        return;
+      }
+      document.getElementById('ficha-personal-alta')?.classList.remove('hidden');
+    });
+
+    document.getElementById('ficha-alta-cancelar')?.addEventListener('click', () => {
+      document.getElementById('ficha-personal-alta')?.classList.add('hidden');
+    });
+    document.getElementById('ficha-alta-guardar')?.addEventListener('click', guardarAltaPersonalFicha);
 
     form?.addEventListener('submit', e => {
       e.preventDefault();
@@ -4613,7 +4699,6 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById('ficha-tecnica-limpiar')?.addEventListener('click', limpiarFichaTecnicaDirector);
     document.getElementById('ficha-tecnica-imprimir')?.addEventListener('click', imprimirFichaTecnicaDirector);
   }
-
 
   function renderPanelDirector() {
     document.querySelectorAll('#director-sidebar-menu [data-director-view]').forEach(b => {
@@ -13374,4 +13459,87 @@ Archivo enviado directamente desde EduGestión.`);
   document.head.appendChild(style);
 })();
 /* EDUGESTION_FASE_21O_FICHA_TECNICA_END */
+
+
+/* =========================================================
+   EduGestión · FASE 21P
+   FICHA TÉCNICA DEL PERSONAL — DIRECCIÓN
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21P_FICHA_PERSONAL) return;
+  window.EDUGESTION_FASE21P_FICHA_PERSONAL = true;
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21p-ficha-personal-style';
+  style.textContent = `
+    .ficha-personal-selector-grid{
+      max-width:1080px;
+      margin:20px auto;
+      padding:18px;
+      display:grid;
+      grid-template-columns:220px minmax(280px,1fr) auto;
+      gap:14px;
+      align-items:end;
+      border:1px solid #dce7f2;
+      background:#f8fbfe;
+      border-radius:15px
+    }
+    .ficha-personal-selector-grid label{
+      display:flex;
+      flex-direction:column;
+      gap:8px
+    }
+    .ficha-personal-selector-grid label span{
+      font-size:15px;
+      font-weight:800;
+      color:#526b86;
+      text-transform:uppercase
+    }
+    .ficha-personal-selector-grid select{
+      width:100%;
+      min-height:50px;
+      padding:10px 12px;
+      font-size:16px;
+      border:1px solid #cbdbee;
+      border-radius:11px;
+      color:#173a65;
+      background:#fff
+    }
+    .ficha-personal-selector-grid button{
+      min-height:50px;
+      font-size:15px
+    }
+    .ficha-personal-alta{
+      max-width:1080px;
+      margin:18px auto;
+      padding:20px;
+      border:1px dashed #b9cee4;
+      border-radius:15px;
+      background:#f7fbff
+    }
+    .ficha-personal-alta h4{
+      margin:0 0 16px;
+      font-size:20px;
+      color:#173a65
+    }
+    .ficha-alta-actions{
+      display:flex;
+      gap:10px;
+      align-items:end
+    }
+    .ficha-alta-actions button{
+      min-height:46px
+    }
+    @media(max-width:900px){
+      .ficha-personal-selector-grid{
+        grid-template-columns:1fr
+      }
+      .ficha-alta-actions{
+        flex-direction:column;
+        align-items:stretch
+      }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+/* EDUGESTION_FASE_21P_FICHA_PERSONAL_END */
 
