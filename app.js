@@ -2861,6 +2861,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       <button data-director-view="horarios" type="button"><i class="fa-solid fa-calendar-week"></i><span>Horarios</span></button>
       <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
       <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span></button>
+      <button data-director-view="estadistica" type="button"><i class="fa-solid fa-chart-pie"></i><span>Estadística</span></button>
       <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
     `;
     nav.appendChild(menuInstitucional);
@@ -2969,7 +2970,9 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     const constanciaTab = document.querySelector('#director-sidebar-menu [data-director-view="constancia"]');
     if (constanciaTab) constanciaTab.classList.toggle('hidden', controlEstudio);
-    if (controlEstudio && vistaDirector === 'constancia') vistaDirector = 'resumen';
+    const estadisticaTab = document.querySelector('#director-sidebar-menu [data-director-view="estadistica"]');
+    if (estadisticaTab) estadisticaTab.classList.toggle('hidden', controlEstudio);
+    if (controlEstudio && ['constancia','estadistica'].includes(vistaDirector)) vistaDirector = 'resumen';
 
     if (institucional) {
       const nombreCuenta = document.getElementById('director-account-name');
@@ -3798,6 +3801,357 @@ const SESSION_KEY = 'edugestion_session_v2';
     }));
   }
 
+
+  const DIRECTOR_ESTADISTICA_STORAGE = 'edugestion:director:estadistica-diaria:v1';
+
+  function cargarEstadisticaDirectorLocal() {
+    try {
+      const raw = localStorage.getItem(DIRECTOR_ESTADISTICA_STORAGE);
+      const data = raw ? JSON.parse(raw) : {};
+      return {
+        salones: Array.isArray(data.salones) ? data.salones : [],
+        registros: data.registros && typeof data.registros === 'object' ? data.registros : {}
+      };
+    } catch (_) {
+      return { salones: [], registros: {} };
+    }
+  }
+
+  function guardarEstadisticaDirectorLocal(data) {
+    localStorage.setItem(DIRECTOR_ESTADISTICA_STORAGE, JSON.stringify(data));
+  }
+
+  function claveSalonEstadistica(salon) {
+    return [
+      String(salon.nivel || '').trim().toLowerCase(),
+      String(salon.grado || '').trim().toLowerCase(),
+      String(salon.seccion || '').trim().toLowerCase(),
+      String(salon.turno || '').trim().toLowerCase()
+    ].join('|');
+  }
+
+  function salonesEstadisticaDirector() {
+    const store = cargarEstadisticaDirectorLocal();
+    const mapa = new Map();
+
+    store.salones.forEach(s => {
+      const salon = {
+        id: String(s.id || claveSalonEstadistica(s)),
+        nivel: s.nivel || 'Bachillerato',
+        grado: s.grado || '',
+        seccion: s.seccion || 'A',
+        turno: s.turno || 'Mañana',
+        personalizado: true
+      };
+      mapa.set(salon.id, salon);
+    });
+
+    const estudiantes = Array.isArray(datosDirector?.estudiantes) ? datosDirector.estudiantes : [];
+    estudiantes.forEach(a => {
+      const grado = String(a.ano || a.grado || '').trim();
+      const seccion = String(a.seccion || 'A').trim();
+      const turnoRaw = String(a.turno || 'Mañana').trim();
+      const nivelRaw = String(a.nivel || a.etapa || a.modalidad || '').trim().toLowerCase();
+      let nivel = 'Bachillerato';
+      if (nivelRaw.includes('prim')) nivel = 'Primaria';
+      else if (nivelRaw.includes('media') || nivelRaw.includes('bach')) nivel = 'Bachillerato';
+      if (!grado) return;
+
+      const salon = {
+        nivel,
+        grado,
+        seccion,
+        turno: /tarde/i.test(turnoRaw) ? 'Tarde' : 'Mañana',
+        personalizado: false
+      };
+      salon.id = claveSalonEstadistica(salon);
+      if (!mapa.has(salon.id)) mapa.set(salon.id, salon);
+    });
+
+    if (!mapa.size) {
+      ['1ero','2do','3ero','4to','5to','6to'].forEach(grado => {
+        const salon = {nivel:'Primaria', grado, seccion:'A', turno:'Mañana', personalizado:true};
+        salon.id = claveSalonEstadistica(salon);
+        mapa.set(salon.id, salon);
+      });
+      ['1ero','2do','3ero','4to','5to'].forEach(grado => {
+        const salon = {nivel:'Bachillerato', grado, seccion:'A', turno:'Mañana', personalizado:true};
+        salon.id = claveSalonEstadistica(salon);
+        mapa.set(salon.id, salon);
+      });
+    }
+
+    return [...mapa.values()].sort((a,b) => {
+      const nivelA = a.nivel === 'Primaria' ? 0 : 1;
+      const nivelB = b.nivel === 'Primaria' ? 0 : 1;
+      if (nivelA !== nivelB) return nivelA - nivelB;
+      const numA = parseInt(String(a.grado).match(/\d+/)?.[0] || '99', 10);
+      const numB = parseInt(String(b.grado).match(/\d+/)?.[0] || '99', 10);
+      if (numA !== numB) return numA - numB;
+      return String(a.seccion).localeCompare(String(b.seccion), 'es', {sensitivity:'base'});
+    });
+  }
+
+  function fechaHoyEstadistica() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function formatoFechaEstadistica(fecha) {
+    if (!fecha) return '';
+    const [y,m,d] = String(fecha).split('-').map(Number);
+    const f = new Date(y || 2000, (m || 1)-1, d || 1);
+    return f.toLocaleDateString('es-VE', {day:'2-digit', month:'long', year:'numeric'});
+  }
+
+  function datosDiaEstadistica(fecha) {
+    const store = cargarEstadisticaDirectorLocal();
+    return store.registros[fecha] || { salones:{}, totalNinas:0, totalNinos:0, total:0 };
+  }
+
+  function estadisticaDirectorHtml() {
+    const salones = salonesEstadisticaDirector();
+    const fecha = fechaHoyEstadistica();
+    const dia = datosDiaEstadistica(fecha);
+    const store = cargarEstadisticaDirectorLocal();
+    const historial = Object.entries(store.registros)
+      .sort((a,b)=>String(b[0]).localeCompare(String(a[0])))
+      .slice(0,14);
+
+    return `
+      <section class="director-card director-estadistica">
+        <header>
+          <div>
+            <span><i class="fa-solid fa-chart-pie"></i></span>
+            <div>
+              <h3>Estadística diaria institucional</h3>
+              <p>Conteo diario de niñas y niños por salón, desde Primaria hasta 5.º año de Bachillerato.</p>
+            </div>
+          </div>
+          <small>Dirección</small>
+        </header>
+
+        <div class="estadistica-toolbar">
+          <label>
+            <span>Fecha del conteo</span>
+            <input id="estadistica-fecha" type="date" value="${fecha}">
+          </label>
+          <div class="estadistica-toolbar__actions">
+            <button id="estadistica-guardar" type="button" class="constancia-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar conteo</button>
+            <button id="estadistica-imprimir" type="button" class="director-back-button"><i class="fa-solid fa-print"></i> Imprimir resumen</button>
+          </div>
+        </div>
+
+        <section class="estadistica-metricas">
+          <article><i class="fa-solid fa-person-dress"></i><div><strong id="estadistica-total-ninas">${Number(dia.totalNinas)||0}</strong><span>Niñas presentes</span></div></article>
+          <article><i class="fa-solid fa-person"></i><div><strong id="estadistica-total-ninos">${Number(dia.totalNinos)||0}</strong><span>Niños presentes</span></div></article>
+          <article class="estadistica-total"><i class="fa-solid fa-people-group"></i><div><strong id="estadistica-total-general">${Number(dia.total)||0}</strong><span>Total diario en la institución</span></div></article>
+        </section>
+
+        <div class="estadistica-add-salon">
+          <div>
+            <strong>Agregar salón</strong>
+            <span>Úsalo para registrar secciones que todavía no aparezcan automáticamente.</span>
+          </div>
+          <select id="estadistica-nivel">
+            <option value="Primaria">Primaria</option>
+            <option value="Bachillerato">Bachillerato</option>
+          </select>
+          <select id="estadistica-grado">
+            <option>1ero</option><option>2do</option><option>3ero</option><option>4to</option><option>5to</option><option>6to</option>
+          </select>
+          <input id="estadistica-seccion" maxlength="4" value="A" placeholder="Sección">
+          <select id="estadistica-turno"><option>Mañana</option><option>Tarde</option></select>
+          <button id="estadistica-agregar-salon" type="button"><i class="fa-solid fa-plus"></i> Agregar</button>
+        </div>
+
+        <div class="estadistica-tabla-wrap">
+          <table class="estadistica-tabla">
+            <thead>
+              <tr><th>Nivel</th><th>Grado / Año</th><th>Sección</th><th>Turno</th><th>Niñas</th><th>Niños</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+              ${salones.map(s => {
+                const r = dia.salones?.[s.id] || {};
+                const ninas = Number(r.ninas)||0;
+                const ninos = Number(r.ninos)||0;
+                return `<tr data-estadistica-salon="${h(s.id)}">
+                  <td><strong>${h(s.nivel)}</strong></td>
+                  <td>${h(s.grado)}</td>
+                  <td>${h(s.seccion)}</td>
+                  <td>${h(s.turno)}</td>
+                  <td><input class="estadistica-num estadistica-ninas" type="number" inputmode="numeric" min="0" step="1" value="${ninas}"></td>
+                  <td><input class="estadistica-num estadistica-ninos" type="number" inputmode="numeric" min="0" step="1" value="${ninos}"></td>
+                  <td><strong class="estadistica-fila-total">${ninas+ninos}</strong></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+
+        <section class="estadistica-historial">
+          <header>
+            <div><span><i class="fa-solid fa-calendar-days"></i></span><div><h3>Historial diario</h3><p>Últimos conteos guardados.</p></div></div>
+            <small>${historial.length} días</small>
+          </header>
+          ${historial.length ? `
+          <div class="estadistica-historial-grid">
+            ${historial.map(([f,r]) => `
+              <button type="button" data-estadistica-cargar="${h(f)}">
+                <span>${h(formatoFechaEstadistica(f))}</span>
+                <strong>${Number(r.total)||0}</strong>
+                <small>${Number(r.totalNinas)||0} niñas · ${Number(r.totalNinos)||0} niños</small>
+              </button>`).join('')}
+          </div>` : '<div class="director-empty"><i class="fa-solid fa-chart-line"></i><span>Aún no hay conteos diarios guardados.</span></div>'}
+        </section>
+
+        <div class="estadistica-nota">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>Esta primera versión guarda los conteos en este navegador. En una fase posterior podemos sincronizarlos con Google Sheets para que queden disponibles desde cualquier equipo.</span>
+        </div>
+      </section>`;
+  }
+
+  function recalcularEstadisticaDirector() {
+    let totalNinas = 0;
+    let totalNinos = 0;
+    document.querySelectorAll('[data-estadistica-salon]').forEach(tr => {
+      const ninas = Math.max(0, Number(tr.querySelector('.estadistica-ninas')?.value || 0));
+      const ninos = Math.max(0, Number(tr.querySelector('.estadistica-ninos')?.value || 0));
+      totalNinas += ninas;
+      totalNinos += ninos;
+      const total = tr.querySelector('.estadistica-fila-total');
+      if (total) total.textContent = String(ninas + ninos);
+    });
+    const ninasNode = document.getElementById('estadistica-total-ninas');
+    const ninosNode = document.getElementById('estadistica-total-ninos');
+    const totalNode = document.getElementById('estadistica-total-general');
+    if (ninasNode) ninasNode.textContent = String(totalNinas);
+    if (ninosNode) ninosNode.textContent = String(totalNinos);
+    if (totalNode) totalNode.textContent = String(totalNinas + totalNinos);
+    return {totalNinas,totalNinos,total:totalNinas+totalNinos};
+  }
+
+  function guardarDiaEstadisticaDirector() {
+    const fecha = document.getElementById('estadistica-fecha')?.value || fechaHoyEstadistica();
+    const store = cargarEstadisticaDirectorLocal();
+    const salones = {};
+    document.querySelectorAll('[data-estadistica-salon]').forEach(tr => {
+      const id = tr.dataset.estadisticaSalon;
+      salones[id] = {
+        ninas: Math.max(0, Number(tr.querySelector('.estadistica-ninas')?.value || 0)),
+        ninos: Math.max(0, Number(tr.querySelector('.estadistica-ninos')?.value || 0))
+      };
+    });
+    const totales = recalcularEstadisticaDirector();
+    store.registros[fecha] = {fecha, salones, ...totales, guardadoEn:new Date().toISOString()};
+    guardarEstadisticaDirectorLocal(store);
+    alert(`Conteo del ${formatoFechaEstadistica(fecha)} guardado correctamente. Total institucional: ${totales.total} estudiantes.`);
+    renderPanelDirector();
+    const fechaNode = document.getElementById('estadistica-fecha');
+    if (fechaNode) fechaNode.value = fecha;
+    cargarDiaEstadisticaEnFormulario(fecha);
+  }
+
+  function cargarDiaEstadisticaEnFormulario(fecha) {
+    const dia = datosDiaEstadistica(fecha);
+    document.querySelectorAll('[data-estadistica-salon]').forEach(tr => {
+      const r = dia.salones?.[tr.dataset.estadisticaSalon] || {ninas:0,ninos:0};
+      const ninas = tr.querySelector('.estadistica-ninas');
+      const ninos = tr.querySelector('.estadistica-ninos');
+      if (ninas) ninas.value = Number(r.ninas)||0;
+      if (ninos) ninos.value = Number(r.ninos)||0;
+    });
+    recalcularEstadisticaDirector();
+  }
+
+  function agregarSalonEstadisticaDirector() {
+    const nivel = document.getElementById('estadistica-nivel')?.value || 'Primaria';
+    const grado = document.getElementById('estadistica-grado')?.value || '1ero';
+    const seccion = String(document.getElementById('estadistica-seccion')?.value || 'A').trim().toUpperCase();
+    const turno = document.getElementById('estadistica-turno')?.value || 'Mañana';
+    if (!seccion) {
+      alert('Indica la sección del salón.');
+      return;
+    }
+
+    const salon = {nivel,grado,seccion,turno,personalizado:true};
+    salon.id = claveSalonEstadistica(salon);
+    const store = cargarEstadisticaDirectorLocal();
+    if (!store.salones.some(s => String(s.id) === salon.id)) {
+      store.salones.push(salon);
+      guardarEstadisticaDirectorLocal(store);
+    }
+    renderPanelDirector();
+  }
+
+  function actualizarGradosEstadistica() {
+    const nivel = document.getElementById('estadistica-nivel')?.value || 'Primaria';
+    const select = document.getElementById('estadistica-grado');
+    if (!select) return;
+    const grados = nivel === 'Primaria'
+      ? ['1ero','2do','3ero','4to','5to','6to']
+      : ['1ero','2do','3ero','4to','5to'];
+    select.innerHTML = grados.map(x=>`<option>${x}</option>`).join('');
+  }
+
+  function imprimirEstadisticaDirector() {
+    const fecha = document.getElementById('estadistica-fecha')?.value || fechaHoyEstadistica();
+    const rows = [...document.querySelectorAll('[data-estadistica-salon]')].map(tr => {
+      const celdas = tr.querySelectorAll('td');
+      return {
+        nivel:celdas[0]?.innerText || '',
+        grado:celdas[1]?.innerText || '',
+        seccion:celdas[2]?.innerText || '',
+        turno:celdas[3]?.innerText || '',
+        ninas:Number(tr.querySelector('.estadistica-ninas')?.value || 0),
+        ninos:Number(tr.querySelector('.estadistica-ninos')?.value || 0)
+      };
+    });
+    const totales = recalcularEstadisticaDirector();
+    const ventana = window.open('', '_blank', 'width=900,height=1100');
+    if (!ventana) {
+      alert('Permite ventanas emergentes para imprimir el resumen.');
+      return;
+    }
+    ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Estadística diaria - ${h(fecha)}</title>
+      <style>
+        @page{size:Letter;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#172033;margin:0}
+        h1{text-align:center;font-size:22px;margin:0 0 4px}.sub{text-align:center;margin:0 0 24px;color:#53657a}
+        .totales{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.totales div{border:1px solid #ccd7e5;padding:14px;text-align:center;border-radius:10px}.totales strong{display:block;font-size:26px}
+        table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #bac7d6;padding:7px;text-align:center}th{background:#eef4fa}
+        footer{margin-top:28px;font-size:10px;color:#5d6b7c}
+      </style></head><body>
+      <h1>ESTADÍSTICA DIARIA INSTITUCIONAL</h1><p class="sub">U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS · ${h(formatoFechaEstadistica(fecha))}</p>
+      <section class="totales"><div><strong>${totales.totalNinas}</strong>Niñas</div><div><strong>${totales.totalNinos}</strong>Niños</div><div><strong>${totales.total}</strong>Total institucional</div></section>
+      <table><thead><tr><th>Nivel</th><th>Grado/Año</th><th>Sección</th><th>Turno</th><th>Niñas</th><th>Niños</th><th>Total</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td>${h(r.nivel)}</td><td>${h(r.grado)}</td><td>${h(r.seccion)}</td><td>${h(r.turno)}</td><td>${r.ninas}</td><td>${r.ninos}</td><td><strong>${r.ninas+r.ninos}</strong></td></tr>`).join('')}
+      </tbody></table>
+      <footer>Documento generado desde EduGestión · Panel de Dirección.</footer>
+      <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+    ventana.document.close();
+  }
+
+  function enlazarEstadisticaDirector() {
+    if (vistaDirector !== 'estadistica') return;
+    document.querySelectorAll('.estadistica-num').forEach(input => input.addEventListener('input', recalcularEstadisticaDirector));
+    document.getElementById('estadistica-fecha')?.addEventListener('change', e => cargarDiaEstadisticaEnFormulario(e.target.value));
+    document.getElementById('estadistica-guardar')?.addEventListener('click', guardarDiaEstadisticaDirector);
+    document.getElementById('estadistica-imprimir')?.addEventListener('click', imprimirEstadisticaDirector);
+    document.getElementById('estadistica-agregar-salon')?.addEventListener('click', agregarSalonEstadisticaDirector);
+    document.getElementById('estadistica-nivel')?.addEventListener('change', actualizarGradosEstadistica);
+    document.querySelectorAll('[data-estadistica-cargar]').forEach(button => {
+      button.addEventListener('click', () => {
+        const fecha = button.dataset.estadisticaCargar;
+        const input = document.getElementById('estadistica-fecha');
+        if (input) input.value = fecha;
+        cargarDiaEstadisticaEnFormulario(fecha);
+      });
+    });
+    recalcularEstadisticaDirector();
+  }
+
+
   function renderPanelDirector() {
     document.querySelectorAll('#director-sidebar-menu [data-director-view]').forEach(b => {
       b.classList.toggle('is-active', b.dataset.directorView === vistaDirector);
@@ -3958,6 +4312,10 @@ const SESSION_KEY = 'edugestion_session_v2';
       html = constanciaEstudioHtml();
     }
 
+    if (vistaDirector === 'estadistica') {
+      html = estadisticaDirectorHtml();
+    }
+
     if (vistaDirector === 'auditoria') {
       const items = filtrar(datosDirector.auditoria, ['docente','actorNombre','alumno','accion','origen','estadoAnterior','estadoNuevo']);
       html = `<section class="director-card"><header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Auditoría administrativa</h3><p>Cambios de asistencia realizados desde la web y Telegram.</p></div></div><small>${items.length} movimientos</small></header>
@@ -3966,6 +4324,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     content.innerHTML = contexto + html;
     enlazarConstanciaEstudio();
+    enlazarEstadisticaDirector();
 
     content.querySelectorAll('[data-director-section]').forEach(button => {
       button.addEventListener('click', () => {
@@ -12103,3 +12462,63 @@ Archivo enviado directamente desde EduGestión.`);
 /* EDUGESTION_FASE_21K_CONSTANCIA_LOGO_PREVIEW_FIX_END */
 
 /* EDUGESTION_FASE_21L_LOGO_DIRECCION_MAS_VISIBLE_END */
+
+
+/* =========================================================
+   EduGestión · FASE 21M
+   ESTADÍSTICA DIARIA INSTITUCIONAL — DIRECCIÓN
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21M_ESTADISTICA_DIRECCION) return;
+  window.EDUGESTION_FASE21M_ESTADISTICA_DIRECCION = true;
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21m-estadistica-direccion-style';
+  style.textContent = `
+    .director-estadistica{overflow:hidden}
+    .estadistica-toolbar{
+      display:flex;align-items:end;justify-content:space-between;gap:16px;
+      padding:18px;margin:18px 0;background:#f5f9fd;border:1px solid #dce8f5;border-radius:16px
+    }
+    .estadistica-toolbar label{display:flex;flex-direction:column;gap:7px;min-width:220px}
+    .estadistica-toolbar label span{font-size:13px;font-weight:800;color:#58708c;text-transform:uppercase}
+    .estadistica-toolbar input{min-height:48px;border:1px solid #cddbee;border-radius:11px;padding:10px 12px;font:inherit;color:#173a65;background:#fff}
+    .estadistica-toolbar__actions{display:flex;gap:10px;flex-wrap:wrap}
+    .estadistica-metricas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:18px 0}
+    .estadistica-metricas article{display:flex;align-items:center;gap:14px;padding:18px;border:1px solid #d6e4f3;border-radius:16px;background:#fff}
+    .estadistica-metricas article>i{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:#edf5fd;color:#1f5da8;font-size:20px}
+    .estadistica-metricas strong{display:block;font-size:30px;color:#173a65;line-height:1}
+    .estadistica-metricas span{display:block;margin-top:5px;color:#63758c;font-size:13px;font-weight:700}
+    .estadistica-total{border-color:#a9c8e8!important;background:#f3f8fe!important}
+    .estadistica-add-salon{
+      display:grid;grid-template-columns:minmax(220px,1.5fr) 150px 120px 90px 120px auto;
+      gap:10px;align-items:center;padding:15px;margin:18px 0;background:#f8fbfe;border:1px dashed #b9cee4;border-radius:15px
+    }
+    .estadistica-add-salon>div strong{display:block;color:#173a65}.estadistica-add-salon>div span{display:block;color:#6f8299;font-size:12px;margin-top:3px}
+    .estadistica-add-salon select,.estadistica-add-salon input{min-height:43px;border:1px solid #cddbee;border-radius:10px;padding:8px 10px;background:#fff;color:#173a65;font:inherit}
+    .estadistica-add-salon button{min-height:43px;border:0;border-radius:10px;padding:0 14px;background:#1f5da8;color:#fff;font-weight:800;cursor:pointer}
+    .estadistica-tabla-wrap{overflow:auto;border:1px solid #d9e5f1;border-radius:15px}
+    .estadistica-tabla{width:100%;border-collapse:collapse;min-width:760px;background:#fff}
+    .estadistica-tabla th{padding:12px 10px;background:#edf5fc;color:#516a87;font-size:12px;text-transform:uppercase;letter-spacing:.03em;text-align:center}
+    .estadistica-tabla td{padding:11px 10px;border-top:1px solid #e4edf6;text-align:center;color:#223d5d}
+    .estadistica-tabla td:first-child,.estadistica-tabla td:nth-child(2){text-align:left}
+    .estadistica-num{width:86px;min-height:42px;text-align:center;border:1px solid #c9d9ea;border-radius:9px;font:inherit;font-weight:800;color:#173a65;background:#fff}
+    .estadistica-fila-total{display:inline-grid;place-items:center;min-width:48px;height:38px;padding:0 8px;border-radius:10px;background:#eaf3fc;color:#154b82}
+    .estadistica-historial{margin-top:22px;padding-top:6px}
+    .estadistica-historial-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:14px}
+    .estadistica-historial-grid button{border:1px solid #d9e6f3;border-radius:13px;background:#fff;padding:13px;text-align:left;cursor:pointer}
+    .estadistica-historial-grid button:hover{border-color:#8eb7df;background:#f7fbff}
+    .estadistica-historial-grid span{display:block;color:#63758c;font-size:12px}.estadistica-historial-grid strong{display:block;font-size:25px;color:#173a65;margin:4px 0}.estadistica-historial-grid small{color:#63758c}
+    .estadistica-nota{display:flex;gap:10px;align-items:flex-start;margin-top:18px;padding:12px 14px;border-radius:12px;background:#f4f8fc;color:#536a84;font-size:12px}
+    .estadistica-nota i{color:#1f5da8;margin-top:2px}
+    @media(max-width:900px){
+      .estadistica-toolbar{align-items:stretch;flex-direction:column}
+      .estadistica-metricas{grid-template-columns:1fr}
+      .estadistica-add-salon{grid-template-columns:1fr 1fr}
+      .estadistica-add-salon>div{grid-column:1/-1}
+      .estadistica-add-salon button{grid-column:1/-1}
+    }
+  `;
+  document.head.appendChild(style);
+})();
+/* EDUGESTION_FASE_21M_ESTADISTICA_DIRECCION_END */
+
