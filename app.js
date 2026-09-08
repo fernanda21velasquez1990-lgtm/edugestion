@@ -4908,6 +4908,9 @@ const SESSION_KEY = 'edugestion_session_v2';
                 <small>Control de respuestas del personal en tiempo real.</small>
               </div>
             </div>
+            <button id="registro-personal-imprimir-reporte" type="button" class="director-back-button rp-report-button">
+              <i class="fa-solid fa-print"></i> Imprimir reporte
+            </button>
           </div>
           ${(() => {
             const encuesta = registroPersonalResumenEncuestas(lista);
@@ -5394,6 +5397,118 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
   }
 
+  function imprimirReporteEncuestasPersonal() {
+    const lista = cargarRegistroPersonalDirector()
+      .slice()
+      .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+
+    if (!lista.length) {
+      mostrarToast('No hay personal registrado para generar el reporte.', 'error', 'Reporte de encuestas');
+      return;
+    }
+
+    const resumen = registroPersonalResumenEncuestas(lista);
+    const porTipo = {
+      Docente: lista.filter(p => p.tipo === 'Docente'),
+      Administrativo: lista.filter(p => p.tipo === 'Administrativo'),
+      Obrero: lista.filter(p => p.tipo === 'Obrero')
+    };
+    const porTurno = {
+      'Mañana': lista.filter(p => p.turno === 'Mañana'),
+      'Tarde': lista.filter(p => p.turno === 'Tarde')
+    };
+
+    const resumenGrupo = (items) => {
+      const r = registroPersonalResumenEncuestas(items);
+      return `${r.respondidas} respondidas · ${r.pendientes} pendientes · ${r.porcentaje}%`;
+    };
+
+    const filaPersona = (p, i) => {
+      const respondida = registroPersonalEncuestaRespondida(p);
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><strong>${h(p.nombre || 'Sin nombre')}</strong><br><small>${h(p.cedula || '')}</small></td>
+        <td>${h(p.tipo || '—')}</td>
+        <td>${h(p.nivelDocente || '—')}</td>
+        <td>${h(p.turno || '—')}</td>
+        <td>${h(p.cargo || '—')}</td>
+        <td>${h(p.telefono || '—')}</td>
+        <td><span class="${respondida ? 'ok' : 'pending'}">${respondida ? 'Respondida' : 'Pendiente'}</span></td>
+        <td>${h(p.origen || 'Panel Dirección')}</td>
+      </tr>`;
+    };
+
+    const fecha = new Date().toLocaleDateString('es-VE', {
+      day:'2-digit', month:'2-digit', year:'numeric'
+    });
+
+    const ventana = window.open('', '_blank', 'width=1100,height=900');
+    if (!ventana) {
+      alert('Permite ventanas emergentes para imprimir el reporte.');
+      return;
+    }
+
+    ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+      <title>Reporte de encuestas del personal</title>
+      <style>
+        @page{size:Letter landscape;margin:10mm}
+        *{box-sizing:border-box}
+        body{font-family:Arial,sans-serif;color:#1d2f45;margin:0}
+        h1{text-align:center;font-size:22px;margin:0 0 4px}
+        .sub{text-align:center;color:#65768a;margin:0 0 16px;font-size:12px}
+        .date{text-align:right;font-size:11px;color:#64768a;margin-bottom:10px}
+        .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+        .metric{border:1px solid #cfdce9;border-radius:8px;padding:9px;text-align:center}
+        .metric strong{display:block;font-size:21px;color:#173a65}
+        .metric span{font-size:10px;color:#66798e;font-weight:700}
+        h2{font-size:14px;background:#eef5fb;padding:7px 9px;margin:14px 0 7px;border-radius:6px}
+        .groups{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+        .group{border:1px solid #d7e1eb;border-radius:7px;padding:8px;font-size:10px}
+        .group strong{font-size:11px}
+        table{width:100%;border-collapse:collapse;font-size:9px;margin-top:9px}
+        th,td{border:1px solid #cbd7e3;padding:5px;text-align:left;vertical-align:top}
+        th{background:#f3f7fb;font-size:8px;text-transform:uppercase}
+        small{color:#708197}
+        .ok,.pending{display:inline-block;padding:3px 5px;border-radius:999px;font-weight:700}
+        .ok{background:#eaf7ef;color:#267044}
+        .pending{background:#fff6df;color:#8a6518}
+        .foot{margin-top:14px;font-size:9px;color:#718197;text-align:center}
+      </style></head><body>
+      <h1>REPORTE DE ENCUESTAS DEL PERSONAL</h1>
+      <p class="sub">U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS · Dirección · EduGestión</p>
+      <div class="date">Fecha de emisión: ${h(fecha)}</div>
+
+      <div class="metrics">
+        <div class="metric"><strong>${resumen.total}</strong><span>Total personal</span></div>
+        <div class="metric"><strong>${resumen.respondidas}</strong><span>Respondidas</span></div>
+        <div class="metric"><strong>${resumen.pendientes}</strong><span>Pendientes</span></div>
+        <div class="metric"><strong>${resumen.porcentaje}%</strong><span>Avance general</span></div>
+      </div>
+
+      <h2>Resumen por tipo de personal</h2>
+      <div class="groups">
+        <div class="group"><strong>Docentes:</strong> ${porTipo.Docente.length} · ${resumenGrupo(porTipo.Docente)}</div>
+        <div class="group"><strong>Administrativos:</strong> ${porTipo.Administrativo.length} · ${resumenGrupo(porTipo.Administrativo)}</div>
+        <div class="group"><strong>Obreros:</strong> ${porTipo.Obrero.length} · ${resumenGrupo(porTipo.Obrero)}</div>
+        <div class="group"><strong>Turno Mañana:</strong> ${porTurno['Mañana'].length} · ${resumenGrupo(porTurno['Mañana'])}</div>
+        <div class="group"><strong>Turno Tarde:</strong> ${porTurno['Tarde'].length} · ${resumenGrupo(porTurno['Tarde'])}</div>
+      </div>
+
+      <h2>Detalle de respuestas</h2>
+      <table>
+        <thead><tr>
+          <th>#</th><th>Nombre / Cédula</th><th>Tipo</th><th>Nivel</th><th>Turno</th>
+          <th>Cargo</th><th>Teléfono</th><th>Encuesta</th><th>Origen</th>
+        </tr></thead>
+        <tbody>${lista.map(filaPersona).join('')}</tbody>
+      </table>
+
+      <div class="foot">Reporte generado desde EduGestión.</div>
+      <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script>
+      </body></html>`);
+    ventana.document.close();
+  }
+
   function imprimirRegistroPersonal(id) {
     const p = personaRegistroPersonalPorId(id);
     if (!p) return;
@@ -5519,6 +5634,8 @@ const SESSION_KEY = 'edugestion_session_v2';
         .catch(() => {});
       return;
     }
+
+    document.getElementById('registro-personal-imprimir-reporte')?.addEventListener('click', imprimirReporteEncuestasPersonal);
 
     document.getElementById('registro-personal-actualizar')?.addEventListener('click', async () => {
       const btn = document.getElementById('registro-personal-actualizar');
@@ -14420,7 +14537,8 @@ Archivo enviado directamente desde EduGestión.`);
     .registro-personal-toolbar{max-width:1120px;margin:18px auto;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border:1px solid #dbe7f2;background:#f7fbff;border-radius:15px}
     .registro-personal-filtros{display:grid;grid-template-columns:minmax(240px,1fr) 170px 145px 170px;gap:10px;flex:1}
     .registro-personal-seguimiento{max-width:1120px;margin:18px auto;padding:18px;border:1px solid #d7e5f3;border-radius:16px;background:#f8fbff}
-    .rp-survey-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .rp-survey-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+    .rp-report-button{white-space:nowrap}
     .rp-survey-heading>div{display:flex;align-items:center;gap:12px}
     .rp-survey-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#e8f2fc;color:#1f5da8;font-size:19px}
     .rp-survey-heading strong{display:block;color:#173a65;font-size:17px}
@@ -14473,6 +14591,8 @@ Archivo enviado directamente desde EduGestión.`);
     .registro-personal-encuesta-info button{min-height:40px;border:0;border-radius:9px;padding:0 13px;background:#dbe6f0;color:#657689;font-weight:800}
     @media(max-width:1000px){
       .registro-personal-metricas{grid-template-columns:repeat(2,1fr)}
+      .rp-survey-heading{align-items:stretch;flex-direction:column}
+      .rp-report-button{width:100%}
       .rp-survey-metrics{grid-template-columns:1fr}
       .registro-personal-toolbar{align-items:stretch;flex-direction:column}
       .registro-personal-filtros{grid-template-columns:1fr}
@@ -14493,4 +14613,5 @@ Archivo enviado directamente desde EduGestión.`);
 /* EDUGESTION_FASE_21R_C_REGISTRO_PERSONAL_SHEETS_FRONTEND_END */
 /* EDUGESTION_FASE_21S_C_ENLACE_ENCUESTA_PERSONAL_FRONTEND_END */
 /* EDUGESTION_FASE_21T_A_SEGUIMIENTO_ENCUESTAS_PERSONAL_END */
+/* EDUGESTION_FASE_21T_B_REPORTE_ENCUESTAS_PERSONAL_END */
 
