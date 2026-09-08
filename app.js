@@ -4835,6 +4835,27 @@ const SESSION_KEY = 'edugestion_session_v2';
     return { total, docentes, administrativos, obreros, manana, tarde };
   }
 
+  function registroPersonalEncuestaRespondida(persona) {
+    const estado = normalizarTextoRegistroPersonal(persona?.estadoRegistro).toLowerCase();
+    const origen = normalizarTextoRegistroPersonal(persona?.origen).toLowerCase();
+    return estado === 'recibida' || origen === 'encuesta';
+  }
+
+  function registroPersonalResumenEncuestas(lista) {
+    const total = lista.length;
+    const respondidas = lista.filter(registroPersonalEncuestaRespondida).length;
+    const pendientes = Math.max(0, total - respondidas);
+    const porcentaje = total ? Math.round((respondidas / total) * 100) : 0;
+    return { total, respondidas, pendientes, porcentaje };
+  }
+
+  function registroPersonalEstadoEncuestaHtml(persona) {
+    const respondida = registroPersonalEncuestaRespondida(persona);
+    return respondida
+      ? `<span class="rp-survey-status is-received"><i class="fa-solid fa-circle-check"></i> Respondida</span>`
+      : `<span class="rp-survey-status is-pending"><i class="fa-solid fa-clock"></i> Pendiente</span>`;
+  }
+
   function registroPersonalHtml() {
     const lista = cargarRegistroPersonalDirector()
       .slice()
@@ -4878,6 +4899,27 @@ const SESSION_KEY = 'edugestion_session_v2';
           <article><i class="fa-solid fa-helmet-safety"></i><div><strong>${resumen.obreros}</strong><span>Obreros</span></div></article>
         </section>
 
+        <section class="registro-personal-seguimiento">
+          <div class="rp-survey-heading">
+            <div>
+              <span class="rp-survey-icon"><i class="fa-solid fa-clipboard-check"></i></span>
+              <div>
+                <strong>Seguimiento de encuestas</strong>
+                <small>Control de respuestas del personal en tiempo real.</small>
+              </div>
+            </div>
+          </div>
+          ${(() => {
+            const encuesta = registroPersonalResumenEncuestas(lista);
+            return `
+              <div class="rp-survey-metrics">
+                <article><i class="fa-solid fa-circle-check"></i><div><strong>${encuesta.respondidas}</strong><span>Respondidas</span></div></article>
+                <article><i class="fa-solid fa-clock"></i><div><strong>${encuesta.pendientes}</strong><span>Pendientes</span></div></article>
+                <article><i class="fa-solid fa-chart-pie"></i><div><strong>${encuesta.porcentaje}%</strong><span>Avance general</span></div></article>
+              </div>`;
+          })()}
+        </section>
+
         <div class="registro-personal-toolbar">
           <div class="registro-personal-filtros">
             <input id="registro-personal-buscar" type="search" placeholder="Buscar por nombre, cédula, cargo o teléfono">
@@ -4891,6 +4933,11 @@ const SESSION_KEY = 'edugestion_session_v2';
               <option value="">Todos los turnos</option>
               <option value="Mañana">Mañana</option>
               <option value="Tarde">Tarde</option>
+            </select>
+            <select id="registro-personal-filtro-encuesta">
+              <option value="">Todas las encuestas</option>
+              <option value="respondida">Respondidas</option>
+              <option value="pendiente">Pendientes</option>
             </select>
           </div>
           <div class="rp-toolbar-actions">
@@ -5114,7 +5161,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         <table class="registro-personal-tabla">
           <thead>
             <tr>
-              <th>Nombre</th><th>Tipo</th><th>Nivel</th><th>Turno</th><th>Cargo</th><th>Teléfono</th><th>Tiempo en el liceo</th><th>Acciones</th>
+              <th>Nombre</th><th>Tipo</th><th>Nivel</th><th>Turno</th><th>Cargo</th><th>Teléfono</th><th>Encuesta</th><th>Tiempo en el liceo</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -5126,6 +5173,7 @@ const SESSION_KEY = 'edugestion_session_v2';
                 <td>${h(p.turno || '—')}</td>
                 <td>${h(p.cargo || '—')}</td>
                 <td>${h(p.telefono || '—')}</td>
+                <td>${registroPersonalEstadoEncuestaHtml(p)}<small>${h(p.origen || 'Panel Dirección')}</small></td>
                 <td>${h(p.antiguedad || calcularAntiguedadRegistroPersonal(p.ingresoPlantel) || '—')}</td>
                 <td>
                   <div class="rp-actions-row">
@@ -5298,9 +5346,18 @@ const SESSION_KEY = 'edugestion_session_v2';
     const buscar = normalizarTextoRegistroPersonal(document.getElementById('registro-personal-buscar')?.value).toLowerCase();
     const tipo = normalizarTextoRegistroPersonal(document.getElementById('registro-personal-filtro-tipo')?.value);
     const turno = normalizarTextoRegistroPersonal(document.getElementById('registro-personal-filtro-turno')?.value);
+    const encuesta = normalizarTextoRegistroPersonal(document.getElementById('registro-personal-filtro-encuesta')?.value);
     const lista = cargarRegistroPersonalDirector().filter(p => {
       const texto = [p.nombre,p.cedula,p.cargo,p.telefono,p.correo,p.materia].join(' ').toLowerCase();
-      return (!buscar || texto.includes(buscar)) && (!tipo || p.tipo === tipo) && (!turno || p.turno === turno);
+      const respondida = registroPersonalEncuestaRespondida(p);
+      const coincideEncuesta =
+        !encuesta ||
+        (encuesta === 'respondida' && respondida) ||
+        (encuesta === 'pendiente' && !respondida);
+      return (!buscar || texto.includes(buscar))
+        && (!tipo || p.tipo === tipo)
+        && (!turno || p.turno === turno)
+        && coincideEncuesta;
     });
     const cont = document.getElementById('registro-personal-listado');
     if (cont) {
@@ -5485,6 +5542,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById('registro-personal-buscar')?.addEventListener('input', filtrarListadoRegistroPersonal);
     document.getElementById('registro-personal-filtro-tipo')?.addEventListener('change', filtrarListadoRegistroPersonal);
     document.getElementById('registro-personal-filtro-turno')?.addEventListener('change', filtrarListadoRegistroPersonal);
+    document.getElementById('registro-personal-filtro-encuesta')?.addEventListener('change', filtrarListadoRegistroPersonal);
     enlazarAccionesListadoRegistroPersonal();
   }
 
@@ -14360,7 +14418,22 @@ Archivo enviado directamente desde EduGestión.`);
     .registro-personal-metricas strong{display:block;font-size:30px;color:#173a65;line-height:1}
     .registro-personal-metricas span{display:block;margin-top:5px;font-size:14px;font-weight:700;color:#62768d}
     .registro-personal-toolbar{max-width:1120px;margin:18px auto;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border:1px solid #dbe7f2;background:#f7fbff;border-radius:15px}
-    .registro-personal-filtros{display:grid;grid-template-columns:minmax(260px,1fr) 190px 160px;gap:10px;flex:1}
+    .registro-personal-filtros{display:grid;grid-template-columns:minmax(240px,1fr) 170px 145px 170px;gap:10px;flex:1}
+    .registro-personal-seguimiento{max-width:1120px;margin:18px auto;padding:18px;border:1px solid #d7e5f3;border-radius:16px;background:#f8fbff}
+    .rp-survey-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .rp-survey-heading>div{display:flex;align-items:center;gap:12px}
+    .rp-survey-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:#e8f2fc;color:#1f5da8;font-size:19px}
+    .rp-survey-heading strong{display:block;color:#173a65;font-size:17px}
+    .rp-survey-heading small{display:block;margin-top:3px;color:#6f8194;font-size:13px}
+    .rp-survey-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+    .rp-survey-metrics article{display:flex;align-items:center;justify-content:center;gap:12px;min-height:82px;background:#fff;border:1px solid #dbe7f2;border-radius:13px;text-align:center;padding:13px}
+    .rp-survey-metrics article>i{font-size:20px;color:#1f5da8}
+    .rp-survey-metrics strong{display:block;font-size:25px;line-height:1;color:#173a65}
+    .rp-survey-metrics span{display:block;margin-top:4px;font-size:13px;font-weight:700;color:#667b91}
+    .rp-survey-status{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px 9px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}
+    .rp-survey-status.is-received{background:#eaf7ef;color:#267044;border:1px solid #c7e8d3}
+    .rp-survey-status.is-pending{background:#fff6df;color:#8a6518;border:1px solid #efddb1}
+
     .rp-toolbar-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
     .registro-personal-toolbar input,.registro-personal-toolbar select{min-height:46px;padding:9px 11px;border:1px solid #cbdbee;border-radius:10px;background:#fff;color:#173a65;font-size:15px}
     .registro-personal-toolbar button{min-height:46px;font-size:15px;white-space:nowrap}
@@ -14400,6 +14473,7 @@ Archivo enviado directamente desde EduGestión.`);
     .registro-personal-encuesta-info button{min-height:40px;border:0;border-radius:9px;padding:0 13px;background:#dbe6f0;color:#657689;font-weight:800}
     @media(max-width:1000px){
       .registro-personal-metricas{grid-template-columns:repeat(2,1fr)}
+      .rp-survey-metrics{grid-template-columns:1fr}
       .registro-personal-toolbar{align-items:stretch;flex-direction:column}
       .registro-personal-filtros{grid-template-columns:1fr}
       .rp-grid-4,.rp-grid-3{grid-template-columns:repeat(2,1fr)}
@@ -14418,4 +14492,5 @@ Archivo enviado directamente desde EduGestión.`);
 /* EDUGESTION_FASE_21Q_REGISTRO_PERSONAL_END */
 /* EDUGESTION_FASE_21R_C_REGISTRO_PERSONAL_SHEETS_FRONTEND_END */
 /* EDUGESTION_FASE_21S_C_ENLACE_ENCUESTA_PERSONAL_FRONTEND_END */
+/* EDUGESTION_FASE_21T_A_SEGUIMIENTO_ENCUESTAS_PERSONAL_END */
 
