@@ -2862,6 +2862,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
       <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span></button>
       <button data-director-view="estadistica" type="button"><i class="fa-solid fa-chart-pie"></i><span>Estadística</span></button>
+      <button data-director-view="ficha-tecnica" type="button"><i class="fa-solid fa-notes-medical"></i><span>Ficha técnica</span></button>
       <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
     `;
     nav.appendChild(menuInstitucional);
@@ -2972,7 +2973,9 @@ const SESSION_KEY = 'edugestion_session_v2';
     if (constanciaTab) constanciaTab.classList.toggle('hidden', controlEstudio);
     const estadisticaTab = document.querySelector('#director-sidebar-menu [data-director-view="estadistica"]');
     if (estadisticaTab) estadisticaTab.classList.toggle('hidden', controlEstudio);
-    if (controlEstudio && ['constancia','estadistica'].includes(vistaDirector)) vistaDirector = 'resumen';
+    const fichaTecnicaTab = document.querySelector('#director-sidebar-menu [data-director-view="ficha-tecnica"]');
+    if (fichaTecnicaTab) fichaTecnicaTab.classList.toggle('hidden', controlEstudio);
+    if (controlEstudio && ['constancia','estadistica','ficha-tecnica'].includes(vistaDirector)) vistaDirector = 'resumen';
 
     if (institucional) {
       const nombreCuenta = document.getElementById('director-account-name');
@@ -4232,6 +4235,386 @@ const SESSION_KEY = 'edugestion_session_v2';
   }
 
 
+
+  const DIRECTOR_FICHA_TECNICA_STORAGE = 'edugestion:director:ficha-tecnica:v1';
+
+  function cargarFichasTecnicasDirector() {
+    try {
+      const raw = localStorage.getItem(DIRECTOR_FICHA_TECNICA_STORAGE);
+      return raw ? JSON.parse(raw) : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function guardarFichasTecnicasDirector(data) {
+    localStorage.setItem(DIRECTOR_FICHA_TECNICA_STORAGE, JSON.stringify(data));
+  }
+
+  function fichaTecnicaAlumnoClave(alumno) {
+    return String(normalizarClaveAlumno(alumno) || alumno?.cedula || alumno?.nombre || '').trim();
+  }
+
+  function fichaTecnicaActualPorAlumno(alumno) {
+    if (!alumno) return null;
+    const fichas = cargarFichasTecnicasDirector();
+    return fichas[fichaTecnicaAlumnoClave(alumno)] || null;
+  }
+
+  function fichaTecnicaHtml() {
+    const alumnos = filtrar(
+      Array.isArray(datosDirector?.estudiantes) ? datosDirector.estudiantes : [],
+      ['nombre','cedula','ano','seccion','turno','docente']
+    ).sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+
+    return `
+      <section class="director-card ficha-tecnica-tool">
+        <header>
+          <div>
+            <span><i class="fa-solid fa-notes-medical"></i></span>
+            <div>
+              <h3>Ficha técnica del estudiante</h3>
+              <p>Registro básico de salud, contacto de emergencia y datos importantes para la atención del estudiante.</p>
+            </div>
+          </div>
+          <small>Dirección</small>
+        </header>
+
+        <div class="ficha-tecnica-aviso">
+          <i class="fa-solid fa-shield-heart"></i>
+          <span>Registra solo la información necesaria para la seguridad y atención del estudiante. Estos datos son sensibles y deben mantenerse con acceso restringido.</span>
+        </div>
+
+        <div class="ficha-tecnica-selector">
+          <label>
+            <span>Estudiante</span>
+            <select id="ficha-tecnica-estudiante">
+              <option value="">Selecciona un estudiante</option>
+              ${alumnos.map(a => `
+                <option value="${escapeAttrConstancia(normalizarClaveAlumno(a))}">
+                  ${h(a.nombre)} · ${h(a.ano)} ${h(a.seccion)} · ${h(a.turno)}
+                </option>`).join('')}
+            </select>
+          </label>
+        </div>
+
+        <form id="ficha-tecnica-form" class="ficha-tecnica-form">
+          <section class="ficha-bloque">
+            <h4><i class="fa-solid fa-user"></i> Datos básicos</h4>
+            <div class="ficha-grid ficha-grid-3">
+              <label><span>Nombre completo</span><input id="ficha-nombre" readonly></label>
+              <label><span>Cédula / Identificación</span><input id="ficha-cedula" readonly></label>
+              <label><span>Grado / Año y sección</span><input id="ficha-grado" readonly></label>
+            </div>
+          </section>
+
+          <section class="ficha-bloque">
+            <h4><i class="fa-solid fa-heart-pulse"></i> Información de salud</h4>
+            <div class="ficha-grid ficha-grid-2">
+              <label class="ficha-pregunta">
+                <span>¿Sufre de alguna enfermedad o condición médica?</span>
+                <select id="ficha-enfermedad"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </label>
+              <label class="ficha-pregunta">
+                <span>¿Toma medicamentos actualmente?</span>
+                <select id="ficha-medicamentos"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </label>
+              <label class="ficha-pregunta">
+                <span>¿Tiene alergias conocidas?</span>
+                <select id="ficha-alergias"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </label>
+              <label class="ficha-pregunta">
+                <span>¿Tiene alguna limitación física o recomendación especial?</span>
+                <select id="ficha-limitacion"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </label>
+            </div>
+
+            <div class="ficha-grid ficha-grid-2 ficha-detalles">
+              <label><span>Enfermedad / condición</span><textarea id="ficha-enfermedad-detalle" rows="3" placeholder="Ej.: asma, diabetes, epilepsia..."></textarea></label>
+              <label><span>Medicamentos</span><textarea id="ficha-medicamentos-detalle" rows="3" placeholder="Nombre del medicamento, horario o indicación relevante"></textarea></label>
+              <label><span>Alergias</span><textarea id="ficha-alergias-detalle" rows="3" placeholder="Medicamentos, alimentos, picaduras u otras"></textarea></label>
+              <label><span>Limitación o recomendación</span><textarea id="ficha-limitacion-detalle" rows="3" placeholder="Ej.: evitar esfuerzo intenso, usar lentes, etc."></textarea></label>
+            </div>
+          </section>
+
+          <section class="ficha-bloque">
+            <h4><i class="fa-solid fa-house-medical"></i> Antecedentes familiares y observaciones</h4>
+            <div class="ficha-grid ficha-grid-2">
+              <label class="ficha-pregunta">
+                <span>¿Tiene un familiar directo con una enfermedad importante?</span>
+                <select id="ficha-familiar-enfermo"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </label>
+              <label>
+                <span>Detalle del antecedente familiar</span>
+                <textarea id="ficha-familiar-detalle" rows="3" placeholder="Indica solo lo necesario"></textarea>
+              </label>
+              <label class="ficha-pregunta">
+                <span>¿Usa lentes, audífonos u otro apoyo?</span>
+                <select id="ficha-apoyo"><option value="No">No</option><option value="Sí">Sí</option></select>
+              </label>
+              <label>
+                <span>Detalle</span>
+                <textarea id="ficha-apoyo-detalle" rows="3" placeholder="Indica el apoyo que utiliza"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="ficha-bloque">
+            <h4><i class="fa-solid fa-phone-volume"></i> Contacto de emergencia</h4>
+            <div class="ficha-grid ficha-grid-3">
+              <label><span>Nombre del contacto</span><input id="ficha-emergencia-nombre" placeholder="Nombre y apellido"></label>
+              <label><span>Parentesco</span><input id="ficha-emergencia-parentesco" placeholder="Madre, padre, representante..."></label>
+              <label><span>Teléfono principal</span><input id="ficha-emergencia-telefono" inputmode="tel" placeholder="Número de contacto"></label>
+              <label><span>Teléfono alternativo</span><input id="ficha-emergencia-telefono2" inputmode="tel" placeholder="Opcional"></label>
+              <label><span>Persona autorizada para retirar al estudiante</span><input id="ficha-autorizado" placeholder="Nombre completo"></label>
+              <label><span>Teléfono de la persona autorizada</span><input id="ficha-autorizado-telefono" inputmode="tel" placeholder="Número de contacto"></label>
+            </div>
+          </section>
+
+          <section class="ficha-bloque">
+            <h4><i class="fa-solid fa-clipboard"></i> Información adicional</h4>
+            <div class="ficha-grid ficha-grid-2">
+              <label>
+                <span>Centro de salud de preferencia</span>
+                <input id="ficha-centro-salud" placeholder="Opcional">
+              </label>
+              <label>
+                <span>Seguro médico / institución</span>
+                <input id="ficha-seguro" placeholder="Opcional">
+              </label>
+              <label class="ficha-col-completa">
+                <span>Observaciones importantes</span>
+                <textarea id="ficha-observaciones" rows="4" placeholder="Cualquier información necesaria para la atención y seguridad del estudiante"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <div class="ficha-tecnica-actions">
+            <button type="button" id="ficha-tecnica-limpiar" class="director-back-button"><i class="fa-solid fa-eraser"></i> Limpiar</button>
+            <button type="button" id="ficha-tecnica-imprimir" class="director-back-button" disabled><i class="fa-solid fa-print"></i> Imprimir ficha</button>
+            <button type="submit" id="ficha-tecnica-guardar" class="constancia-primary" disabled><i class="fa-solid fa-floppy-disk"></i> Guardar ficha</button>
+          </div>
+        </form>
+      </section>`;
+  }
+
+  function obtenerAlumnoFichaTecnica() {
+    const select = document.getElementById('ficha-tecnica-estudiante');
+    return estudianteConstanciaPorClave(select?.value || '');
+  }
+
+  function valorFicha(id) {
+    const el = document.getElementById(id);
+    return String(el?.value || '').trim();
+  }
+
+  function llenarFichaTecnica(alumno, ficha = null) {
+    const set = (id, valor='') => {
+      const el = document.getElementById(id);
+      if (el) el.value = valor ?? '';
+    };
+
+    set('ficha-nombre', alumno?.nombre || '');
+    set('ficha-cedula', alumno?.cedula || '');
+    set('ficha-grado', alumno ? `${alumno.ano || ''} ${alumno.seccion || ''} · ${alumno.turno || ''}`.trim() : '');
+
+    const data = ficha || {};
+    set('ficha-enfermedad', data.enfermedad || 'No');
+    set('ficha-medicamentos', data.medicamentos || 'No');
+    set('ficha-alergias', data.alergias || 'No');
+    set('ficha-limitacion', data.limitacion || 'No');
+    set('ficha-enfermedad-detalle', data.enfermedadDetalle || '');
+    set('ficha-medicamentos-detalle', data.medicamentosDetalle || '');
+    set('ficha-alergias-detalle', data.alergiasDetalle || '');
+    set('ficha-limitacion-detalle', data.limitacionDetalle || '');
+    set('ficha-familiar-enfermo', data.familiarEnfermo || 'No');
+    set('ficha-familiar-detalle', data.familiarDetalle || '');
+    set('ficha-apoyo', data.apoyo || 'No');
+    set('ficha-apoyo-detalle', data.apoyoDetalle || '');
+    set('ficha-emergencia-nombre', data.emergenciaNombre || '');
+    set('ficha-emergencia-parentesco', data.emergenciaParentesco || '');
+    set('ficha-emergencia-telefono', data.emergenciaTelefono || '');
+    set('ficha-emergencia-telefono2', data.emergenciaTelefono2 || '');
+    set('ficha-autorizado', data.autorizado || '');
+    set('ficha-autorizado-telefono', data.autorizadoTelefono || '');
+    set('ficha-centro-salud', data.centroSalud || '');
+    set('ficha-seguro', data.seguro || '');
+    set('ficha-observaciones', data.observaciones || '');
+
+    const guardar = document.getElementById('ficha-tecnica-guardar');
+    const imprimir = document.getElementById('ficha-tecnica-imprimir');
+    if (guardar) guardar.disabled = !alumno;
+    if (imprimir) imprimir.disabled = !alumno;
+  }
+
+  function leerFichaTecnicaFormulario(alumno) {
+    return {
+      alumnoClave: fichaTecnicaAlumnoClave(alumno),
+      nombre: alumno?.nombre || '',
+      cedula: alumno?.cedula || '',
+      ano: alumno?.ano || '',
+      seccion: alumno?.seccion || '',
+      turno: alumno?.turno || '',
+      enfermedad: valorFicha('ficha-enfermedad'),
+      medicamentos: valorFicha('ficha-medicamentos'),
+      alergias: valorFicha('ficha-alergias'),
+      limitacion: valorFicha('ficha-limitacion'),
+      enfermedadDetalle: valorFicha('ficha-enfermedad-detalle'),
+      medicamentosDetalle: valorFicha('ficha-medicamentos-detalle'),
+      alergiasDetalle: valorFicha('ficha-alergias-detalle'),
+      limitacionDetalle: valorFicha('ficha-limitacion-detalle'),
+      familiarEnfermo: valorFicha('ficha-familiar-enfermo'),
+      familiarDetalle: valorFicha('ficha-familiar-detalle'),
+      apoyo: valorFicha('ficha-apoyo'),
+      apoyoDetalle: valorFicha('ficha-apoyo-detalle'),
+      emergenciaNombre: valorFicha('ficha-emergencia-nombre'),
+      emergenciaParentesco: valorFicha('ficha-emergencia-parentesco'),
+      emergenciaTelefono: valorFicha('ficha-emergencia-telefono'),
+      emergenciaTelefono2: valorFicha('ficha-emergencia-telefono2'),
+      autorizado: valorFicha('ficha-autorizado'),
+      autorizadoTelefono: valorFicha('ficha-autorizado-telefono'),
+      centroSalud: valorFicha('ficha-centro-salud'),
+      seguro: valorFicha('ficha-seguro'),
+      observaciones: valorFicha('ficha-observaciones'),
+      actualizadoEn: new Date().toISOString()
+    };
+  }
+
+  function guardarFichaTecnicaDirector() {
+    const alumno = obtenerAlumnoFichaTecnica();
+    if (!alumno) {
+      alert('Primero selecciona un estudiante.');
+      return;
+    }
+
+    const ficha = leerFichaTecnicaFormulario(alumno);
+    if (!ficha.emergenciaNombre || !ficha.emergenciaTelefono) {
+      alert('Completa al menos el nombre y teléfono del contacto de emergencia.');
+      return;
+    }
+
+    const fichas = cargarFichasTecnicasDirector();
+    fichas[ficha.alumnoClave] = ficha;
+    guardarFichasTecnicasDirector(fichas);
+    alert(`Ficha técnica de ${alumno.nombre} guardada correctamente.`);
+  }
+
+  function limpiarFichaTecnicaDirector() {
+    const alumno = obtenerAlumnoFichaTecnica();
+    if (!alumno) {
+      llenarFichaTecnica(null, null);
+      return;
+    }
+    llenarFichaTecnica(alumno, null);
+  }
+
+  function imprimirFichaTecnicaDirector() {
+    const alumno = obtenerAlumnoFichaTecnica();
+    if (!alumno) return;
+
+    const ficha = leerFichaTecnicaFormulario(alumno);
+    const ventana = window.open('', '_blank', 'width=900,height=1100');
+    if (!ventana) {
+      alert('Permite ventanas emergentes para imprimir la ficha.');
+      return;
+    }
+
+    const fila = (titulo, valor) => `<tr><th>${h(titulo)}</th><td>${h(valor || 'No indicado')}</td></tr>`;
+    ventana.document.write(`<!doctype html>
+      <html lang="es">
+      <head>
+        <meta charset="utf-8">
+        <title>Ficha técnica - ${h(alumno.nombre || '')}</title>
+        <style>
+          @page{size:Letter;margin:12mm}
+          *{box-sizing:border-box}
+          body{font-family:Arial,Helvetica,sans-serif;color:#1d2f45;margin:0}
+          h1{text-align:center;font-size:22px;margin:0 0 4px}
+          .sub{text-align:center;color:#66798f;margin:0 0 22px;font-size:12px}
+          .datos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+          .datos div{border:1px solid #ccd8e5;border-radius:8px;padding:9px;text-align:center}
+          .datos strong{display:block;font-size:11px;color:#63778e;text-transform:uppercase;margin-bottom:3px}
+          h2{font-size:15px;background:#eef5fb;padding:8px 10px;margin:18px 0 8px;border-radius:7px}
+          table{width:100%;border-collapse:collapse;font-size:11px}
+          th,td{border:1px solid #cbd7e3;padding:7px;vertical-align:top;text-align:left}
+          th{width:34%;background:#f8fbfe}
+          .nota{margin-top:18px;font-size:9px;color:#697b8e}
+        </style>
+      </head>
+      <body>
+        <h1>FICHA TÉCNICA DEL ESTUDIANTE</h1>
+        <p class="sub">U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS · Uso interno de Dirección</p>
+
+        <div class="datos">
+          <div><strong>Estudiante</strong>${h(alumno.nombre || '')}</div>
+          <div><strong>Cédula</strong>${h(alumno.cedula || '')}</div>
+          <div><strong>Grado / Sección</strong>${h(`${alumno.ano || ''} ${alumno.seccion || ''}`)}</div>
+        </div>
+
+        <h2>Información de salud</h2>
+        <table>
+          ${fila('¿Sufre de alguna enfermedad?', ficha.enfermedad)}
+          ${fila('Detalle', ficha.enfermedadDetalle)}
+          ${fila('¿Toma medicamentos?', ficha.medicamentos)}
+          ${fila('Medicamentos / indicación', ficha.medicamentosDetalle)}
+          ${fila('¿Tiene alergias?', ficha.alergias)}
+          ${fila('Detalle de alergias', ficha.alergiasDetalle)}
+          ${fila('¿Tiene limitación o recomendación especial?', ficha.limitacion)}
+          ${fila('Detalle', ficha.limitacionDetalle)}
+          ${fila('¿Usa lentes, audífonos u otro apoyo?', ficha.apoyo)}
+          ${fila('Detalle del apoyo', ficha.apoyoDetalle)}
+        </table>
+
+        <h2>Antecedentes familiares</h2>
+        <table>
+          ${fila('¿Familiar directo con enfermedad importante?', ficha.familiarEnfermo)}
+          ${fila('Detalle', ficha.familiarDetalle)}
+        </table>
+
+        <h2>Contacto de emergencia</h2>
+        <table>
+          ${fila('Nombre', ficha.emergenciaNombre)}
+          ${fila('Parentesco', ficha.emergenciaParentesco)}
+          ${fila('Teléfono principal', ficha.emergenciaTelefono)}
+          ${fila('Teléfono alternativo', ficha.emergenciaTelefono2)}
+          ${fila('Persona autorizada para retirar', ficha.autorizado)}
+          ${fila('Teléfono de persona autorizada', ficha.autorizadoTelefono)}
+        </table>
+
+        <h2>Información adicional</h2>
+        <table>
+          ${fila('Centro de salud de preferencia', ficha.centroSalud)}
+          ${fila('Seguro médico / institución', ficha.seguro)}
+          ${fila('Observaciones', ficha.observaciones)}
+        </table>
+
+        <p class="nota">Documento de uso interno. La información contenida en esta ficha debe manejarse de forma confidencial y únicamente para fines de seguridad, atención y emergencia del estudiante.</p>
+        <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script>
+      </body>
+      </html>`);
+    ventana.document.close();
+  }
+
+  function enlazarFichaTecnicaDirector() {
+    if (vistaDirector !== 'ficha-tecnica') return;
+    const select = document.getElementById('ficha-tecnica-estudiante');
+    const form = document.getElementById('ficha-tecnica-form');
+
+    select?.addEventListener('change', () => {
+      const alumno = obtenerAlumnoFichaTecnica();
+      llenarFichaTecnica(alumno, fichaTecnicaActualPorAlumno(alumno));
+    });
+
+    form?.addEventListener('submit', e => {
+      e.preventDefault();
+      guardarFichaTecnicaDirector();
+    });
+
+    document.getElementById('ficha-tecnica-limpiar')?.addEventListener('click', limpiarFichaTecnicaDirector);
+    document.getElementById('ficha-tecnica-imprimir')?.addEventListener('click', imprimirFichaTecnicaDirector);
+  }
+
+
   function renderPanelDirector() {
     document.querySelectorAll('#director-sidebar-menu [data-director-view]').forEach(b => {
       b.classList.toggle('is-active', b.dataset.directorView === vistaDirector);
@@ -4396,6 +4779,10 @@ const SESSION_KEY = 'edugestion_session_v2';
       html = estadisticaDirectorHtml();
     }
 
+    if (vistaDirector === 'ficha-tecnica') {
+      html = fichaTecnicaHtml();
+    }
+
     if (vistaDirector === 'auditoria') {
       const items = filtrar(datosDirector.auditoria, ['docente','actorNombre','alumno','accion','origen','estadoAnterior','estadoNuevo']);
       html = `<section class="director-card"><header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Auditoría administrativa</h3><p>Cambios de asistencia realizados desde la web y Telegram.</p></div></div><small>${items.length} movimientos</small></header>
@@ -4405,6 +4792,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     content.innerHTML = contexto + html;
     enlazarConstanciaEstudio();
     enlazarEstadisticaDirector();
+    enlazarFichaTecnicaDirector();
 
     content.querySelectorAll('[data-director-section]').forEach(button => {
       button.addEventListener('click', () => {
@@ -12812,4 +13200,178 @@ Archivo enviado directamente desde EduGestión.`);
   document.head.appendChild(style);
 })();
 /* EDUGESTION_FASE_21N_ESTADISTICA_AMPLIADA_END */
+
+
+/* =========================================================
+   EduGestión · FASE 21O
+   FICHA TÉCNICA DEL ESTUDIANTE — DIRECCIÓN
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21O_FICHA_TECNICA) return;
+  window.EDUGESTION_FASE21O_FICHA_TECNICA = true;
+
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21o-ficha-tecnica-style';
+  style.textContent = `
+    .ficha-tecnica-tool{
+      max-width:1180px;
+      margin:0 auto !important;
+      overflow:hidden
+    }
+    .ficha-tecnica-tool>header{
+      justify-content:center !important;
+      text-align:center
+    }
+    .ficha-tecnica-tool>header>div{
+      justify-content:center
+    }
+    .ficha-tecnica-tool>header h3{
+      font-size:24px !important
+    }
+    .ficha-tecnica-tool>header p{
+      font-size:16px !important;
+      max-width:760px
+    }
+    .ficha-tecnica-aviso{
+      max-width:1080px;
+      margin:18px auto;
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      padding:14px 16px;
+      border:1px solid #d7e6f4;
+      border-radius:14px;
+      background:#f5f9fd;
+      color:#536b84;
+      font-size:14px
+    }
+    .ficha-tecnica-aviso i{
+      color:#1f5da8;
+      font-size:20px;
+      margin-top:1px
+    }
+    .ficha-tecnica-selector{
+      max-width:1080px;
+      margin:20px auto;
+      padding:18px;
+      border:1px solid #dce7f2;
+      background:#f8fbfe;
+      border-radius:15px
+    }
+    .ficha-tecnica-selector label{
+      display:flex;
+      flex-direction:column;
+      gap:8px
+    }
+    .ficha-tecnica-selector label span{
+      font-size:15px;
+      font-weight:800;
+      color:#526b86;
+      text-transform:uppercase
+    }
+    .ficha-tecnica-selector select{
+      width:100%;
+      min-height:50px;
+      padding:10px 12px;
+      font-size:16px;
+      border:1px solid #cbdbee;
+      border-radius:11px;
+      color:#173a65;
+      background:#fff
+    }
+    .ficha-tecnica-form{
+      max-width:1080px;
+      margin:0 auto
+    }
+    .ficha-bloque{
+      margin:18px 0;
+      padding:20px;
+      border:1px solid #d8e5f2;
+      border-radius:16px;
+      background:#fff
+    }
+    .ficha-bloque h4{
+      display:flex;
+      align-items:center;
+      gap:9px;
+      margin:0 0 16px;
+      font-size:20px;
+      color:#173a65
+    }
+    .ficha-bloque h4 i{
+      color:#1f5da8
+    }
+    .ficha-grid{
+      display:grid;
+      gap:14px
+    }
+    .ficha-grid-2{
+      grid-template-columns:repeat(2,minmax(0,1fr))
+    }
+    .ficha-grid-3{
+      grid-template-columns:repeat(3,minmax(0,1fr))
+    }
+    .ficha-grid label{
+      display:flex;
+      flex-direction:column;
+      gap:7px
+    }
+    .ficha-grid label span{
+      font-size:14px;
+      font-weight:800;
+      color:#506a86
+    }
+    .ficha-grid input,
+    .ficha-grid select,
+    .ficha-grid textarea{
+      width:100%;
+      border:1px solid #cad9ea;
+      border-radius:10px;
+      padding:10px 11px;
+      font:inherit;
+      font-size:16px;
+      color:#173a65;
+      background:#fff;
+      resize:vertical
+    }
+    .ficha-grid input,
+    .ficha-grid select{
+      min-height:47px
+    }
+    .ficha-grid input[readonly]{
+      background:#f3f7fb;
+      color:#5e7187
+    }
+    .ficha-detalles{
+      margin-top:14px
+    }
+    .ficha-col-completa{
+      grid-column:1/-1
+    }
+    .ficha-tecnica-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:10px;
+      flex-wrap:wrap;
+      margin:22px 0 4px
+    }
+    .ficha-tecnica-actions button{
+      min-height:46px;
+      font-size:15px
+    }
+    @media(max-width:850px){
+      .ficha-grid-2,.ficha-grid-3{
+        grid-template-columns:1fr
+      }
+      .ficha-col-completa{
+        grid-column:auto
+      }
+      .ficha-tecnica-actions{
+        flex-direction:column
+      }
+    }
+  `;
+  document.head.appendChild(style);
+})();
+/* EDUGESTION_FASE_21O_FICHA_TECNICA_END */
 
