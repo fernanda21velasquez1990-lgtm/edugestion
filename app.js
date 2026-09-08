@@ -2862,6 +2862,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       <button data-director-view="actas" type="button"><i class="fa-solid fa-file-signature"></i><span>Actas</span></button>
       <button data-director-view="constancia" type="button"><i class="fa-solid fa-file-circle-check"></i><span>Constancia de estudio</span></button>
       <button data-director-view="estadistica" type="button"><i class="fa-solid fa-chart-pie"></i><span>Estadística</span></button>
+      <button data-director-view="registro-personal" type="button"><i class="fa-solid fa-address-book"></i><span>Registro de personal</span></button>
       <button data-director-view="ficha-tecnica" type="button"><i class="fa-solid fa-notes-medical"></i><span>Ficha técnica</span></button>
       <button data-director-view="auditoria" type="button"><i class="fa-solid fa-clock-rotate-left"></i><span>Auditoría</span></button>
     `;
@@ -2975,7 +2976,9 @@ const SESSION_KEY = 'edugestion_session_v2';
     if (estadisticaTab) estadisticaTab.classList.toggle('hidden', controlEstudio);
     const fichaTecnicaTab = document.querySelector('#director-sidebar-menu [data-director-view="ficha-tecnica"]');
     if (fichaTecnicaTab) fichaTecnicaTab.classList.toggle('hidden', controlEstudio);
-    if (controlEstudio && ['constancia','estadistica','ficha-tecnica'].includes(vistaDirector)) vistaDirector = 'resumen';
+    const registroPersonalTab = document.querySelector('#director-sidebar-menu [data-director-view="registro-personal"]');
+    if (registroPersonalTab) registroPersonalTab.classList.toggle('hidden', controlEstudio);
+    if (controlEstudio && ['constancia','estadistica','ficha-tecnica','registro-personal'].includes(vistaDirector)) vistaDirector = 'resumen';
 
     if (institucional) {
       const nombreCuenta = document.getElementById('director-account-name');
@@ -4700,6 +4703,555 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById('ficha-tecnica-imprimir')?.addEventListener('click', imprimirFichaTecnicaDirector);
   }
 
+
+  const DIRECTOR_REGISTRO_PERSONAL_STORAGE = 'edugestion:director:registro-personal:v1';
+
+  function cargarRegistroPersonalDirector() {
+    try {
+      const raw = localStorage.getItem(DIRECTOR_REGISTRO_PERSONAL_STORAGE);
+      const data = raw ? JSON.parse(raw) : [];
+      return Array.isArray(data) ? data : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function guardarRegistroPersonalDirector(lista) {
+    localStorage.setItem(DIRECTOR_REGISTRO_PERSONAL_STORAGE, JSON.stringify(lista));
+  }
+
+  function normalizarTextoRegistroPersonal(valor) {
+    return String(valor || '').trim();
+  }
+
+  function personaRegistroPersonalPorId(id) {
+    return cargarRegistroPersonalDirector().find(p => String(p.id) === String(id)) || null;
+  }
+
+  function calcularAntiguedadRegistroPersonal(fecha) {
+    if (!fecha) return '';
+    const d = new Date(`${fecha}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    const hoy = new Date();
+    let anos = hoy.getFullYear() - d.getFullYear();
+    const m = hoy.getMonth() - d.getMonth();
+    if (m < 0 || (m === 0 && hoy.getDate() < d.getDate())) anos--;
+    return anos < 0 ? '0 años' : `${anos} año${anos === 1 ? '' : 's'}`;
+  }
+
+  function registroPersonalResumen(lista) {
+    const total = lista.length;
+    const docentes = lista.filter(p => p.tipo === 'Docente').length;
+    const administrativos = lista.filter(p => p.tipo === 'Administrativo').length;
+    const obreros = lista.filter(p => p.tipo === 'Obrero').length;
+    const manana = lista.filter(p => p.turno === 'Mañana').length;
+    const tarde = lista.filter(p => p.turno === 'Tarde').length;
+    return { total, docentes, administrativos, obreros, manana, tarde };
+  }
+
+  function registroPersonalHtml() {
+    const lista = cargarRegistroPersonalDirector()
+      .slice()
+      .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+    const resumen = registroPersonalResumen(lista);
+
+    return `
+      <section class="director-card registro-personal-tool">
+        <header>
+          <div>
+            <span><i class="fa-solid fa-address-book"></i></span>
+            <div>
+              <h3>Registro de personal</h3>
+              <p>Base de datos institucional del personal docente, administrativo y obrero.</p>
+            </div>
+          </div>
+          <small>Dirección</small>
+        </header>
+
+        <section class="registro-personal-metricas">
+          <article><i class="fa-solid fa-users"></i><div><strong>${resumen.total}</strong><span>Total personal</span></div></article>
+          <article><i class="fa-solid fa-chalkboard-user"></i><div><strong>${resumen.docentes}</strong><span>Docentes</span></div></article>
+          <article><i class="fa-solid fa-user-tie"></i><div><strong>${resumen.administrativos}</strong><span>Administrativos</span></div></article>
+          <article><i class="fa-solid fa-helmet-safety"></i><div><strong>${resumen.obreros}</strong><span>Obreros</span></div></article>
+        </section>
+
+        <div class="registro-personal-toolbar">
+          <div class="registro-personal-filtros">
+            <input id="registro-personal-buscar" type="search" placeholder="Buscar por nombre, cédula, cargo o teléfono">
+            <select id="registro-personal-filtro-tipo">
+              <option value="">Todo el personal</option>
+              <option value="Docente">Docente</option>
+              <option value="Administrativo">Administrativo</option>
+              <option value="Obrero">Obrero</option>
+            </select>
+            <select id="registro-personal-filtro-turno">
+              <option value="">Todos los turnos</option>
+              <option value="Mañana">Mañana</option>
+              <option value="Tarde">Tarde</option>
+            </select>
+          </div>
+          <button id="registro-personal-nuevo" type="button" class="constancia-primary">
+            <i class="fa-solid fa-user-plus"></i> Registrar personal
+          </button>
+        </div>
+
+        <div id="registro-personal-form-wrap" class="registro-personal-form-wrap hidden">
+          ${formRegistroPersonalHtml()}
+        </div>
+
+        <div id="registro-personal-listado">
+          ${tablaRegistroPersonalHtml(lista)}
+        </div>
+
+        <div class="registro-personal-encuesta-info">
+          <i class="fa-solid fa-link"></i>
+          <div>
+            <strong>Encuesta individual para el personal</strong>
+            <span>La próxima fase permitirá generar un enlace para que cada trabajador complete su propia ficha desde el teléfono y la información llegue automáticamente a EduGestión.</span>
+          </div>
+          <button type="button" disabled title="Se activará en la fase de encuesta">Próxima fase</button>
+        </div>
+      </section>`;
+  }
+
+  function formRegistroPersonalHtml(persona = null) {
+    const p = persona || {};
+    const v = (k, def='') => escapeAttrConstancia(p[k] ?? def);
+    const sel = (k, valor) => String(p[k] || '') === valor ? 'selected' : '';
+    const check = (k) => p[k] ? 'checked' : '';
+
+    return `
+      <form id="registro-personal-form" class="registro-personal-form">
+        <div class="registro-personal-form-header">
+          <div>
+            <h4><i class="fa-solid fa-id-card"></i> ${persona ? 'Editar registro' : 'Nuevo registro de personal'}</h4>
+            <p>Completa los datos personales, laborales y familiares.</p>
+          </div>
+          <button id="registro-personal-cerrar" type="button" class="director-back-button"><i class="fa-solid fa-xmark"></i> Cerrar</button>
+        </div>
+
+        <input type="hidden" id="rp-id" value="${v('id')}">
+
+        <section class="rp-bloque">
+          <h5>Clasificación laboral</h5>
+          <div class="rp-grid rp-grid-4">
+            <label>
+              <span>Tipo de personal *</span>
+              <select id="rp-tipo" required>
+                <option value="">Selecciona</option>
+                <option value="Docente" ${sel('tipo','Docente')}>Docente</option>
+                <option value="Administrativo" ${sel('tipo','Administrativo')}>Administrativo</option>
+                <option value="Obrero" ${sel('tipo','Obrero')}>Obrero</option>
+              </select>
+            </label>
+            <label id="rp-nivel-docente-wrap">
+              <span>Nivel docente</span>
+              <select id="rp-nivel-docente">
+                <option value="">Selecciona</option>
+                <option value="Primaria" ${sel('nivelDocente','Primaria')}>Primaria</option>
+                <option value="Bachillerato" ${sel('nivelDocente','Bachillerato')}>Bachillerato</option>
+              </select>
+            </label>
+            <label>
+              <span>Turno *</span>
+              <select id="rp-turno" required>
+                <option value="">Selecciona</option>
+                <option value="Mañana" ${sel('turno','Mañana')}>Mañana</option>
+                <option value="Tarde" ${sel('turno','Tarde')}>Tarde</option>
+              </select>
+            </label>
+            <label>
+              <span>Cargo / Función *</span>
+              <input id="rp-cargo" value="${v('cargo')}" required placeholder="Ej.: Docente de Matemática">
+            </label>
+            <label id="rp-materia-wrap">
+              <span>Materia / Especialidad</span>
+              <input id="rp-materia" value="${v('materia')}" placeholder="Solo para docentes">
+            </label>
+            <label id="rp-grados-wrap" class="rp-col-2">
+              <span>Grados / Años / Secciones que atiende</span>
+              <input id="rp-grados" value="${v('grados')}" placeholder="Ej.: 1.º A, 2.º B, 3.º A">
+            </label>
+            <label>
+              <span>Carga horaria semanal</span>
+              <input id="rp-carga-horaria" type="number" min="0" value="${v('cargaHoraria')}" placeholder="Horas">
+            </label>
+          </div>
+        </section>
+
+        <section class="rp-bloque">
+          <h5>Datos personales</h5>
+          <div class="rp-grid rp-grid-3">
+            <label><span>Nombres y apellidos *</span><input id="rp-nombre" value="${v('nombre')}" required></label>
+            <label><span>Cédula / Identificación *</span><input id="rp-cedula" value="${v('cedula')}" required></label>
+            <label><span>Fecha de nacimiento</span><input id="rp-fecha-nacimiento" type="date" value="${v('fechaNacimiento')}"></label>
+            <label>
+              <span>Sexo</span>
+              <select id="rp-sexo">
+                <option value="">Selecciona</option>
+                <option value="Femenino" ${sel('sexo','Femenino')}>Femenino</option>
+                <option value="Masculino" ${sel('sexo','Masculino')}>Masculino</option>
+                <option value="Otro" ${sel('sexo','Otro')}>Otro</option>
+              </select>
+            </label>
+            <label>
+              <span>Estado civil</span>
+              <select id="rp-estado-civil">
+                <option value="">Selecciona</option>
+                <option value="Soltero/a" ${sel('estadoCivil','Soltero/a')}>Soltero/a</option>
+                <option value="Casado/a" ${sel('estadoCivil','Casado/a')}>Casado/a</option>
+                <option value="Unión estable" ${sel('estadoCivil','Unión estable')}>Unión estable</option>
+                <option value="Divorciado/a" ${sel('estadoCivil','Divorciado/a')}>Divorciado/a</option>
+                <option value="Viudo/a" ${sel('estadoCivil','Viudo/a')}>Viudo/a</option>
+              </select>
+            </label>
+            <label><span>Correo electrónico</span><input id="rp-correo" type="email" value="${v('correo')}"></label>
+            <label><span>Teléfono celular *</span><input id="rp-telefono" inputmode="tel" value="${v('telefono')}" required></label>
+            <label><span>Teléfono local</span><input id="rp-telefono-local" inputmode="tel" value="${v('telefonoLocal')}"></label>
+            <label><span>Otro teléfono</span><input id="rp-telefono-alt" inputmode="tel" value="${v('telefonoAlternativo')}"></label>
+          </div>
+        </section>
+
+        <section class="rp-bloque">
+          <h5>Dirección de habitación</h5>
+          <div class="rp-grid rp-grid-3">
+            <label class="rp-col-2"><span>Dirección completa *</span><textarea id="rp-direccion" rows="3" required>${h(p.direccion || '')}</textarea></label>
+            <label><span>Parroquia</span><input id="rp-parroquia" value="${v('parroquia')}"></label>
+            <label><span>Municipio</span><input id="rp-municipio" value="${v('municipio')}"></label>
+            <label><span>Estado</span><input id="rp-estado" value="${v('estado')}"></label>
+            <label><span>Punto de referencia</span><input id="rp-referencia" value="${v('referencia')}"></label>
+          </div>
+        </section>
+
+        <section class="rp-bloque">
+          <h5>Formación académica y situación laboral</h5>
+          <div class="rp-grid rp-grid-3">
+            <label><span>Nivel académico</span><input id="rp-nivel-academico" value="${v('nivelAcademico')}" placeholder="Bachiller, TSU, Licenciado..."></label>
+            <label><span>Título / Profesión</span><input id="rp-profesion" value="${v('profesion')}"></label>
+            <label><span>Institución donde estudió</span><input id="rp-institucion-estudio" value="${v('institucionEstudio')}"></label>
+            <label><span>Fecha de ingreso al Ministerio</span><input id="rp-ingreso-ministerio" type="date" value="${v('ingresoMinisterio')}"></label>
+            <label><span>Fecha de ingreso al liceo *</span><input id="rp-ingreso-plantel" type="date" value="${v('ingresoPlantel')}" required></label>
+            <label><span>Tiempo en la institución</span><input id="rp-antiguedad" value="${v('antiguedad')}" readonly placeholder="Se calcula automáticamente"></label>
+            <label>
+              <span>Condición laboral</span>
+              <select id="rp-condicion">
+                <option value="">Selecciona</option>
+                <option value="Fijo" ${sel('condicion','Fijo')}>Fijo</option>
+                <option value="Contratado" ${sel('condicion','Contratado')}>Contratado</option>
+                <option value="Suplente" ${sel('condicion','Suplente')}>Suplente</option>
+                <option value="Otro" ${sel('condicion','Otro')}>Otro</option>
+              </select>
+            </label>
+            <label><span>Código / N.º de empleado</span><input id="rp-codigo-empleado" value="${v('codigoEmpleado')}"></label>
+            <label><span>Departamento / Coordinación</span><input id="rp-departamento" value="${v('departamento')}"></label>
+          </div>
+        </section>
+
+        <section class="rp-bloque">
+          <h5>Carga familiar</h5>
+          <div class="rp-grid rp-grid-4">
+            <label><span>Cantidad de hijos</span><input id="rp-hijos" type="number" min="0" value="${v('hijos',0)}"></label>
+            <label><span>Personas bajo su carga</span><input id="rp-carga-familiar" type="number" min="0" value="${v('cargaFamiliar',0)}"></label>
+            <label><span>Personas con discapacidad a cargo</span><input id="rp-discapacidad-cargo" type="number" min="0" value="${v('discapacidadCargo',0)}"></label>
+            <label><span>Adultos mayores a cargo</span><input id="rp-adultos-mayores" type="number" min="0" value="${v('adultosMayores',0)}"></label>
+          </div>
+        </section>
+
+        <section class="rp-bloque">
+          <h5>Traslado hasta la institución</h5>
+          <div class="rp-grid rp-grid-4">
+            <label>
+              <span>Medio de transporte principal</span>
+              <select id="rp-transporte">
+                <option value="">Selecciona</option>
+                <option value="Carro propio" ${sel('transporte','Carro propio')}>Carro propio</option>
+                <option value="Moto propia" ${sel('transporte','Moto propia')}>Moto propia</option>
+                <option value="Transporte público" ${sel('transporte','Transporte público')}>Transporte público</option>
+                <option value="Taxi / aplicación" ${sel('transporte','Taxi / aplicación')}>Taxi / aplicación</option>
+                <option value="Caminando" ${sel('transporte','Caminando')}>Caminando</option>
+                <option value="Otro" ${sel('transporte','Otro')}>Otro</option>
+              </select>
+            </label>
+            <label><span>¿Usa vehículo propio?</span><select id="rp-vehiculo-propio"><option value="No" ${sel('vehiculoPropio','No')}>No</option><option value="Sí" ${sel('vehiculoPropio','Sí')}>Sí</option></select></label>
+            <label><span>Tiempo aproximado de llegada</span><input id="rp-tiempo-llegada" value="${v('tiempoLlegada')}" placeholder="Ej.: 45 minutos"></label>
+            <label><span>N.º de transportes que toma</span><input id="rp-num-transportes" type="number" min="0" value="${v('numTransportes',0)}"></label>
+          </div>
+        </section>
+
+        <section class="rp-bloque">
+          <h5>Contacto de emergencia</h5>
+          <div class="rp-grid rp-grid-3">
+            <label><span>Nombre completo *</span><input id="rp-emergencia-nombre" value="${v('emergenciaNombre')}" required></label>
+            <label><span>Parentesco *</span><input id="rp-emergencia-parentesco" value="${v('emergenciaParentesco')}" required></label>
+            <label><span>Teléfono *</span><input id="rp-emergencia-telefono" inputmode="tel" value="${v('emergenciaTelefono')}" required></label>
+            <label><span>Teléfono alternativo</span><input id="rp-emergencia-telefono2" inputmode="tel" value="${v('emergenciaTelefono2')}"></label>
+            <label class="rp-col-2"><span>Observaciones generales</span><textarea id="rp-observaciones" rows="3">${h(p.observaciones || '')}</textarea></label>
+          </div>
+        </section>
+
+        <div class="registro-personal-actions">
+          <button type="button" id="registro-personal-cancelar" class="director-back-button"><i class="fa-solid fa-ban"></i> Cancelar</button>
+          <button type="submit" class="constancia-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar registro</button>
+        </div>
+      </form>`;
+  }
+
+  function tablaRegistroPersonalHtml(lista) {
+    if (!lista.length) {
+      return `<div class="director-empty registro-personal-empty"><i class="fa-solid fa-address-book"></i><span>Aún no hay personal registrado. Pulsa “Registrar personal” para comenzar.</span></div>`;
+    }
+
+    return `
+      <div class="registro-personal-tabla-wrap">
+        <table class="registro-personal-tabla">
+          <thead>
+            <tr>
+              <th>Nombre</th><th>Tipo</th><th>Nivel</th><th>Turno</th><th>Cargo</th><th>Teléfono</th><th>Tiempo en el liceo</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lista.map(p => `
+              <tr data-rp-id="${h(p.id)}">
+                <td><strong>${h(p.nombre)}</strong><small>${h(p.cedula || '')}</small></td>
+                <td><span class="rp-badge">${h(p.tipo || '')}</span></td>
+                <td>${h(p.tipo === 'Docente' ? (p.nivelDocente || '—') : '—')}</td>
+                <td>${h(p.turno || '—')}</td>
+                <td>${h(p.cargo || '—')}</td>
+                <td>${h(p.telefono || '—')}</td>
+                <td>${h(p.antiguedad || calcularAntiguedadRegistroPersonal(p.ingresoPlantel) || '—')}</td>
+                <td>
+                  <div class="rp-actions-row">
+                    <button type="button" data-rp-editar="${h(p.id)}" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" data-rp-imprimir="${h(p.id)}" title="Imprimir ficha"><i class="fa-solid fa-print"></i></button>
+                    <button type="button" data-rp-eliminar="${h(p.id)}" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function leerRegistroPersonalFormulario() {
+    const val = id => normalizarTextoRegistroPersonal(document.getElementById(id)?.value);
+    const ingresoPlantel = val('rp-ingreso-plantel');
+    return {
+      id: val('rp-id') || `personal-${Date.now()}`,
+      tipo: val('rp-tipo'),
+      nivelDocente: val('rp-nivel-docente'),
+      turno: val('rp-turno'),
+      cargo: val('rp-cargo'),
+      materia: val('rp-materia'),
+      grados: val('rp-grados'),
+      cargaHoraria: val('rp-carga-horaria'),
+      nombre: val('rp-nombre'),
+      cedula: val('rp-cedula'),
+      fechaNacimiento: val('rp-fecha-nacimiento'),
+      sexo: val('rp-sexo'),
+      estadoCivil: val('rp-estado-civil'),
+      correo: val('rp-correo'),
+      telefono: val('rp-telefono'),
+      telefonoLocal: val('rp-telefono-local'),
+      telefonoAlternativo: val('rp-telefono-alt'),
+      direccion: val('rp-direccion'),
+      parroquia: val('rp-parroquia'),
+      municipio: val('rp-municipio'),
+      estado: val('rp-estado'),
+      referencia: val('rp-referencia'),
+      nivelAcademico: val('rp-nivel-academico'),
+      profesion: val('rp-profesion'),
+      institucionEstudio: val('rp-institucion-estudio'),
+      ingresoMinisterio: val('rp-ingreso-ministerio'),
+      ingresoPlantel,
+      antiguedad: calcularAntiguedadRegistroPersonal(ingresoPlantel),
+      condicion: val('rp-condicion'),
+      codigoEmpleado: val('rp-codigo-empleado'),
+      departamento: val('rp-departamento'),
+      hijos: Number(val('rp-hijos') || 0),
+      cargaFamiliar: Number(val('rp-carga-familiar') || 0),
+      discapacidadCargo: Number(val('rp-discapacidad-cargo') || 0),
+      adultosMayores: Number(val('rp-adultos-mayores') || 0),
+      transporte: val('rp-transporte'),
+      vehiculoPropio: val('rp-vehiculo-propio'),
+      tiempoLlegada: val('rp-tiempo-llegada'),
+      numTransportes: Number(val('rp-num-transportes') || 0),
+      emergenciaNombre: val('rp-emergencia-nombre'),
+      emergenciaParentesco: val('rp-emergencia-parentesco'),
+      emergenciaTelefono: val('rp-emergencia-telefono'),
+      emergenciaTelefono2: val('rp-emergencia-telefono2'),
+      observaciones: val('rp-observaciones'),
+      actualizadoEn: new Date().toISOString()
+    };
+  }
+
+  function guardarRegistroPersonalFormulario(e) {
+    e?.preventDefault();
+    const persona = leerRegistroPersonalFormulario();
+
+    if (!persona.tipo || !persona.nombre || !persona.cedula || !persona.turno || !persona.cargo || !persona.telefono || !persona.direccion || !persona.ingresoPlantel) {
+      alert('Completa todos los campos obligatorios marcados con *.');
+      return;
+    }
+    if (persona.tipo === 'Docente' && !persona.nivelDocente) {
+      alert('Selecciona si el docente pertenece a Primaria o Bachillerato.');
+      return;
+    }
+
+    const lista = cargarRegistroPersonalDirector();
+    const duplicado = lista.find(p => p.cedula && persona.cedula && p.cedula === persona.cedula && p.id !== persona.id);
+    if (duplicado) {
+      alert('Ya existe una persona registrada con esa cédula.');
+      return;
+    }
+
+    const idx = lista.findIndex(p => p.id === persona.id);
+    if (idx >= 0) lista[idx] = persona;
+    else lista.push(persona);
+    guardarRegistroPersonalDirector(lista);
+
+    // Sincroniza administrativos/obreros con la ficha técnica existente.
+    if (persona.tipo === 'Administrativo' || persona.tipo === 'Obrero') {
+      try {
+        const raw = localStorage.getItem('edugestion:director:personal-ficha:v1');
+        const store = raw ? JSON.parse(raw) : {Administrativo:[], Obrero:[]};
+        if (!Array.isArray(store[persona.tipo])) store[persona.tipo] = [];
+        const item = {
+          id: persona.id,
+          nombre: persona.nombre,
+          cedula: persona.cedula,
+          cargo: persona.cargo,
+          telefono: persona.telefono,
+          correo: persona.correo,
+          tipo: persona.tipo
+        };
+        const pos = store[persona.tipo].findIndex(x => x.id === persona.id || (x.cedula && x.cedula === persona.cedula));
+        if (pos >= 0) store[persona.tipo][pos] = item;
+        else store[persona.tipo].push(item);
+        localStorage.setItem('edugestion:director:personal-ficha:v1', JSON.stringify(store));
+      } catch (_) {}
+    }
+
+    alert(`Registro de ${persona.nombre} guardado correctamente.`);
+    renderPanelDirector();
+  }
+
+  function mostrarFormularioRegistroPersonal(persona = null) {
+    const wrap = document.getElementById('registro-personal-form-wrap');
+    if (!wrap) return;
+    wrap.innerHTML = formRegistroPersonalHtml(persona);
+    wrap.classList.remove('hidden');
+    enlazarFormularioRegistroPersonal();
+    wrap.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  function cerrarFormularioRegistroPersonal() {
+    const wrap = document.getElementById('registro-personal-form-wrap');
+    if (wrap) {
+      wrap.classList.add('hidden');
+      wrap.innerHTML = '';
+    }
+  }
+
+  function actualizarCamposDocenteRegistroPersonal() {
+    const tipo = document.getElementById('rp-tipo')?.value || '';
+    const esDocente = tipo === 'Docente';
+    ['rp-nivel-docente-wrap','rp-materia-wrap','rp-grados-wrap'].forEach(id => {
+      document.getElementById(id)?.classList.toggle('hidden', !esDocente);
+    });
+    const nivel = document.getElementById('rp-nivel-docente');
+    if (nivel && !esDocente) nivel.value = '';
+  }
+
+  function enlazarFormularioRegistroPersonal() {
+    document.getElementById('registro-personal-form')?.addEventListener('submit', guardarRegistroPersonalFormulario);
+    document.getElementById('registro-personal-cerrar')?.addEventListener('click', cerrarFormularioRegistroPersonal);
+    document.getElementById('registro-personal-cancelar')?.addEventListener('click', cerrarFormularioRegistroPersonal);
+    document.getElementById('rp-tipo')?.addEventListener('change', actualizarCamposDocenteRegistroPersonal);
+    document.getElementById('rp-ingreso-plantel')?.addEventListener('change', e => {
+      const antiguedad = document.getElementById('rp-antiguedad');
+      if (antiguedad) antiguedad.value = calcularAntiguedadRegistroPersonal(e.target.value);
+    });
+    actualizarCamposDocenteRegistroPersonal();
+  }
+
+  function filtrarListadoRegistroPersonal() {
+    const buscar = normalizarTextoRegistroPersonal(document.getElementById('registro-personal-buscar')?.value).toLowerCase();
+    const tipo = normalizarTextoRegistroPersonal(document.getElementById('registro-personal-filtro-tipo')?.value);
+    const turno = normalizarTextoRegistroPersonal(document.getElementById('registro-personal-filtro-turno')?.value);
+    const lista = cargarRegistroPersonalDirector().filter(p => {
+      const texto = [p.nombre,p.cedula,p.cargo,p.telefono,p.correo,p.materia].join(' ').toLowerCase();
+      return (!buscar || texto.includes(buscar)) && (!tipo || p.tipo === tipo) && (!turno || p.turno === turno);
+    });
+    const cont = document.getElementById('registro-personal-listado');
+    if (cont) {
+      cont.innerHTML = tablaRegistroPersonalHtml(lista);
+      enlazarAccionesListadoRegistroPersonal();
+    }
+  }
+
+  function eliminarRegistroPersonal(id) {
+    const persona = personaRegistroPersonalPorId(id);
+    if (!persona) return;
+    if (!confirm(`¿Eliminar el registro de ${persona.nombre}?`)) return;
+    const lista = cargarRegistroPersonalDirector().filter(p => p.id !== id);
+    guardarRegistroPersonalDirector(lista);
+    renderPanelDirector();
+  }
+
+  function imprimirRegistroPersonal(id) {
+    const p = personaRegistroPersonalPorId(id);
+    if (!p) return;
+    const ventana = window.open('', '_blank', 'width=900,height=1100');
+    if (!ventana) {
+      alert('Permite ventanas emergentes para imprimir la ficha.');
+      return;
+    }
+    const fila = (t, v) => `<tr><th>${h(t)}</th><td>${h(v || 'No indicado')}</td></tr>`;
+    ventana.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Registro de personal - ${h(p.nombre)}</title>
+      <style>@page{size:Letter;margin:12mm}body{font-family:Arial,sans-serif;color:#1d2f45;margin:0}h1{text-align:center;font-size:22px;margin:0 0 4px}.sub{text-align:center;color:#65768a;margin:0 0 20px;font-size:12px}h2{font-size:15px;background:#eef5fb;padding:8px 10px;margin:16px 0 8px;border-radius:7px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #cbd7e3;padding:7px;text-align:left;vertical-align:top}th{width:32%;background:#f8fbfe}</style>
+      </head><body>
+      <h1>REGISTRO DE PERSONAL</h1><p class="sub">U.E.N. MIGUEL ÁNGEL LÓPEZ CÁRDENAS · Dirección</p>
+      <h2>Datos laborales</h2><table>
+        ${fila('Tipo de personal', p.tipo)}${fila('Nivel docente', p.nivelDocente)}${fila('Turno', p.turno)}${fila('Cargo / Función', p.cargo)}${fila('Materia / Especialidad', p.materia)}${fila('Grados / Años', p.grados)}${fila('Carga horaria', p.cargaHoraria)}
+      </table>
+      <h2>Datos personales</h2><table>
+        ${fila('Nombre', p.nombre)}${fila('Cédula', p.cedula)}${fila('Fecha de nacimiento', p.fechaNacimiento)}${fila('Sexo', p.sexo)}${fila('Estado civil', p.estadoCivil)}${fila('Correo', p.correo)}${fila('Teléfono celular', p.telefono)}${fila('Teléfono local', p.telefonoLocal)}${fila('Otro teléfono', p.telefonoAlternativo)}
+      </table>
+      <h2>Dirección</h2><table>
+        ${fila('Dirección completa', p.direccion)}${fila('Parroquia', p.parroquia)}${fila('Municipio', p.municipio)}${fila('Estado', p.estado)}${fila('Referencia', p.referencia)}
+      </table>
+      <h2>Formación y antigüedad</h2><table>
+        ${fila('Nivel académico', p.nivelAcademico)}${fila('Profesión', p.profesion)}${fila('Institución de estudio', p.institucionEstudio)}${fila('Ingreso al Ministerio', p.ingresoMinisterio)}${fila('Ingreso al liceo', p.ingresoPlantel)}${fila('Tiempo en la institución', p.antiguedad)}${fila('Condición laboral', p.condicion)}${fila('Código de empleado', p.codigoEmpleado)}${fila('Departamento', p.departamento)}
+      </table>
+      <h2>Carga familiar y traslado</h2><table>
+        ${fila('Hijos', String(p.hijos ?? 0))}${fila('Personas bajo su carga', String(p.cargaFamiliar ?? 0))}${fila('Personas con discapacidad a cargo', String(p.discapacidadCargo ?? 0))}${fila('Adultos mayores a cargo', String(p.adultosMayores ?? 0))}${fila('Transporte', p.transporte)}${fila('Vehículo propio', p.vehiculoPropio)}${fila('Tiempo de llegada', p.tiempoLlegada)}${fila('N.º de transportes', String(p.numTransportes ?? 0))}
+      </table>
+      <h2>Emergencia</h2><table>
+        ${fila('Contacto', p.emergenciaNombre)}${fila('Parentesco', p.emergenciaParentesco)}${fila('Teléfono', p.emergenciaTelefono)}${fila('Teléfono alternativo', p.emergenciaTelefono2)}${fila('Observaciones', p.observaciones)}
+      </table>
+      <script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);
+    ventana.document.close();
+  }
+
+  function enlazarAccionesListadoRegistroPersonal() {
+    document.querySelectorAll('[data-rp-editar]').forEach(btn => btn.addEventListener('click', () => {
+      const p = personaRegistroPersonalPorId(btn.dataset.rpEditar);
+      if (p) mostrarFormularioRegistroPersonal(p);
+    }));
+    document.querySelectorAll('[data-rp-imprimir]').forEach(btn => btn.addEventListener('click', () => imprimirRegistroPersonal(btn.dataset.rpImprimir)));
+    document.querySelectorAll('[data-rp-eliminar]').forEach(btn => btn.addEventListener('click', () => eliminarRegistroPersonal(btn.dataset.rpEliminar)));
+  }
+
+  function enlazarRegistroPersonalDirector() {
+    if (vistaDirector !== 'registro-personal') return;
+    document.getElementById('registro-personal-nuevo')?.addEventListener('click', () => mostrarFormularioRegistroPersonal());
+    document.getElementById('registro-personal-buscar')?.addEventListener('input', filtrarListadoRegistroPersonal);
+    document.getElementById('registro-personal-filtro-tipo')?.addEventListener('change', filtrarListadoRegistroPersonal);
+    document.getElementById('registro-personal-filtro-turno')?.addEventListener('change', filtrarListadoRegistroPersonal);
+    enlazarAccionesListadoRegistroPersonal();
+  }
+
+
   function renderPanelDirector() {
     document.querySelectorAll('#director-sidebar-menu [data-director-view]').forEach(b => {
       b.classList.toggle('is-active', b.dataset.directorView === vistaDirector);
@@ -4864,6 +5416,10 @@ const SESSION_KEY = 'edugestion_session_v2';
       html = estadisticaDirectorHtml();
     }
 
+    if (vistaDirector === 'registro-personal') {
+      html = registroPersonalHtml();
+    }
+
     if (vistaDirector === 'ficha-tecnica') {
       html = fichaTecnicaHtml();
     }
@@ -4877,6 +5433,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     content.innerHTML = contexto + html;
     enlazarConstanciaEstudio();
     enlazarEstadisticaDirector();
+    enlazarRegistroPersonalDirector();
     enlazarFichaTecnicaDirector();
 
     content.querySelectorAll('[data-director-section]').forEach(button => {
@@ -13542,4 +14099,83 @@ Archivo enviado directamente desde EduGestión.`);
   document.head.appendChild(style);
 })();
 /* EDUGESTION_FASE_21P_FICHA_PERSONAL_END */
+
+
+/* =========================================================
+   EduGestión · FASE 21Q
+   REGISTRO DE PERSONAL — DIRECCIÓN
+   ========================================================= */
+(() => {
+  if (window.EDUGESTION_FASE21Q_REGISTRO_PERSONAL) return;
+  window.EDUGESTION_FASE21Q_REGISTRO_PERSONAL = true;
+
+  const style = document.createElement('style');
+  style.id = 'edugestion-fase21q-registro-personal-style';
+  style.textContent = `
+    .registro-personal-tool{max-width:1220px;margin:0 auto!important;overflow:hidden}
+    .registro-personal-tool>header{justify-content:center!important;text-align:center}
+    .registro-personal-tool>header>div{justify-content:center}
+    .registro-personal-tool>header h3{font-size:25px!important}
+    .registro-personal-tool>header p{font-size:16px!important}
+    .registro-personal-metricas{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:1120px;margin:20px auto}
+    .registro-personal-metricas article{display:flex;align-items:center;justify-content:center;gap:13px;min-height:100px;padding:16px;border:1px solid #d7e5f3;border-radius:15px;background:#fff;text-align:center}
+    .registro-personal-metricas i{width:46px;height:46px;display:grid;place-items:center;border-radius:12px;background:#edf5fd;color:#1f5da8;font-size:20px}
+    .registro-personal-metricas strong{display:block;font-size:30px;color:#173a65;line-height:1}
+    .registro-personal-metricas span{display:block;margin-top:5px;font-size:14px;font-weight:700;color:#62768d}
+    .registro-personal-toolbar{max-width:1120px;margin:18px auto;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px;border:1px solid #dbe7f2;background:#f7fbff;border-radius:15px}
+    .registro-personal-filtros{display:grid;grid-template-columns:minmax(260px,1fr) 190px 160px;gap:10px;flex:1}
+    .registro-personal-toolbar input,.registro-personal-toolbar select{min-height:46px;padding:9px 11px;border:1px solid #cbdbee;border-radius:10px;background:#fff;color:#173a65;font-size:15px}
+    .registro-personal-toolbar button{min-height:46px;font-size:15px;white-space:nowrap}
+    .registro-personal-form-wrap{max-width:1120px;margin:20px auto;padding:0}
+    .registro-personal-form{border:1px solid #d7e5f2;border-radius:18px;background:#fff;padding:20px;box-shadow:0 10px 28px rgba(30,76,125,.06)}
+    .registro-personal-form-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}
+    .registro-personal-form-header h4{margin:0;font-size:22px;color:#173a65}
+    .registro-personal-form-header p{margin:5px 0 0;color:#6b7f95;font-size:14px}
+    .rp-bloque{margin:18px 0;padding:18px;border:1px solid #dbe7f2;border-radius:15px;background:#fbfdff}
+    .rp-bloque h5{margin:0 0 14px;font-size:18px;color:#173a65}
+    .rp-grid{display:grid;gap:13px}
+    .rp-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .rp-grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .rp-col-2{grid-column:span 2}
+    .rp-grid label{display:flex;flex-direction:column;gap:7px}
+    .rp-grid label span{font-size:14px;font-weight:800;color:#506a86}
+    .rp-grid input,.rp-grid select,.rp-grid textarea{width:100%;border:1px solid #cad9ea;border-radius:10px;padding:10px 11px;font:inherit;font-size:15px;color:#173a65;background:#fff;resize:vertical}
+    .rp-grid input,.rp-grid select{min-height:46px}
+    .rp-grid input[readonly]{background:#f1f5f9;color:#6a7b8c}
+    .registro-personal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+    .registro-personal-tabla-wrap{max-width:1120px;margin:0 auto;overflow:auto;border:1px solid #d8e5f1;border-radius:15px}
+    .registro-personal-tabla{width:100%;border-collapse:collapse;min-width:980px;background:#fff}
+    .registro-personal-tabla th{padding:13px 10px;background:#edf5fc;color:#536d88;font-size:13px;text-transform:uppercase;text-align:center}
+    .registro-personal-tabla td{padding:13px 10px;border-top:1px solid #e4edf6;text-align:center;color:#243f5f;font-size:14px}
+    .registro-personal-tabla td:first-child{text-align:left}
+    .registro-personal-tabla td strong{display:block;font-size:15px;color:#173a65}
+    .registro-personal-tabla td small{display:block;margin-top:3px;color:#798ba0}
+    .rp-badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#edf5fd;color:#1f5da8;font-size:12px;font-weight:800}
+    .rp-actions-row{display:flex;justify-content:center;gap:7px}
+    .rp-actions-row button{width:36px;height:36px;border:1px solid #d2e0ed;border-radius:9px;background:#fff;color:#285d94;cursor:pointer}
+    .rp-actions-row button:hover{background:#edf5fd}
+    .registro-personal-empty{max-width:1120px;margin:20px auto}
+    .registro-personal-encuesta-info{max-width:1120px;margin:22px auto 0;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:16px;border:1px solid #d7e6f4;border-radius:14px;background:#f5f9fd;color:#536b84}
+    .registro-personal-encuesta-info>i{font-size:22px;color:#1f5da8}
+    .registro-personal-encuesta-info strong{display:block;font-size:16px;color:#173a65}
+    .registro-personal-encuesta-info span{display:block;margin-top:3px;font-size:13px}
+    .registro-personal-encuesta-info button{min-height:40px;border:0;border-radius:9px;padding:0 13px;background:#dbe6f0;color:#657689;font-weight:800}
+    @media(max-width:1000px){
+      .registro-personal-metricas{grid-template-columns:repeat(2,1fr)}
+      .registro-personal-toolbar{align-items:stretch;flex-direction:column}
+      .registro-personal-filtros{grid-template-columns:1fr}
+      .rp-grid-4,.rp-grid-3{grid-template-columns:repeat(2,1fr)}
+    }
+    @media(max-width:720px){
+      .registro-personal-metricas{grid-template-columns:1fr}
+      .rp-grid-4,.rp-grid-3{grid-template-columns:1fr}
+      .rp-col-2{grid-column:auto}
+      .registro-personal-form-header{flex-direction:column}
+      .registro-personal-actions{flex-direction:column}
+      .registro-personal-encuesta-info{grid-template-columns:1fr;text-align:center}
+    }
+  `;
+  document.head.appendChild(style);
+})();
+/* EDUGESTION_FASE_21Q_REGISTRO_PERSONAL_END */
 
