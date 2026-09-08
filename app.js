@@ -3678,17 +3678,17 @@ const SESSION_KEY = 'edugestion_session_v2';
           }
           .constancia-watermark{
             position:absolute;
-            inset:190px 65px 135px;
+            inset:170px 40px 110px;
             display:grid;
             place-items:center;
             z-index:0;
             pointer-events:none
           }
           .constancia-watermark img{
-            width:78%;
-            max-width:535px;
-            opacity:.12;
-            filter:grayscale(1)
+            width:88%;
+            max-width:640px;
+            opacity:.20;
+            filter:grayscale(1) contrast(1.08)
           }
           .constancia-documento>*:not(.constancia-watermark){position:relative;z-index:1}
           .constancia-cabecera-oficial{
@@ -3780,7 +3780,18 @@ const SESSION_KEY = 'edugestion_session_v2';
     const director = document.getElementById('constancia-director');
 
     select?.addEventListener('change', actualizarVistaConstancia);
-    btnPreview?.addEventListener('click', actualizarVistaConstancia);
+    btnPreview?.addEventListener('click', () => {
+      if (!select?.value) {
+        alert('Primero selecciona un estudiante para generar la vista previa.');
+        select?.focus();
+        return;
+      }
+      actualizarVistaConstancia();
+      document.getElementById('constancia-preview')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    });
     btnPrint?.addEventListener('click', imprimirConstanciaEstudio);
     [fecha, ano, director].forEach(el => el?.addEventListener('input', () => {
       if (select?.value) actualizarVistaConstancia();
@@ -11932,17 +11943,17 @@ Archivo enviado directamente desde EduGestión.`);
     }
     .constancia-documento--oficial .constancia-watermark{
       position:absolute;
-      inset:220px 70px 145px;
+      inset:180px 40px 110px;
       display:grid;
       place-items:center;
       pointer-events:none;
       z-index:0
     }
     .constancia-documento--oficial .constancia-watermark img{
-      width:78%;
-      max-width:540px;
-      opacity:.12;
-      filter:grayscale(1)
+      width:88%;
+      max-width:640px;
+      opacity:.22;
+      filter:grayscale(1) contrast(1.08)
     }
     .constancia-documento--oficial>*:not(.constancia-watermark){
       position:relative;
@@ -12088,3 +12099,5 @@ Archivo enviado directamente desde EduGestión.`);
 })();
 /* EDUGESTION_FASE_21J_LOGO_DIRECCION_DOCUMENTOS_END */
 
+
+/* EDUGESTION_FASE_21K_CONSTANCIA_LOGO_PREVIEW_FIX_END */
