@@ -4254,38 +4254,30 @@ const SESSION_KEY = 'edugestion_session_v2';
     localStorage.setItem(DIRECTOR_FICHA_TECNICA_STORAGE, JSON.stringify(data));
   }
 
-  function cargarPersonalFichaDirector() {
-    try {
-      const raw = localStorage.getItem('edugestion:director:personal-ficha:v1');
-      return raw ? JSON.parse(raw) : {Administrativo:[], Obrero:[]};
-    } catch (_) {
-      return {Administrativo:[], Obrero:[]};
-    }
-  }
-
-  function guardarPersonalFichaDirector(data) {
-    localStorage.setItem('edugestion:director:personal-ficha:v1', JSON.stringify(data));
-  }
-
-  function listaDocentesFichaDirector() {
-    const lista = Array.isArray(datosDirector?.docentes) ? datosDirector.docentes : [];
-    return lista
-      .map((d, i) => ({
-        id: String(d.idProfesor || d.id || d.correo || d.usuario || `docente-${i}`),
-        nombre: String(d.nombre || d.docente || d.nombreCompleto || d.correo || '').trim(),
-        cedula: String(d.cedula || d.identificacion || '').trim(),
-        cargo: String(d.materia || d.especialidad || 'Docente').trim(),
-        telefono: String(d.telefono || d.whatsapp || '').trim(),
-        correo: String(d.correo || d.email || '').trim(),
-        tipo: 'Docente'
+  function personalFichaDesdeRegistroInstitucional() {
+    return cargarRegistroPersonalDirector()
+      .map(p => ({
+        id: String(p.id || ''),
+        nombre: String(p.nombre || '').trim(),
+        cedula: String(p.cedula || '').trim(),
+        cargo: String(p.cargo || '').trim(),
+        telefono: String(p.telefono || '').trim(),
+        correo: String(p.correo || '').trim(),
+        tipo: String(p.tipo || '').trim(),
+        nivelDocente: String(p.nivelDocente || '').trim(),
+        turno: String(p.turno || '').trim(),
+        emergenciaNombre: String(p.emergenciaNombre || '').trim(),
+        emergenciaParentesco: String(p.emergenciaParentesco || '').trim(),
+        emergenciaTelefono: String(p.emergenciaTelefono || '').trim(),
+        emergenciaTelefono2: String(p.emergenciaTelefono2 || '').trim()
       }))
-      .filter(x => x.nombre);
+      .filter(p => p.id && p.nombre && ['Docente','Administrativo','Obrero'].includes(p.tipo));
   }
 
   function personalFichaPorTipo(tipo) {
-    if (tipo === 'Docente') return listaDocentesFichaDirector();
-    const store = cargarPersonalFichaDirector();
-    return Array.isArray(store[tipo]) ? store[tipo] : [];
+    return personalFichaDesdeRegistroInstitucional()
+      .filter(p => p.tipo === tipo)
+      .sort((a,b) => a.nombre.localeCompare(b.nombre, 'es', {sensitivity:'base'}));
   }
 
   function claveFichaPersonal(persona) {
@@ -4309,7 +4301,7 @@ const SESSION_KEY = 'edugestion_session_v2';
             <span><i class="fa-solid fa-notes-medical"></i></span>
             <div>
               <h3>Ficha técnica del personal</h3>
-              <p>Registro básico de salud y emergencia para personal docente, administrativo y obrero.</p>
+              <p>Registro de salud y emergencia vinculado al personal institucional registrado en Google Sheets.</p>
             </div>
           </div>
           <small>Dirección</small>
@@ -4320,7 +4312,7 @@ const SESSION_KEY = 'edugestion_session_v2';
           <span>Esta ficha es exclusiva para el personal de la institución. La información de salud es confidencial y debe utilizarse únicamente para atención y situaciones de emergencia.</span>
         </div>
 
-        <div class="ficha-personal-selector-grid">
+        <div class="ficha-personal-selector-grid ficha-personal-selector-grid-sheets">
           <label>
             <span>Tipo de personal</span>
             <select id="ficha-personal-tipo">
@@ -4331,30 +4323,20 @@ const SESSION_KEY = 'edugestion_session_v2';
           </label>
 
           <label>
-            <span>Persona</span>
+            <span>Persona registrada</span>
             <select id="ficha-personal-persona">
               <option value="">Selecciona una persona</option>
             </select>
           </label>
 
-          <button type="button" id="ficha-personal-agregar" class="director-back-button">
-            <i class="fa-solid fa-user-plus"></i> Agregar personal
+          <button type="button" id="ficha-personal-actualizar" class="director-back-button">
+            <i class="fa-solid fa-rotate"></i> Actualizar personal
           </button>
         </div>
 
-        <div id="ficha-personal-alta" class="ficha-personal-alta hidden">
-          <h4><i class="fa-solid fa-user-plus"></i> Registrar persona</h4>
-          <div class="ficha-grid ficha-grid-3">
-            <label><span>Nombre completo</span><input id="ficha-alta-nombre" placeholder="Nombre y apellido"></label>
-            <label><span>Cédula / Identificación</span><input id="ficha-alta-cedula" placeholder="Cédula"></label>
-            <label><span>Cargo / Función</span><input id="ficha-alta-cargo" placeholder="Cargo"></label>
-            <label><span>Teléfono</span><input id="ficha-alta-telefono" inputmode="tel" placeholder="Teléfono"></label>
-            <label><span>Correo</span><input id="ficha-alta-correo" inputmode="email" placeholder="Correo"></label>
-            <div class="ficha-alta-actions">
-              <button type="button" id="ficha-alta-cancelar" class="director-back-button">Cancelar</button>
-              <button type="button" id="ficha-alta-guardar" class="constancia-primary">Guardar persona</button>
-            </div>
-          </div>
+        <div class="ficha-personal-sheets-info">
+          <i class="fa-solid fa-database"></i>
+          <span>La lista se toma directamente de <strong>Registro de personal → PersonalInstitucion</strong>. Para agregar o modificar un trabajador, utiliza Registro de personal.</span>
         </div>
 
         <form id="ficha-tecnica-form" class="ficha-tecnica-form">
@@ -4491,10 +4473,10 @@ const SESSION_KEY = 'edugestion_session_v2';
     set('ficha-condicion-detalle', data.condicionDetalle || '');
     set('ficha-familiar-enfermo', data.familiarEnfermo || 'No');
     set('ficha-familiar-detalle', data.familiarDetalle || '');
-    set('ficha-emergencia-nombre', data.emergenciaNombre || '');
-    set('ficha-emergencia-parentesco', data.emergenciaParentesco || '');
-    set('ficha-emergencia-telefono', data.emergenciaTelefono || '');
-    set('ficha-emergencia-telefono2', data.emergenciaTelefono2 || '');
+    set('ficha-emergencia-nombre', data.emergenciaNombre || persona?.emergenciaNombre || '');
+    set('ficha-emergencia-parentesco', data.emergenciaParentesco || persona?.emergenciaParentesco || '');
+    set('ficha-emergencia-telefono', data.emergenciaTelefono || persona?.emergenciaTelefono || '');
+    set('ficha-emergencia-telefono2', data.emergenciaTelefono2 || persona?.emergenciaTelefono2 || '');
     set('ficha-grupo-sanguineo', data.grupoSanguineo || '');
     set('ficha-centro-salud', data.centroSalud || '');
     set('ficha-seguro', data.seguro || '');
@@ -4560,40 +4542,6 @@ const SESSION_KEY = 'edugestion_session_v2';
   function limpiarFichaTecnicaDirector() {
     const persona = personaFichaSeleccionada();
     llenarFichaTecnicaPersonal(persona, null);
-  }
-
-  function guardarAltaPersonalFicha() {
-    const tipo = document.getElementById('ficha-personal-tipo')?.value || 'Administrativo';
-    if (tipo === 'Docente') {
-      alert('Los docentes se cargan desde los docentes registrados en EduGestión.');
-      return;
-    }
-    const nombre = valorFicha('ficha-alta-nombre');
-    if (!nombre) {
-      alert('Indica el nombre de la persona.');
-      return;
-    }
-    const cedula = valorFicha('ficha-alta-cedula');
-    const persona = {
-      id: `personal-${Date.now()}`,
-      nombre,
-      cedula,
-      cargo: valorFicha('ficha-alta-cargo'),
-      telefono: valorFicha('ficha-alta-telefono'),
-      correo: valorFicha('ficha-alta-correo'),
-      tipo
-    };
-    const store = cargarPersonalFichaDirector();
-    if (!Array.isArray(store[tipo])) store[tipo] = [];
-    store[tipo].push(persona);
-    guardarPersonalFichaDirector(store);
-    document.getElementById('ficha-personal-alta')?.classList.add('hidden');
-    llenarSelectorPersonalFicha();
-    const select = document.getElementById('ficha-personal-persona');
-    if (select) {
-      select.value = persona.id;
-      llenarFichaTecnicaPersonal(persona, fichaTecnicaActualPersonal(persona));
-    }
   }
 
   function imprimirFichaTecnicaDirector() {
@@ -4667,32 +4615,43 @@ const SESSION_KEY = 'edugestion_session_v2';
     const personaSelect = document.getElementById('ficha-personal-persona');
     const form = document.getElementById('ficha-tecnica-form');
 
-    llenarSelectorPersonalFicha();
+    const cargarPersonalFichaDesdeSheets = async (forzar = false) => {
+      const boton = document.getElementById('ficha-personal-actualizar');
+      const original = boton?.innerHTML || '';
+      if (boton) {
+        boton.disabled = true;
+        boton.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Actualizando...';
+      }
+      try {
+        await cargarRegistroPersonalDesdeServidor(forzar);
+        llenarSelectorPersonalFicha();
+      } catch (error) {
+        mostrarToast(
+          error.message || 'No se pudo cargar el personal desde Google Sheets.',
+          'error',
+          'Ficha técnica'
+        );
+      } finally {
+        if (boton && document.body.contains(boton)) {
+          boton.disabled = false;
+          boton.innerHTML = original;
+        }
+      }
+    };
 
-    tipo?.addEventListener('change', () => {
-      llenarSelectorPersonalFicha();
-      const botonAgregar = document.getElementById('ficha-personal-agregar');
-      if (botonAgregar) botonAgregar.disabled = tipo.value === 'Docente';
-    });
+    if (registroPersonalDirectorCargado) llenarSelectorPersonalFicha();
+    else cargarPersonalFichaDesdeSheets(false);
+
+    tipo?.addEventListener('change', llenarSelectorPersonalFicha);
 
     personaSelect?.addEventListener('change', () => {
       const persona = personaFichaSeleccionada();
       llenarFichaTecnicaPersonal(persona, fichaTecnicaActualPersonal(persona));
     });
 
-    document.getElementById('ficha-personal-agregar')?.addEventListener('click', () => {
-      const t = tipo?.value || 'Docente';
-      if (t === 'Docente') {
-        alert('Los docentes se cargan automáticamente desde EduGestión. Selecciona Administrativo u Obrero para registrar una persona manualmente.');
-        return;
-      }
-      document.getElementById('ficha-personal-alta')?.classList.remove('hidden');
+    document.getElementById('ficha-personal-actualizar')?.addEventListener('click', () => {
+      cargarPersonalFichaDesdeSheets(true);
     });
-
-    document.getElementById('ficha-alta-cancelar')?.addEventListener('click', () => {
-      document.getElementById('ficha-personal-alta')?.classList.add('hidden');
-    });
-    document.getElementById('ficha-alta-guardar')?.addEventListener('click', guardarAltaPersonalFicha);
 
     form?.addEventListener('submit', e => {
       e.preventDefault();
@@ -5268,32 +5227,6 @@ const SESSION_KEY = 'edugestion_session_v2';
       const respuesta = await apiRequest('guardarRegistroPersonalInstitucion', { datos: persona });
       await cargarRegistroPersonalDesdeServidor(true);
 
-      // Mantiene compatibilidad con Ficha técnica mientras esa vista migra al backend.
-      const guardada = respuesta.registro
-        ? mapearPersonalSheetsAFrontend(respuesta.registro)
-        : cargarRegistroPersonalDirector().find(x => x.cedula === persona.cedula) || persona;
-
-      if (guardada.tipo === 'Administrativo' || guardada.tipo === 'Obrero') {
-        try {
-          const raw = localStorage.getItem('edugestion:director:personal-ficha:v1');
-          const store = raw ? JSON.parse(raw) : {Administrativo:[], Obrero:[]};
-          if (!Array.isArray(store[guardada.tipo])) store[guardada.tipo] = [];
-          const item = {
-            id: guardada.id,
-            nombre: guardada.nombre,
-            cedula: guardada.cedula,
-            cargo: guardada.cargo,
-            telefono: guardada.telefono,
-            correo: guardada.correo,
-            tipo: guardada.tipo
-          };
-          const pos = store[guardada.tipo].findIndex(x => x.id === guardada.id || (x.cedula && x.cedula === guardada.cedula));
-          if (pos >= 0) store[guardada.tipo][pos] = item;
-          else store[guardada.tipo].push(item);
-          localStorage.setItem('edugestion:director:personal-ficha:v1', JSON.stringify(store));
-        } catch (_) {}
-      }
-
       mostrarToast(`Registro de ${guardada.nombre || persona.nombre} guardado en Google Sheets.`, 'success', 'Personal actualizado');
       renderPanelDirector();
     } catch (error) {
@@ -5377,18 +5310,6 @@ const SESSION_KEY = 'edugestion_session_v2';
     try {
       await apiRequest('eliminarRegistroPersonalInstitucion', { id });
       await cargarRegistroPersonalDesdeServidor(true);
-
-      // Limpia también el apoyo local de Ficha técnica para administrativos/obreros.
-      if (persona.tipo === 'Administrativo' || persona.tipo === 'Obrero') {
-        try {
-          const raw = localStorage.getItem('edugestion:director:personal-ficha:v1');
-          const store = raw ? JSON.parse(raw) : {Administrativo:[], Obrero:[]};
-          if (Array.isArray(store[persona.tipo])) {
-            store[persona.tipo] = store[persona.tipo].filter(x => String(x.id) !== String(id));
-            localStorage.setItem('edugestion:director:personal-ficha:v1', JSON.stringify(store));
-          }
-        } catch (_) {}
-      }
 
       mostrarToast(`Registro de ${persona.nombre} eliminado de Google Sheets.`, 'success', 'Personal eliminado');
       renderPanelDirector();
@@ -14477,6 +14398,27 @@ Archivo enviado directamente desde EduGestión.`);
       min-height:50px;
       font-size:15px
     }
+    .ficha-personal-sheets-info{
+      max-width:1080px;
+      margin:-6px auto 18px;
+      padding:12px 14px;
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+      border:1px solid #d7e5f3;
+      background:#f7fbff;
+      border-radius:12px;
+      color:#536d89;
+      font-size:13px;
+      line-height:1.5
+    }
+    .ficha-personal-sheets-info i{
+      color:#1f5da8;
+      margin-top:2px
+    }
+    .ficha-personal-sheets-info strong{
+      color:#173a65
+    }
     .ficha-personal-alta{
       max-width:1080px;
       margin:18px auto;
@@ -14614,4 +14556,5 @@ Archivo enviado directamente desde EduGestión.`);
 /* EDUGESTION_FASE_21S_C_ENLACE_ENCUESTA_PERSONAL_FRONTEND_END */
 /* EDUGESTION_FASE_21T_A_SEGUIMIENTO_ENCUESTAS_PERSONAL_END */
 /* EDUGESTION_FASE_21T_B_REPORTE_ENCUESTAS_PERSONAL_END */
+/* EDUGESTION_FASE_21U_A_FICHA_PERSONAL_DESDE_SHEETS_END */
 
