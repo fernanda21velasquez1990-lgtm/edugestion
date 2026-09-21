@@ -10696,6 +10696,7 @@ Archivo enviado directamente desde EduGestión.`);
     const same=rows.filter(x=>norm(x.tema)===norm(item?.tema));
     if(same.length===1)delete m[legacyTopicKey(grado,item?.tema)];
     writeJSON(ASSIGN_KEY,m);
+    try{window.dispatchEvent(new CustomEvent('edugestion:lapsos-changed',{detail:{grado,tema:item?.tema||'',lapso}}))}catch(_){}
     if(prev!==lapso)addHistory(grado,item?.tema,trackMap()[legacyTopicKey(grado,item?.tema)]?.estado||'Pendiente','Cambio de lapso',lapso?`Tema asignado a ${lapso}.`:'Tema dejado sin lapso asignado.');
   }
   function addHistory(grado,tema,estado,accion,detalle){const all=historyMap(),k=topicKey(grado,tema);if(!Array.isArray(all[k]))all[k]=[];all[k].push({fecha:new Date().toISOString(),grado,tema,estado,accion,detalle});if(all[k].length>80)all[k]=all[k].slice(-80);writeJSON(HISTORY_KEY,all)}
@@ -14836,13 +14837,43 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     if(!lapsoName)return [];
     const data=window.EDUGESTION_CEF_DATA||{}, grade=curriculumGradeKey(ano); if(!grade||!Array.isArray(data[grade]))return [];
     const assignments=safeJSON(LAPSO_ASSIGN_KEY,{}), track=safeJSON(LAPSO_TRACK_KEY,{}), norm=v=>String(v||'').trim().replace(/\s+/g,' '), rows=data[grade];
-    return rows.map(topic=>{
+    let found=rows.map(topic=>{
       const legacy=`${norm(grade)}|||${norm(topic.tema)}`;
       const unique=`${norm(grade)}|||${norm(topic.tema)}|||p:${norm(topic.pagina)}|||d:${norm(topic.descripcion||topic.tejido||topic.referentes||'')}`;
       const same=rows.filter(x=>norm(x.tema)===norm(topic.tema));
       const lapso=Object.prototype.hasOwnProperty.call(assignments,unique)?(assignments[unique]||''):(same.length===1?(assignments[legacy]||''):'');
       return {...topic,lapso,estado:track[legacy]?.estado||'Pendiente'};
     }).filter(x=>x.lapso===lapsoName);
+    if(lapsoName==='1er Lapso'&&!found.length){
+      const num=Number(String(grade).match(/\d+/)?.[0]||0),specsByYear={
+        1:[
+          ['La Educación Física como base de salud integral',21],
+          ['Salud y desarrollo integral del ser humano',22],
+          ['El movimiento humano como fuente de salud y vida',22],
+          ['Habilidades motrices como principio de la práctica de actividad física',22],
+          ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
+          ['Variables sociales para una vida saludable',22],
+        ],
+        2:[
+          ['La Educación Física como base de la salud integral',25],
+          ['Hábitos actitudes, aptitudes y destrezas motoras como herramientas para el desarrollo físico y salud integral del ser humano',25],
+          ['Habilidades motrices como principio de la práctica de actividades físicas',25],
+          ['El movimiento humano como fuente de salud y vida',26],
+          ['Potencialidades humanas y parámetros fisiológicos para el mantenimiento de la salud. Variables sociales parta una vida saludable',26],
+          ['Ambiente, recreación y valores, para el uso del tiempo libre y la salud',26],
+        ],
+        3:[
+          ['La actividad física sistemática para la salud y la vida',30],
+          ['Aptitud física, destrezas y hábitos adquiridos',30],
+          ['Sistemas de trabajo físico para la salud y la vida',31],
+          ['El trabajo físico y sus potencialidades humanas',31],
+          ['El desarrollo físico y armónico del ser humano',31],
+          ['Practicar hábitos de alimentación sana e higiene personal para mantener buena salud',32],
+        ],
+      },specs=specsByYear[num]||[];
+      found=specs.map(([tema,pagina])=>rows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean).map(topic=>({...topic,lapso:lapsoName,estado:track[`${norm(grade)}|||${norm(topic.tema)}`]?.estado||'Pendiente'}));
+    }
+    return found;
   }
   function compactPlan(occ) {
     return {fecha:occ.date,espacio:occ.location,tema:occ.tema||'',objetivo:occ.objetivo||'',estrategias:occ.estrategias||'',evaluacion:occ.evaluacion||'',evaluacionesPlan:evaluationFor(occ).map(e=>({actividad:e.actividad||e.nombre||'Evaluación',puntos:e.puntos||''}))};
@@ -15186,21 +15217,43 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function curriculumGradeKey(ano){const data=window.EDUGESTION_CEF_DATA||{},candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));if(candidates.length<=1)return candidates[0]||'';const raw=String(ano||'').toLowerCase();const yr=candidates.find(g=>/año/i.test(g));if(/año|ano|media|1ero|2do|3ro|4to|5to/.test(raw)&&yr)return yr;return candidates[0]||''}
   function topicOrderScore(x){const t=norm(x?.tema||''),p=String(x?.pagina||'');if(/educacion fisica como base de salud integral/.test(t))return 10;if(/salud y desarrollo integral del ser humano/.test(t))return 20;if(/movimiento humano como fuente de salud y vida/.test(t)&&p==='22')return 30;if(/habilidades motrices como principio/.test(t))return 40;if(/habitos, habilidades, destrezas, actitud y aptitud/.test(t)&&p==='22')return 50;if(/variables sociales para una vida saludable/.test(t)&&p==='22')return 60;return 1000+Number(p||999)}
   function canonicalPrimerLapsoTopics(ano){
-    const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||normalizeAcademicKey(grade)!=='n:1'||!/año/i.test(grade)||!Array.isArray(data[grade]))return[];
-    const rows=data[grade],specs=[
-      ['La Educación Física como base de salud integral',21],
-      ['Salud y desarrollo integral del ser humano',22],
-      ['El movimiento humano como fuente de salud y vida',22],
-      ['Habilidades motrices como principio de la práctica de actividad física',22],
-      ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
-      ['Variables sociales para una vida saludable',22],
-    ];
+    const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];
+    const rows=data[grade],num=Number(String(grade).match(/\d+/)?.[0]||0);
+    const specsByYear={
+      1:[
+        ['La Educación Física como base de salud integral',21],
+        ['Salud y desarrollo integral del ser humano',22],
+        ['El movimiento humano como fuente de salud y vida',22],
+        ['Habilidades motrices como principio de la práctica de actividad física',22],
+        ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
+        ['Variables sociales para una vida saludable',22],
+      ],
+      2:[
+        ['La Educación Física como base de la salud integral',25],
+        ['Hábitos actitudes, aptitudes y destrezas motoras como herramientas para el desarrollo físico y salud integral del ser humano',25],
+        ['Habilidades motrices como principio de la práctica de actividades físicas',25],
+        ['El movimiento humano como fuente de salud y vida',26],
+        ['Potencialidades humanas y parámetros fisiológicos para el mantenimiento de la salud. Variables sociales parta una vida saludable',26],
+        ['Ambiente, recreación y valores, para el uso del tiempo libre y la salud',26],
+      ],
+      3:[
+        ['La actividad física sistemática para la salud y la vida',30],
+        ['Aptitud física, destrezas y hábitos adquiridos',30],
+        ['Sistemas de trabajo físico para la salud y la vida',31],
+        ['El trabajo físico y sus potencialidades humanas',31],
+        ['El desarrollo físico y armónico del ser humano',31],
+        ['Practicar hábitos de alimentación sana e higiene personal para mantener buena salud',32],
+      ],
+    };
+    const specs=specsByYear[num]||[];
     return specs.map(([tema,pagina])=>rows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean).map(x=>({...x,grado:grade,lapso:'1er Lapso'}));
   }
   function topicsFor(ano,lapso){
-    if(String(lapso)==='1'){const canonical=canonicalPrimerLapsoTopics(ano);if(canonical.length===6)return canonical}
     const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];const a=readJSON(ASSIGN_KEY,{}),name=LAPSOS[String(lapso)],rows=data[grade];
-    return rows.map(x=>{const unique=topicKey(grade,x),legacy=legacyTopicKey(grade,x.tema),same=rows.filter(y=>String(y.tema||'').trim().replace(/\s+/g,' ')===String(x.tema||'').trim().replace(/\s+/g,' '));const assigned=Object.prototype.hasOwnProperty.call(a,unique)?(a[unique]||''):(same.length===1?(a[legacy]||''):'');return {...x,grado:grade,lapso:assigned}}).filter(x=>x.lapso===name).sort((a,b)=>topicOrderScore(a)-topicOrderScore(b))
+    const assignedRows=rows.map(x=>{const unique=topicKey(grade,x),legacy=legacyTopicKey(grade,x.tema),same=rows.filter(y=>String(y.tema||'').trim().replace(/\s+/g,' ')===String(x.tema||'').trim().replace(/\s+/g,' '));const assigned=Object.prototype.hasOwnProperty.call(a,unique)?(a[unique]||''):(same.length===1?(a[legacy]||''):'');return {...x,grado:grade,lapso:assigned}}).filter(x=>x.lapso===name).sort((a,b)=>topicOrderScore(a)-topicOrderScore(b));
+    if(assignedRows.length)return assignedRows;
+    if(String(lapso)==='1'){const canonical=canonicalPrimerLapsoTopics(ano);if(canonical.length)return canonical}
+    return [];
   }
   function schoolYearText(){const s=weeklyState(),a=fromISO(s.start),b=fromISO(s.end);return a&&b?`${a.getFullYear()} - ${b.getFullYear()}`:'2026 - 2027'}
   function lapsoRange(lapso){const s=weeklyState(),cfg=s.lapsos?.[String(lapso)]||{};return {start:cfg.start||'',end:cfg.end||''}}
@@ -15350,6 +15403,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function init(){try{return create()}catch(e){console.warn('EduGestión Formato Control de Estudio:',e);return false}}
   if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>40)clearInterval(tm)},250)}
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{syncSelectors();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))renderPreview()},100));
+  window.addEventListener('edugestion:lapsos-changed',()=>setTimeout(()=>{syncSelectors();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))renderPreview()},50));
 })();
 /* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V5_END */
 
@@ -15436,19 +15490,39 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function selectedTopics(){return readJSON(TOPICS_KEY,[])}
   function assignedTopics(grado,lapso){
     const data=window.EDUGESTION_CEF_DATA||{},assign=readJSON(ASSIGN_KEY,{}),rows=Array.isArray(data[grado])?data[grado]:[];
-    const order=x=>{const t=norm(x?.tema||'').toLowerCase(),p=String(x?.pagina||'');if(t.includes('educación física como base de salud integral')||t.includes('educacion fisica como base de salud integral'))return 10;if(t.includes('salud y desarrollo integral del ser humano'))return 20;if(t.includes('movimiento humano como fuente de salud y vida')&&p==='22')return 30;if(t.includes('habilidades motrices como principio'))return 40;if((t.includes('hábitos, habilidades, destrezas, actitud y aptitud')||t.includes('habitos, habilidades, destrezas, actitud y aptitud'))&&p==='22')return 50;if(t.includes('variables sociales para una vida saludable')&&p==='22')return 60;return 1000+Number(p||999)};
+    const order=x=>{const p=Number(x?.pagina||999);return p*100+rows.indexOf(x)};
     let found=rows.filter(x=>{const unique=topicKey(grado,x),legacy=legacyTopicKey(grado,x.tema),same=rows.filter(y=>norm(y.tema)===norm(x.tema));const value=Object.prototype.hasOwnProperty.call(assign,unique)?(assign[unique]||''):(same.length===1?(assign[legacy]||''):'');return value===lapso}).sort((a,b)=>order(a)-order(b));
-    if(lapso==='1er Lapso'&&/1er\s+año/i.test(grado)&&found.length!==6){
-      const specs=[
-        ['La Educación Física como base de salud integral',21],
-        ['Salud y desarrollo integral del ser humano',22],
-        ['El movimiento humano como fuente de salud y vida',22],
-        ['Habilidades motrices como principio de la práctica de actividad física',22],
-        ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
-        ['Variables sociales para una vida saludable',22],
-      ];
+    if(lapso==='1er Lapso'&&!found.length){
+      const num=academicNum(grado);
+      const specsByYear={
+        1:[
+          ['La Educación Física como base de salud integral',21],
+          ['Salud y desarrollo integral del ser humano',22],
+          ['El movimiento humano como fuente de salud y vida',22],
+          ['Habilidades motrices como principio de la práctica de actividad física',22],
+          ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
+          ['Variables sociales para una vida saludable',22],
+        ],
+        2:[
+          ['La Educación Física como base de la salud integral',25],
+          ['Hábitos actitudes, aptitudes y destrezas motoras como herramientas para el desarrollo físico y salud integral del ser humano',25],
+          ['Habilidades motrices como principio de la práctica de actividades físicas',25],
+          ['El movimiento humano como fuente de salud y vida',26],
+          ['Potencialidades humanas y parámetros fisiológicos para el mantenimiento de la salud. Variables sociales parta una vida saludable',26],
+          ['Ambiente, recreación y valores, para el uso del tiempo libre y la salud',26],
+        ],
+        3:[
+          ['La actividad física sistemática para la salud y la vida',30],
+          ['Aptitud física, destrezas y hábitos adquiridos',30],
+          ['Sistemas de trabajo físico para la salud y la vida',31],
+          ['El trabajo físico y sus potencialidades humanas',31],
+          ['El desarrollo físico y armónico del ser humano',31],
+          ['Practicar hábitos de alimentación sana e higiene personal para mantener buena salud',32],
+        ],
+      };
+      const specs=specsByYear[num]||[];
       const canonical=specs.map(([tema,pagina])=>rows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean);
-      if(canonical.length===6)found=canonical;
+      if(canonical.length)found=canonical;
     }
     return found.map(x=>({...x,grado,fuente:'Cuadernillo Curricular MPPE · Educación Física',agregadoEn:new Date().toISOString()}));
   }
@@ -15700,7 +15774,38 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function topicKey(grado,item){const n=v=>String(v||'').trim().replace(/\s+/g,' ');return `${n(grado)}|||${n(item?.tema)}|||p:${n(item?.pagina)}|||d:${n(item?.descripcion||item?.tejido||item?.referentes||'')}`}
   function assignedTopics(ano,lapso){
     const grade=curriculumGradeKey(ano),data=window.EDUGESTION_CEF_DATA||{},rows=Array.isArray(data[grade])?data[grade]:[],assign=readJSON(ASSIGN_KEY,{}),lapName=LAPSO_NAMES[String(lapso)]||'1er Lapso';
-    return rows.filter(x=>{const u=topicKey(grade,x),legacy=`${String(grade).trim()}|||${String(x.tema||'').trim()}`;const same=rows.filter(y=>String(y.tema||'').trim()===String(x.tema||'').trim());const val=Object.prototype.hasOwnProperty.call(assign,u)?assign[u]:(same.length===1?assign[legacy]:'');return val===lapName});
+    let found=rows.filter(x=>{const u=topicKey(grade,x),legacy=`${String(grade).trim()}|||${String(x.tema||'').trim()}`;const same=rows.filter(y=>String(y.tema||'').trim()===String(x.tema||'').trim());const val=Object.prototype.hasOwnProperty.call(assign,u)?assign[u]:(same.length===1?assign[legacy]:'');return val===lapName});
+    if(String(lapso)==='1'&&!found.length){
+      const num=academicNum(grade),specsByYear={
+        1:[
+          ['La Educación Física como base de salud integral',21],
+          ['Salud y desarrollo integral del ser humano',22],
+          ['El movimiento humano como fuente de salud y vida',22],
+          ['Habilidades motrices como principio de la práctica de actividad física',22],
+          ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
+          ['Variables sociales para una vida saludable',22],
+        ],
+        2:[
+          ['La Educación Física como base de la salud integral',25],
+          ['Hábitos actitudes, aptitudes y destrezas motoras como herramientas para el desarrollo físico y salud integral del ser humano',25],
+          ['Habilidades motrices como principio de la práctica de actividades físicas',25],
+          ['El movimiento humano como fuente de salud y vida',26],
+          ['Potencialidades humanas y parámetros fisiológicos para el mantenimiento de la salud. Variables sociales parta una vida saludable',26],
+          ['Ambiente, recreación y valores, para el uso del tiempo libre y la salud',26],
+        ],
+        3:[
+          ['La actividad física sistemática para la salud y la vida',30],
+          ['Aptitud física, destrezas y hábitos adquiridos',30],
+          ['Sistemas de trabajo físico para la salud y la vida',31],
+          ['El trabajo físico y sus potencialidades humanas',31],
+          ['El desarrollo físico y armónico del ser humano',31],
+          ['Practicar hábitos de alimentación sana e higiene personal para mantener buena salud',32],
+        ],
+      };
+      const specs=specsByYear[num]||[];
+      found=specs.map(([tema,pagina])=>rows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean);
+    }
+    return found;
   }
   function planRows(ano,lapso){
     const store=readJSON(PLAN_PREFIX+teacherKey(),{}),lapName=LAPSO_NAMES[String(lapso)]||'1er Lapso';
