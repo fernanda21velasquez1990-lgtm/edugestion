@@ -15214,11 +15214,23 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function labelSection(x){return `${x.ano} · Sección ${x.seccion}${x.turno?` · ${x.turno==='Manana'?'Mañana':x.turno}`:''}`}
   function sectionsForAno(ano){return sections().filter(x=>normalizeAcademicKey(x.ano)===normalizeAcademicKey(ano))}
   function combinedSectionLabel(ano){const items=sectionsForAno(ano),secs=[...new Set(items.map(x=>String(x.seccion||'').trim()).filter(Boolean))];return secs.length?`${ano} · Secciones ${secs.join(' y ')}`:String(ano||'')}
-  function curriculumGradeKey(ano){const data=window.EDUGESTION_CEF_DATA||{},candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));if(candidates.length<=1)return candidates[0]||'';const raw=String(ano||'').toLowerCase();const yr=candidates.find(g=>/año/i.test(g));if(/año|ano|media|1ero|2do|3ro|4to|5to/.test(raw)&&yr)return yr;return candidates[0]||''}
+  function academicYearNumber(v){
+    const n=String(v||'').match(/\d+/)?.[0];
+    return n?Number(n):0;
+  }
+  function curriculumGradeKey(ano){
+    const data=window.EDUGESTION_CEF_DATA||{},num=academicYearNumber(ano);
+    const direct=num?({1:'1er Año',2:'2do Año',3:'3er Año',4:'4to Año',5:'5to Año'}[num]||''):'';
+    if(direct&&Array.isArray(data[direct]))return direct;
+    const candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));
+    if(candidates.length<=1)return candidates[0]||'';
+    return candidates.find(g=>/año/i.test(g))||candidates[0]||'';
+  }
   function topicOrderScore(x){const t=norm(x?.tema||''),p=String(x?.pagina||'');if(/educacion fisica como base de salud integral/.test(t))return 10;if(/salud y desarrollo integral del ser humano/.test(t))return 20;if(/movimiento humano como fuente de salud y vida/.test(t)&&p==='22')return 30;if(/habilidades motrices como principio/.test(t))return 40;if(/habitos, habilidades, destrezas, actitud y aptitud/.test(t)&&p==='22')return 50;if(/variables sociales para una vida saludable/.test(t)&&p==='22')return 60;return 1000+Number(p||999)}
   function canonicalPrimerLapsoTopics(ano){
-    const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];
-    const rows=data[grade],num=Number(String(grade).match(/\d+/)?.[0]||0);
+    const data=window.EDUGESTION_CEF_DATA||{},num=academicYearNumber(ano),grade=curriculumGradeKey(ano);
+    if(!num||!grade||!Array.isArray(data[grade]))return[];
+    const rows=data[grade];
     const specsByYear={
       1:[
         ['La Educación Física como base de salud integral',21],
@@ -15252,7 +15264,22 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];const a=readJSON(ASSIGN_KEY,{}),name=LAPSOS[String(lapso)],rows=data[grade];
     const assignedRows=rows.map(x=>{const unique=topicKey(grade,x),legacy=legacyTopicKey(grade,x.tema),same=rows.filter(y=>String(y.tema||'').trim().replace(/\s+/g,' ')===String(x.tema||'').trim().replace(/\s+/g,' '));const assigned=Object.prototype.hasOwnProperty.call(a,unique)?(a[unique]||''):(same.length===1?(a[legacy]||''):'');return {...x,grado:grade,lapso:assigned}}).filter(x=>x.lapso===name).sort((a,b)=>topicOrderScore(a)-topicOrderScore(b));
     if(assignedRows.length)return assignedRows;
-    if(String(lapso)==='1'){const canonical=canonicalPrimerLapsoTopics(ano);if(canonical.length)return canonical}
+    if(String(lapso)==='1'){
+      const canonical=canonicalPrimerLapsoTopics(ano);
+      if(canonical.length)return canonical;
+      // Último respaldo: permite generar Control de Estudio aunque el mapa local de lapsos no esté disponible.
+      const num=academicYearNumber(ano),hardGrade={1:'1er Año',2:'2do Año',3:'3er Año'}[num]||'';
+      const hardRows=Array.isArray(data[hardGrade])?data[hardGrade]:[];
+      if(hardRows.length){
+        const specs={
+          1:[['La Educación Física como base de salud integral',21],['Salud y desarrollo integral del ser humano',22],['El movimiento humano como fuente de salud y vida',22],['Habilidades motrices como principio de la práctica de actividad física',22],['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],['Variables sociales para una vida saludable',22]],
+          2:[['La Educación Física como base de la salud integral',25],['Hábitos actitudes, aptitudes y destrezas motoras como herramientas para el desarrollo físico y salud integral del ser humano',25],['Habilidades motrices como principio de la práctica de actividades físicas',25],['El movimiento humano como fuente de salud y vida',26],['Potencialidades humanas y parámetros fisiológicos para el mantenimiento de la salud. Variables sociales parta una vida saludable',26],['Ambiente, recreación y valores, para el uso del tiempo libre y la salud',26]],
+          3:[['La actividad física sistemática para la salud y la vida',30],['Aptitud física, destrezas y hábitos adquiridos',30],['Sistemas de trabajo físico para la salud y la vida',31],['El trabajo físico y sus potencialidades humanas',31],['El desarrollo físico y armónico del ser humano',31],['Practicar hábitos de alimentación sana e higiene personal para mantener buena salud',32]],
+        }[num]||[];
+        const out=specs.map(([tema,pagina])=>hardRows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean);
+        if(out.length)return out.map(x=>({...x,grado:hardGrade,lapso:'1er Lapso'}));
+      }
+    }
     return [];
   }
   function schoolYearText(){const s=weeklyState(),a=fromISO(s.start),b=fromISO(s.end);return a&&b?`${a.getFullYear()} - ${b.getFullYear()}`:'2026 - 2027'}
@@ -15349,7 +15376,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
   function renderPreview(){
     const box=document.getElementById('fce-pages');if(!box)return;const rows=buildRows(),mid=Math.ceil(rows.length/2),pages=[rows.slice(0,mid),rows.slice(mid)];box.innerHTML=pageHtml(pages[0],1,2)+pageHtml(pages[1],2,2);bindPreviewEdits();
-    const helper=document.getElementById('fce-helper');if(helper){const planned=plannedOccurrences(currentSection,currentLapso).length,topics=topicsFor(parseSectionKey(currentSection).ano,currentLapso).length;helper.innerHTML=`<b>Vista previa lista:</b> ${topics} tema${topics===1?'':'s'} curricular${topics===1?'':'es'} del lapso. La misma planificación se presenta para <b>${esc(combinedSectionLabel(parseSectionKey(currentSection).ano))}</b>. Las 3 superclases de gimnasio se incorporan dentro de Actividades, no como temas adicionales. Puedes corregir cualquier celda antes de imprimir. La impresión saldrá en <b>2 hojas carta horizontales</b>.`}
+    const helper=document.getElementById('fce-helper');if(helper){const planned=plannedOccurrences(currentSection,currentLapso).length,topics=topicsFor(parseSectionKey(currentSection).ano,currentLapso).length;helper.innerHTML=`<b>Vista previa lista · motor V3.5:</b> ${topics} tema${topics===1?'':'s'} curricular${topics===1?'':'es'} del lapso. La misma planificación se presenta para <b>${esc(combinedSectionLabel(parseSectionKey(currentSection).ano))}</b>. Las 3 superclases de gimnasio se incorporan dentro de Actividades, no como temas adicionales. Puedes corregir cualquier celda antes de imprimir. La impresión saldrá en <b>2 hojas carta horizontales</b>.`}
   }
   function bindPreviewEdits(){document.querySelectorAll('#fce-pages tr[data-row-id]').forEach(tr=>{const rid=tr.dataset.rowId;tr.querySelectorAll('[data-edit]').forEach(el=>el.addEventListener('input',()=>saveCell(rid,el.dataset.edit,el.innerText.trim())));tr.querySelectorAll('[data-emph]').forEach(ch=>ch.addEventListener('change',()=>{const values=[...tr.querySelectorAll('[data-emph]:checked')].map(x=>x.dataset.emph);saveCell(rid,'emphasis',values)}))})}
 
