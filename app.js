@@ -14717,14 +14717,14 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   ];
 
   function gymSuperclassFor(dateISO,ano) {
-    if(normalizeAcademicKey(ano)!=='n:1') return null;
+    if(!['n:1','n:2'].includes(normalizeAcademicKey(ano))) return null;
     return GYM_SUPERCLASSES.find(x=>dateISO>=x.weekStart&&dateISO<=x.weekEnd)||null;
   }
 
   function firstYearSectionKeys() {
     const map=new Map();
     (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{
-      if(normalizeAcademicKey(h.ano)!=='n:1')return;
+      if(!['n:1','n:2'].includes(normalizeAcademicKey(h.ano)))return;
       const key=sectionKey(h.ano,h.seccion);
       if(!map.has(key))map.set(key,key);
     });
@@ -14732,7 +14732,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   }
 
   function ensureGymSuperclasses(state) {
-    if(state.gymSuperclassesV1) return false;
+    if(state.gymSuperclassesV2) return false;
     const keys=firstYearSectionKeys();
     if(!keys.length) return false;
     let created=0;
@@ -14771,7 +14771,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
         created++;
       });
     });
-    if(created){ state.gymSuperclassesV1=true; return true; }
+    if(created){ state.gymSuperclassesV2=true; return true; }
     return false;
   }
   function normalizeAcademicKey(value) {
@@ -15354,17 +15354,17 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V5_END */
 
 /* ================================================================
-   EduGestión · PLAN DE EVALUACIÓN PARA ALUMNOS · V2.9
+   EduGestión · PLAN DE EVALUACIÓN PARA ALUMNOS · V3.1
    Documento separado del Formato Control de Estudio.
-   Gemini propone: nombre de evaluación + cómo se evaluará + % + fechas.
+   Gemini propone: actividad + cómo se evaluará + espacio + puntos + fechas reales.
    ================================================================ */
 (() => {
   const SECTION_ID='section-plan-evaluacion-ef';
   const TAB_ID='tab-plan-evaluacion-ef';
   const TOPICS_KEY='edugestion_plan_evaluacion_ef_temas';
   const ASSIGN_KEY='edugestion_cuadernillo_ef_lapsos_v1';
-  const STORE_PREFIX='edugestion_plan_alumnos_v1_';
-  const STYLE_ID='style-plan-alumnos-v25';
+  const STORE_PREFIX='edugestion_plan_alumnos_puntos_v1_';
+  const STYLE_ID='style-plan-alumnos-v31';
   const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
   let busy=false;
 
@@ -15388,7 +15388,27 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function sectionsForGrade(grado){const arr=(Array.isArray(window.horariosProfesor)?window.horariosProfesor:(typeof horariosProfesor!=='undefined'&&Array.isArray(horariosProfesor)?horariosProfesor:[])).filter(h=>sameGrade(h.ano,grado));return [...new Set(arr.map(h=>String(h.seccion||'').trim()).filter(Boolean))]}
   function sectionTextForGrade(grado){const secs=sectionsForGrade(grado);return secs.length?secs.join(' y '):'A y B'}
   function rangeForLapso(lapso){const idx=String(lapso).startsWith('2')?'2':String(lapso).startsWith('3')?'3':'1',cfg=weeklyState().lapsos?.[idx]||{};return {desde:cfg.start||(idx==='1'?'2026-09-21':''),hasta:cfg.end||(idx==='1'?'2026-12-15':'')}}
-  function classDatesForGrade(grado,desde,hasta){if(!desde||!hasta)return '';const hs=(Array.isArray(window.horariosProfesor)?window.horariosProfesor:(typeof horariosProfesor!=='undefined'&&Array.isArray(horariosProfesor)?horariosProfesor:[])).filter(h=>sameGrade(h.ano,grado)),a=new Date(desde+'T12:00:00'),b=new Date(hasta+'T12:00:00');if(!hs.length||Number.isNaN(a.getTime())||Number.isNaN(b.getTime()))return '';const by={};for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){const dow=d.getDay();hs.filter(h=>(dayIdx[String(h.dia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()]??-1)===dow).forEach(h=>{const sec=String(h.seccion||'').trim()||'Sin sección';(by[sec]||(by[sec]=[])).push(isoLocalDate(d))})}return Object.entries(by).map(([sec,dates])=>`Sección ${sec}: ${dates.join(', ')}`).join('\n')}
+  function weeklyBlockKey(h){return [h.dia,h.horaInicio,h.horaFin,h.ano,h.seccion,h.turno].map(x=>String(x||'')).join('|')}
+  function classSessionsForGrade(grado,desde,hasta){
+    if(!desde||!hasta)return '';
+    const all=(Array.isArray(window.horariosProfesor)?window.horariosProfesor:(typeof horariosProfesor!=='undefined'&&Array.isArray(horariosProfesor)?horariosProfesor:[]));
+    const hs=all.filter(h=>sameGrade(h.ano,grado)),a=new Date(desde+'T12:00:00'),b=new Date(hasta+'T12:00:00'),state=weeklyState();
+    if(!hs.length||Number.isNaN(a.getTime())||Number.isNaN(b.getTime()))return '';
+    const by={};
+    const blocksBySec={};
+    hs.forEach(h=>{const sec=String(h.seccion||'').trim()||'Sin sección';(blocksBySec[sec]||(blocksBySec[sec]=[])).push(h)});
+    Object.values(blocksBySec).forEach(list=>list.sort((x,y)=>(dayIdx[String(x.dia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()]??9)-(dayIdx[String(y.dia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()]??9)||String(x.horaInicio||'').localeCompare(String(y.horaInicio||''))));
+    for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){
+      const dow=d.getDay(),date=isoLocalDate(d);
+      hs.filter(h=>(dayIdx[String(h.dia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()]??-1)===dow).forEach(h=>{
+        const sec=String(h.seccion||'').trim()||'Sin sección',id=`auto|${h.ano}|${h.seccion}|${date}|${h.horaInicio||''}|${h.horaFin||''}`,over=state.overrides?.[id]||{};
+        if((over.status||'Clase')==='Sin clase')return;
+        const idx=Math.max(0,(blocksBySec[sec]||[]).indexOf(h)),space=over.location||state.locations?.[weeklyBlockKey(h)]||(idx%2===0?'Aula':'Cancha');
+        (by[sec]||(by[sec]=[])).push(`${date} (${space}, ${h.horaInicio||''}-${h.horaFin||''})`);
+      });
+    }
+    return Object.entries(by).map(([sec,dates])=>`Sección ${sec}: ${dates.join('; ')}`).join('\n');
+  }
 
   function styles(){
     if($(STYLE_ID))return;
@@ -15400,9 +15420,9 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       .pea-config{display:grid;grid-template-columns:1.2fr .9fr .9fr .9fr;gap:10px;margin-bottom:12px}.pea-field{display:flex;flex-direction:column;gap:6px}.pea-field span{font-size:.78rem;font-weight:900;color:#48647d;text-transform:uppercase;letter-spacing:.035em}.pea-field input,.pea-field select{border:1px solid #cad9e5;border-radius:11px;padding:10px 11px;background:var(--card-bg,#fff);color:var(--text-color,#24384c);font:inherit;font-weight:750;min-width:0}
       .pea-actions{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.pea-btn{border:0;border-radius:11px;padding:10px 13px;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;gap:7px}.pea-btn.primary{background:#1769aa;color:white}.pea-btn.ai{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white}.pea-btn.soft{background:#edf5fb;color:#145d8d}.pea-btn.green{background:#e9f9f1;color:#087957}.pea-btn:disabled{opacity:.55;cursor:wait}
       .pea-preview{border:1px solid #d9e4ec;border-radius:16px;overflow:hidden;background:#fff}.pea-preview-head{padding:13px 14px;background:#f4f8fb;border-bottom:1px solid #d9e4ec;display:flex;justify-content:space-between;gap:10px;align-items:center}.pea-preview-head strong{color:#233d54}.pea-total{font-weight:950;color:#334155}.pea-total.good{color:#047857}.pea-total.bad{color:#b45309}
-      .pea-table-wrap{overflow:auto}.pea-table{width:100%;border-collapse:collapse;min-width:780px}.pea-table th{background:#f8fafc;color:#4d647a;text-transform:uppercase;letter-spacing:.035em;font-size:.73rem;text-align:left;padding:10px;border-bottom:1px solid #dbe5ed}.pea-table td{padding:8px 9px;border-bottom:1px solid #edf1f4;vertical-align:top}.pea-table input,.pea-table textarea{width:100%;box-sizing:border-box;border:1px solid #d2dee8;border-radius:9px;padding:8px 9px;font:inherit;color:#263c50;background:#fff}.pea-table textarea{min-height:72px;resize:vertical}.pea-table input[type=number]{min-width:92px}.pea-remove{border:0;background:#fff0f0;color:#b42318;width:34px;height:34px;border-radius:9px;cursor:pointer}.pea-empty{padding:28px;text-align:center;color:#72869a}.pea-foot{padding:11px 13px;background:#fbfdff;color:#6b7f91;font-size:.82rem;line-height:1.45}.pea-loader{display:none;align-items:center;gap:8px;color:#5b4fc4;font-weight:850}.pea-loader.show{display:flex}
+      .pea-table-wrap{overflow:auto}.pea-table{width:100%;border-collapse:collapse;min-width:980px}.pea-table th{background:#f8fafc;color:#4d647a;text-transform:uppercase;letter-spacing:.035em;font-size:.73rem;text-align:left;padding:10px;border-bottom:1px solid #dbe5ed}.pea-table td{padding:8px 9px;border-bottom:1px solid #edf1f4;vertical-align:top}.pea-table input,.pea-table textarea,.pea-table select{width:100%;box-sizing:border-box;border:1px solid #d2dee8;border-radius:9px;padding:8px 9px;font:inherit;color:#263c50;background:#fff}.pea-table textarea{min-height:72px;resize:vertical}.pea-table input[type=number]{min-width:92px}.pea-remove{border:0;background:#fff0f0;color:#b42318;width:34px;height:34px;border-radius:9px;cursor:pointer}.pea-empty{padding:28px;text-align:center;color:#72869a}.pea-foot{padding:11px 13px;background:#fbfdff;color:#6b7f91;font-size:.82rem;line-height:1.45}.pea-loader{display:none;align-items:center;gap:8px;color:#5b4fc4;font-weight:850}.pea-loader.show{display:flex}
       .pea-source-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}.pea-source-tools select{border:1px solid #cad9e5;border-radius:10px;padding:8px 10px;background:var(--card-bg,#fff);color:var(--text-color,#24384c);font-weight:800}
-      .dark-mode .pea-card,.edugestion-dark .pea-card{background:#172334;border-color:#34495d}.dark-mode .pea-preview,.edugestion-dark .pea-preview{background:#172334;border-color:#34495d}.dark-mode .pea-preview-head,.edugestion-dark .pea-preview-head{background:#1d2b3b;border-color:#34495d}.dark-mode .pea-table th,.edugestion-dark .pea-table th{background:#1d2b3b;color:#c9d6e2}.dark-mode .pea-table td,.edugestion-dark .pea-table td{border-color:#2d4255}.dark-mode .pea-table input,.dark-mode .pea-table textarea,.edugestion-dark .pea-table input,.edugestion-dark .pea-table textarea{background:#142131;color:#edf4fb;border-color:#3b5268}.dark-mode .pea-note,.edugestion-dark .pea-note{background:#1b2d3e;color:#c6d5e2;border-color:#36526a}.dark-mode .pea-note.control,.edugestion-dark .pea-note.control{background:#3a2d18;color:#ffe0a8;border-color:#65502d}
+      .dark-mode .pea-card,.edugestion-dark .pea-card{background:#172334;border-color:#34495d}.dark-mode .pea-preview,.edugestion-dark .pea-preview{background:#172334;border-color:#34495d}.dark-mode .pea-preview-head,.edugestion-dark .pea-preview-head{background:#1d2b3b;border-color:#34495d}.dark-mode .pea-table th,.edugestion-dark .pea-table th{background:#1d2b3b;color:#c9d6e2}.dark-mode .pea-table td,.edugestion-dark .pea-table td{border-color:#2d4255}.dark-mode .pea-table input,.dark-mode .pea-table textarea,.dark-mode .pea-table select,.edugestion-dark .pea-table input,.edugestion-dark .pea-table textarea,.edugestion-dark .pea-table select{background:#142131;color:#edf4fb;border-color:#3b5268}.dark-mode .pea-note,.edugestion-dark .pea-note{background:#1b2d3e;color:#c6d5e2;border-color:#36526a}.dark-mode .pea-note.control,.edugestion-dark .pea-note.control{background:#3a2d18;color:#ffe0a8;border-color:#65502d}
       @media(max-width:850px){.pea-config{grid-template-columns:1fr 1fr}.pea-distinction{grid-template-columns:1fr}}@media(max-width:560px){.pea-config{grid-template-columns:1fr}.pea-btn{width:100%;justify-content:center}.pea-source-tools{align-items:stretch}.pea-source-tools select{width:100%}}
     `;document.head.appendChild(st);
   }
@@ -15466,39 +15486,42 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     throw new Error('Gemini devolvió un formato que no se pudo aplicar automáticamente.');
   }
   function iso(v){return /^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):''}
-  function normalizeRow(r={}){return {nombre:norm(r.nombre||r.evaluacion||r.actividad||'Evaluación'),como:norm(r.comoSeEvaluara||r.como||r.metodo||''),porcentaje:Math.max(0,Math.min(100,Number(r.porcentaje||r.ponderacion||0)||0)),fechaDesde:iso(r.fechaDesde||r.desde),fechaHasta:iso(r.fechaHasta||r.hasta||r.fechaDesde||r.desde)}}
+  function normalizeRow(r={}){const espacio=norm(r.espacio||r.space||r.lugar||'Aula');return {nombre:norm(r.nombre||r.evaluacion||r.actividad||'Evaluación'),como:norm(r.comoSeEvaluara||r.como||r.metodo||''),espacio:['Aula','Cancha','Gimnasio'].includes(espacio)?espacio:'Aula',puntos:Math.max(0,Math.min(20,Number(r.puntos||r.pts||0)||0)),fechaDesde:iso(r.fechaDesde||r.desde),fechaHasta:iso(r.fechaHasta||r.hasta||r.fechaDesde||r.desde)}}
 
   function collectRowsFromDom(){
     return [...document.querySelectorAll('#pea-body tr[data-row]')].map(tr=>({
       nombre:tr.querySelector('[data-f="nombre"]')?.value.trim()||'',
       como:tr.querySelector('[data-f="como"]')?.value.trim()||'',
-      porcentaje:Number(tr.querySelector('[data-f="porcentaje"]')?.value||0),
+      espacio:tr.querySelector('[data-f="espacio"]')?.value||'Aula',
+      puntos:Number(tr.querySelector('[data-f="puntos"]')?.value||0),
       fechaDesde:tr.querySelector('[data-f="fechaDesde"]')?.value||'',
       fechaHasta:tr.querySelector('[data-f="fechaHasta"]')?.value||''
-    })).filter(x=>x.nombre||x.como||x.porcentaje||x.fechaDesde||x.fechaHasta);
+    })).filter(x=>x.nombre||x.como||x.puntos||x.fechaDesde||x.fechaHasta);
   }
-  function total(rows){return rows.reduce((s,x)=>s+(Number(x.porcentaje)||0),0)}
+  function total(rows){return rows.reduce((sum,x)=>sum+(Number(x.puntos)||0),0)}
   function renderRows(rows=currentRows()){
     const body=$('pea-body'),empty=$('pea-empty');if(!body)return;
     body.innerHTML='';
     if(!rows.length){if(empty)empty.style.display='block';updateTotal([]);return}else if(empty)empty.style.display='none';
     rows.forEach((r,i)=>{r=normalizeRow(r);const tr=document.createElement('tr');tr.dataset.row=i;tr.innerHTML=`
-      <td><input data-f="nombre" value="${esc(r.nombre)}" placeholder="Ej.: Circuito de habilidades motrices"></td>
-      <td><textarea data-f="como" placeholder="Explica de forma clara cómo se evaluará">${esc(r.como)}</textarea></td>
-      <td><input data-f="porcentaje" type="number" min="0" max="100" step="1" value="${esc(r.porcentaje||'')}"></td>
+      <td><input data-f="nombre" value="${esc(r.nombre)}" placeholder="Nombre de la actividad o evaluación"></td>
+      <td><textarea data-f="como" placeholder="Explica a los alumnos cómo se evaluará">${esc(r.como)}</textarea></td>
+      <td><select data-f="espacio"><option value="Aula" ${r.espacio==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${r.espacio==='Cancha'?'selected':''}>Cancha</option><option value="Gimnasio" ${r.espacio==='Gimnasio'?'selected':''}>Gimnasio</option></select></td>
+      <td><input data-f="puntos" type="number" min="0" max="20" step="0.5" value="${esc(r.puntos||'')}"></td>
       <td><input data-f="fechaDesde" type="date" value="${esc(r.fechaDesde)}"><small style="display:block;color:#7a8d9e;margin:4px 0 2px">hasta</small><input data-f="fechaHasta" type="date" value="${esc(r.fechaHasta)}"></td>
-      <td><button type="button" class="pea-remove" title="Eliminar evaluación"><i class="fa-solid fa-trash"></i></button></td>`;
+      <td><button type="button" class="pea-remove" title="Eliminar actividad"><i class="fa-solid fa-trash"></i></button></td>`;
       tr.querySelector('.pea-remove')?.addEventListener('click',()=>{const arr=collectRowsFromDom();arr.splice(i,1);saveRows(arr);renderRows(arr)});
-      tr.querySelectorAll('input,textarea').forEach(el=>el.addEventListener('input',()=>{const arr=collectRowsFromDom();saveRows(arr);updateTotal(arr)}));
+      tr.querySelectorAll('input,textarea,select').forEach(el=>el.addEventListener('input',()=>{const arr=collectRowsFromDom();saveRows(arr);updateTotal(arr)}));
+      tr.querySelectorAll('select').forEach(el=>el.addEventListener('change',()=>{const arr=collectRowsFromDom();saveRows(arr);updateTotal(arr)}));
       body.appendChild(tr);
     });
     updateTotal(rows);
   }
   function updateTotal(rows=collectRowsFromDom()){
-    const n=Math.round(total(rows)*100)/100,el=$('pea-total');if(!el)return;el.textContent=`Total: ${n}%`;el.className=`pea-total ${Math.abs(n-100)<.01?'good':'bad'}`;
+    const n=Math.round(total(rows)*100)/100,el=$('pea-total');if(!el)return;el.textContent=`Total: ${n}/20 pts`;el.className=`pea-total ${Math.abs(n-20)<.01?'good':'bad'}`;
   }
 
-  function addManual(){const arr=collectRowsFromDom();arr.push({nombre:'',como:'',porcentaje:0,fechaDesde:$('pev-desde')?.value||'',fechaHasta:$('pev-hasta')?.value||''});saveRows(arr);renderRows(arr);setTimeout(()=>document.querySelector('#pea-body tr:last-child [data-f="nombre"]')?.focus(),40)}
+  function addManual(){const arr=collectRowsFromDom();arr.push({nombre:'',como:'',espacio:'Aula',puntos:0,fechaDesde:$('pev-desde')?.value||'',fechaHasta:$('pev-hasta')?.value||''});saveRows(arr);renderRows(arr);setTimeout(()=>document.querySelector('#pea-body tr:last-child [data-f="nombre"]')?.focus(),40)}
 
   async function generate(){
     if(busy)return;
@@ -15513,35 +15536,42 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const desde=$('pev-desde')?.value||'',hasta=$('pev-hasta')?.value||'',secciones=norm($('pev-seccion')?.value||'A y B');
     if(!desde||!hasta)return toast('Coloca la fecha de inicio y la fecha de cierre del período.','warning');
     const bloques=topics.map((t,i)=>`${i+1}. ${t.tema}${t.tejido?` | Contenido: ${String(t.tejido).replace(/\s+/g,' ').slice(0,420)}`:''}${t.intencionalidad?` | Intencionalidad: ${String(t.intencionalidad).replace(/\s+/g,' ').slice(0,280)}`:''}`).join('\n');
-    const fechasClases=classDatesForGrade(grado,desde,hasta);
-    const superclases=lapso==='1er Lapso'?`\nSUPERCLASES PRÁCTICAS DEL LAPSO (son actividades, NO temas adicionales y NO deben crear evaluaciones extra)\n- Superclase 1: acondicionamiento físico general en gimnasio.\n- Superclase 2: ejercicios y circuito con pelotas en gimnasio.\n- Superclase 3: trabajo con ligas en gimnasio.\nIntegra estas tres superclases dentro de las evaluaciones correspondientes a habilidades motrices y hábitos/aptitudes para el trabajo físico.`:'';
-    const prompt=`Actúa como docente especialista en Educación Física de educación media venezolana. Diseña el PLAN DE EVALUACIÓN QUE SE ENTREGARÁ A LOS ALUMNOS EN EL SALÓN DE CLASE. Este documento es diferente del formato institucional que se entrega a Control de Estudio.\n\nDATOS\n- Área: ${window.profesorActual?.materia||'Educación Física'}\n- Año: ${grado}\n- Secciones que usan EXACTAMENTE la misma planificación: ${secciones}\n- Lapso: ${lapso}\n- Período completo del lapso: ${desde} hasta ${hasta}\n\nTEMAS CURRICULARES DEL LAPSO (deben mantenerse los 6, sin añadir ni eliminar)\n${bloques}${superclases}\n\nFECHAS REALES DE CLASE DISPONIBLES POR SECCIÓN\n${fechasClases||'Usa únicamente fechas dentro del período del lapso.'}\n\nINSTRUCCIONES OBLIGATORIAS\n1. Genera EXACTAMENTE 6 evaluaciones: una por cada uno de los 6 temas curriculares, respetando el mismo orden.\n2. Las 3 superclases de gimnasio se integran como evidencias/actividades prácticas dentro de evaluaciones existentes; NO son temas nuevos y NO generan filas adicionales.\n3. Para cada evaluación escribe SOLO: nombre de la evaluación, cómo se evaluará, porcentaje y fecha desde/hasta.\n4. "Cómo se evaluará" debe estar escrito para los alumnos e indicar brevemente actividad, técnica/instrumento y qué se valorará.\n5. Combina evaluación teórica/reflexiva en aula con desempeño práctico en cancha o gimnasio, según corresponda al tema.\n6. Los seis porcentajes DEBEN sumar exactamente 100%.\n7. Distribuye las 6 evaluaciones a lo largo de TODO el lapso, desde el 21/09/2026 hasta el 15/12/2026, sin concentrarlas todas al inicio.\n8. El rango fechaDesde/fechaHasta representa la aplicación de la MISMA evaluación en las dos secciones. Elige fechas reales de clase: fechaDesde será la primera aplicación entre las secciones y fechaHasta la última aplicación.\n9. No uses fechas fuera de ${desde} a ${hasta}.\n10. No incluyas Tema Indispensable, Tema Generador, Referentes, Potencialidades, Énfasis curricular ni Intencionalidades Pedagógicas: pertenecen al Formato Control de Estudio.\n11. No inventes temas fuera de los seis proporcionados.\n\nDevuelve ÚNICAMENTE JSON válido, sin markdown, con esta estructura exacta:\n{"evaluaciones":[{"nombre":"","comoSeEvaluara":"","porcentaje":0,"fechaDesde":"YYYY-MM-DD","fechaHasta":"YYYY-MM-DD"}]}`;
+    const sesiones=classSessionsForGrade(grado,desde,hasta);
+    const isFirstLapso=lapso==='1er Lapso';
+    const superNames=['Superclase de acondicionamiento físico general','Superclase de acondicionamiento físico con pelotas','Superclase de acondicionamiento físico con ligas'];
+    const expected=isFirstLapso?topics.length+3:topics.length;
+    const fixedPoints=isFirstLapso&&topics.length===6?[2,2,2,2,2,2,3,3,2]:null;
+    const superText=isFirstLapso?`\nSUPERCLASES PRÁCTICAS QUE DEBEN APARECER COMO ACTIVIDADES EVALUATIVAS INDEPENDIENTES\n7. ${superNames[0]} — Gimnasio — 3 pts\n8. ${superNames[1]} — Gimnasio — 3 pts\n9. ${superNames[2]} — Gimnasio — 2 pts`:'';
+    const pointInstruction=fixedPoints?'Las puntuaciones son OBLIGATORIAS y en este orden: 2, 2, 2, 2, 2, 2, 3, 3 y 2 puntos. Total exacto: 20 puntos.':'Distribuye los puntos entre todas las actividades y asegúrate de que el total sea exactamente 20 puntos.';
+    const prompt=`Actúa como docente especialista en Educación Física de educación media venezolana. Diseña el PLAN DE EVALUACIÓN QUE SE ENTREGARÁ A LOS ALUMNOS EN EL SALÓN DE CLASE. Es diferente del formato de Control de Estudio.\n\nDATOS\n- Área: ${window.profesorActual?.materia||'Educación Física'}\n- Año: ${grado}\n- Secciones que usan la misma planificación: ${secciones}\n- Lapso: ${lapso}\n- Período: ${desde} hasta ${hasta}\n\n6 TEMAS CURRICULARES DEL LAPSO\n${bloques}${superText}\n\nFECHAS REALES DE CLASE POR SECCIÓN, CON ESPACIO Y HORA\n${sesiones||'Usa únicamente fechas reales dentro del período.'}\n\nINSTRUCCIONES OBLIGATORIAS\n1. Genera EXACTAMENTE ${expected} filas: ${topics.length} correspondientes a los temas curriculares${isFirstLapso?' y 3 correspondientes a las superclases de gimnasio':''}. No omitas ninguna.\n2. Las primeras ${topics.length} filas deben conservar EXACTAMENTE el nombre de cada tema curricular y el mismo orden.\n3. ${isFirstLapso?`Las últimas 3 filas deben llamarse exactamente: ${superNames.join(' | ')}.`:'No inventes temas adicionales.'}\n4. Para cada fila escribe: nombre, cómo se evaluará, espacio (Aula, Cancha o Gimnasio), puntos, fechaDesde y fechaHasta.\n5. ${pointInstruction}\n6. La evaluación debe explicar al alumno la actividad, técnica/instrumento y qué se valorará.\n7. Usa Aula para actividades teóricas/reflexivas; Cancha para desempeño motor/práctico; Gimnasio para las tres superclases.\n8. fechaDesde/fechaHasta corresponden a la misma actividad aplicada a las dos secciones: usa como fechaDesde la primera aplicación y fechaHasta la última.\n9. Elige SOLO fechas que aparezcan en FECHAS REALES DE CLASE y respeta el espacio indicado para ese día.\n10. Distribuye las actividades a lo largo de todo el lapso, desde ${desde} hasta ${hasta}.\n11. No incluyas columnas de Control de Estudio.\n\nDevuelve ÚNICAMENTE JSON válido, sin markdown, con esta estructura exacta:\n{"evaluaciones":[{"nombre":"","comoSeEvaluara":"","espacio":"Aula","puntos":0,"fechaDesde":"YYYY-MM-DD","fechaHasta":"YYYY-MM-DD"}]}`;
     busy=true;$('pea-loader')?.classList.add('show');const btn=$('pea-generate');if(btn)btn.disabled=true;
     try{
       const response=await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:prompt})});
       const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(data?.message||'No se pudo consultar Gemini.');
       const parsed=extractJson(data.answer),rows=(Array.isArray(parsed?.evaluaciones)?parsed.evaluaciones:[]).map(normalizeRow).filter(x=>x.nombre);
-      if(!rows.length)throw new Error('Gemini no devolvió evaluaciones aplicables.');
-      if(topics.length===6&&rows.length!==6)throw new Error(`Gemini devolvió ${rows.length} evaluaciones. Para este lapso deben ser exactamente 6, una por cada tema. Vuelve a generarla.`);
-      const sum=total(rows);if(Math.abs(sum-100)>.01)throw new Error(`La propuesta de Gemini suma ${sum}% y debe sumar 100%. Vuelve a generarla.`);
-      saveRows(rows);renderRows(rows);toast(`Gemini preparó ${rows.length} evaluaciones con un total de 100%.`,'success');
+      if(rows.length!==expected)throw new Error(`Gemini devolvió ${rows.length} actividades. Para este plan deben ser exactamente ${expected}. Vuelve a generarlo.`);
+      topics.forEach((t,i)=>{rows[i].nombre=t.tema});
+      if(isFirstLapso){superNames.forEach((name,j)=>{const i=topics.length+j;rows[i].nombre=name;rows[i].espacio='Gimnasio'});}
+      if(fixedPoints)fixedPoints.forEach((pts,i)=>{rows[i].puntos=pts});
+      const sum=total(rows);if(Math.abs(sum-20)>.01)throw new Error(`La propuesta suma ${sum} puntos y debe sumar exactamente 20 puntos.`);
+      saveRows(rows);renderRows(rows);toast(`Gemini preparó ${rows.length} actividades con un total de 20 puntos.`,'success');
     }catch(e){console.error('Plan alumnos Gemini:',e);toast(e.message||'No se pudo generar el plan.','error')}
     finally{busy=false;$('pea-loader')?.classList.remove('show');if(btn)btn.disabled=false}
   }
 
-  function fmtDate(v){if(!v)return 'Por definir';const d=new Date(`${v}T12:00:00`);return Number.isNaN(d.getTime())?v:d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'})}
+  function fmtDate(v){if(!v)return 'Por definir';const d=new Date(`${v}T12:00:00`);return Number.isNaN(d.getTime())?v:d.toLocaleDateString('es-VE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'})}
   function printPreview(){
-    const rows=collectRowsFromDom();if(!rows.length)return toast('No hay evaluaciones en la vista previa.','warning');
-    const sum=total(rows);if(Math.abs(sum-100)>.01&&!confirm(`La ponderación suma ${sum}%. ¿Deseas abrir la vista de impresión de todos modos?`))return;
+    const rows=collectRowsFromDom();if(!rows.length)return toast('No hay actividades en la vista previa.','warning');
+    const sum=total(rows);if(Math.abs(sum-20)>.01&&!confirm(`El plan suma ${sum} puntos. ¿Deseas abrir la vista de impresión de todos modos?`))return;
     saveRows(rows);
     const inst=$('input-institucion')?.value||'Institución educativa';
     const docente=window.profesorActual?.nombre||'Docente';
     const materia=window.profesorActual?.materia||'Educación Física';
     const grado=$('pea-grade')?.value||'';const lapso=$('pev-lapso')?.value||'';const secs=$('pev-seccion')?.value||'';
     const desde=$('pev-desde')?.value||'',hasta=$('pev-hasta')?.value||'';
-    const body=rows.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.nombre)}</b></td><td>${esc(r.como)}</td><td class="pct">${esc(r.porcentaje)}%</td><td>${esc(fmtDate(r.fechaDesde))}<br><span>hasta</span><br>${esc(fmtDate(r.fechaHasta))}</td></tr>`).join('');
-    const w=window.open('','_blank','width=1100,height=800');if(!w)return toast('El navegador bloqueó la vista previa de impresión.','warning');
-    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plan de evaluación - ${esc(grado)}</title><style>@page{size:letter landscape;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#17202a;margin:0;background:#eef2f5}.sheet{max-width:1050px;margin:22px auto;background:#fff;padding:26px 30px;box-shadow:0 5px 24px #0002}.actions{text-align:right;margin-bottom:14px}.actions button{padding:9px 14px;border:0;border-radius:8px;background:#1769aa;color:#fff;font-weight:700;cursor:pointer}.head{text-align:center;border-bottom:2px solid #1d3348;padding-bottom:12px}.head h1{font-size:20px;margin:3px 0}.head h2{font-size:15px;margin:5px 0;color:#425b70}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;margin:14px 0;font-size:12px}.meta b{color:#243d53}table{width:100%;border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #7a8792;padding:8px;vertical-align:top}th{background:#eaf1f6;text-align:center}.pct{text-align:center;font-weight:700;font-size:14px}td span{font-size:9px;color:#64748b}.foot{margin-top:16px;display:flex;justify-content:space-between;font-size:11px}.note{margin-top:12px;font-size:10px;color:#64748b}@media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none;padding:0}.actions{display:none}}</style></head><body><main class="sheet"><div class="actions"><button onclick="window.print()">Imprimir / Guardar PDF</button></div><div class="head"><div style="font-size:12px;font-weight:700">${esc(inst)}</div><h1>PLAN DE EVALUACIÓN PARA LOS ALUMNOS</h1><h2>${esc(materia)}</h2></div><div class="meta"><div><b>Docente:</b> ${esc(docente)}</div><div><b>Año:</b> ${esc(grado)}</div><div><b>Secciones:</b> ${esc(secs||'Por definir')}</div><div><b>Lapso:</b> ${esc(lapso)}</div><div><b>Desde:</b> ${esc(fmtDate(desde))}</div><div><b>Hasta:</b> ${esc(fmtDate(hasta))}</div></div><table><thead><tr><th style="width:4%">N°</th><th style="width:23%">Nombre de la evaluación</th><th>Cómo se evaluará</th><th style="width:10%">Porcentaje</th><th style="width:16%">Fecha</th></tr></thead><tbody>${body}<tr><td colspan="3" style="text-align:right;font-weight:700">TOTAL</td><td class="pct">${sum}%</td><td></td></tr></tbody></table><div class="note">Este documento informa a los alumnos las actividades evaluativas del lapso. Es independiente del formato institucional de planificación entregado a Control de Estudio.</div><div class="foot"><span>Firma del docente: __________________________</span><span>Fecha de entrega: __________________</span></div></main></body></html>`);w.document.close();w.focus();
+    const body=rows.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.nombre)}</b></td><td>${esc(r.como)}</td><td class="space">${esc(r.espacio)}</td><td class="pts">${esc(r.puntos)} pts</td><td>${esc(fmtDate(r.fechaDesde))}<br><span>hasta</span><br>${esc(fmtDate(r.fechaHasta))}</td></tr>`).join('');
+    const w=window.open('','_blank','width=1200,height=850');if(!w)return toast('El navegador bloqueó la vista previa de impresión.','warning');
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plan de evaluación - ${esc(grado)}</title><style>@page{size:letter landscape;margin:9mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#17202a;margin:0;background:#eef2f5}.sheet{max-width:1080px;margin:20px auto;background:#fff;padding:22px 24px;box-shadow:0 5px 24px #0002}.actions{text-align:right;margin-bottom:12px}.actions button{padding:9px 14px;border:0;border-radius:8px;background:#1769aa;color:#fff;font-weight:700;cursor:pointer}.head{text-align:center;border-bottom:2px solid #1d3348;padding-bottom:10px}.head h1{font-size:19px;margin:3px 0}.head h2{font-size:14px;margin:4px 0;color:#425b70}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:5px 14px;margin:12px 0;font-size:11px}.meta b{color:#243d53}table{width:100%;border-collapse:collapse;font-size:10.2px}th,td{border:1px solid #7a8792;padding:6px;vertical-align:top}th{background:#eaf1f6;text-align:center}.pts,.space{text-align:center;font-weight:700}.pts{font-size:12px}td span{font-size:8.5px;color:#64748b}.foot{margin-top:13px;display:flex;justify-content:space-between;font-size:10px}.note{margin-top:10px;font-size:9px;color:#64748b}@media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none;padding:0}.actions{display:none}}</style></head><body><main class="sheet"><div class="actions"><button onclick="window.print()">Imprimir / Guardar PDF</button></div><div class="head"><div style="font-size:11px;font-weight:700">${esc(inst)}</div><h1>PLAN DE EVALUACIÓN PARA LOS ALUMNOS</h1><h2>${esc(materia)}</h2></div><div class="meta"><div><b>Docente:</b> ${esc(docente)}</div><div><b>Año:</b> ${esc(grado)}</div><div><b>Secciones:</b> ${esc(secs||'Por definir')}</div><div><b>Lapso:</b> ${esc(lapso)}</div><div><b>Desde:</b> ${esc(fmtDate(desde))}</div><div><b>Hasta:</b> ${esc(fmtDate(hasta))}</div></div><table><thead><tr><th style="width:3%">N°</th><th style="width:21%">Actividad / contenido evaluado</th><th>Cómo se evaluará</th><th style="width:9%">Espacio</th><th style="width:7%">Puntos</th><th style="width:18%">Fecha desde / hasta</th></tr></thead><tbody>${body}<tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td class="pts">${sum} pts</td><td></td></tr></tbody></table><div class="note">Incluye los 6 temas del lapso y las 3 superclases prácticas. El espacio indica si la actividad se realiza en Aula, Cancha o Gimnasio.</div><div class="foot"><span>Firma del docente: __________________________</span><span>Fecha de entrega: __________________</span></div></main></body></html>`);w.document.close();w.focus();
   }
 
   function syncHeaderFields(){
@@ -15563,11 +15593,11 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const grade=$('pea-grade');const selected=selectedTopics();if(grade&&selected[0]?.grado&&[...grade.options].some(o=>o.value===selected[0].grado))grade.value=selected[0].grado;
 
     const card=document.createElement('div');card.id='pea-card';card.className='pea-card';card.innerHTML=`
-      <div class="pea-head"><div><h3><i class="fa-solid fa-users"></i> Plan de evaluación para entregar a los alumnos</h3><p>Gemini prepara <b>6 evaluaciones, una por cada tema del 1.er lapso</b>, distribuidas entre el 21/09/2026 y el 15/12/2026. Las tres superclases de gimnasio se integran como actividades prácticas, y la misma planificación se aplica a ambas secciones.</p></div><span class="pea-badge"><i class="fa-solid fa-graduation-cap"></i> Documento para el salón</span></div>
-      <div class="pea-distinction"><div class="pea-note"><strong><i class="fa-solid fa-users"></i> Para los alumnos</strong>Nombre de la evaluación · cómo se evaluará · porcentaje · fecha desde/hasta.</div><div class="pea-note control"><strong><i class="fa-solid fa-building-columns"></i> Para Control de Estudio</strong>Se mantiene separado en la pestaña <b>Formato Control</b> con el cuadro institucional: Tema Indispensable, Tema Generador, Referente Teórico Práctico, Potencialidades, Actividades, Énfasis curricular e Intencionalidades Pedagógicas.</div></div>
+      <div class="pea-head"><div><h3><i class="fa-solid fa-users"></i> Plan de evaluación para entregar a los alumnos</h3><p>Gemini prepara el plan completo con <b>los 6 temas curriculares + las 3 superclases</b>, usando las fechas reales de Aula, Cancha y Gimnasio de ambas secciones. La calificación total del lapso es de <b>20 puntos</b>.</p></div><span class="pea-badge"><i class="fa-solid fa-graduation-cap"></i> Documento para el salón</span></div>
+      <div class="pea-distinction"><div class="pea-note"><strong><i class="fa-solid fa-users"></i> Para los alumnos</strong>Actividad / contenido · cómo se evaluará · espacio · puntos · fecha desde/hasta.</div><div class="pea-note control"><strong><i class="fa-solid fa-building-columns"></i> Para Control de Estudio</strong>Se mantiene separado en la pestaña <b>Formato Control</b> con el cuadro institucional: Tema Indispensable, Tema Generador, Referente Teórico Práctico, Potencialidades, Actividades, Énfasis curricular e Intencionalidades Pedagógicas.</div></div>
       <div class="pea-config"><label class="pea-field"><span>Año</span><select id="pea-grade-mirror">${gradeOptions()}</select></label><label class="pea-field"><span>Lapso</span><select id="pea-lapso">${LAPSOS.map(x=>`<option>${x}</option>`).join('')}</select></label><label class="pea-field"><span>Fecha inicial</span><input id="pea-desde-mirror" type="date"></label><label class="pea-field"><span>Fecha final</span><input id="pea-hasta-mirror" type="date"></label></div>
       <div class="pea-actions"><button type="button" class="pea-btn ai" id="pea-generate"><i class="fa-solid fa-wand-magic-sparkles"></i> Gemini: generar plan para alumnos</button><button type="button" class="pea-btn soft" id="pea-add"><i class="fa-solid fa-plus"></i> Agregar evaluación manual</button><button type="button" class="pea-btn green" id="pea-save"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button><button type="button" class="pea-btn primary" id="pea-print"><i class="fa-solid fa-print"></i> Vista previa / Imprimir</button><span class="pea-loader" id="pea-loader"><i class="fa-solid fa-circle-notch fa-spin"></i> Gemini está preparando el plan…</span></div>
-      <div class="pea-preview"><div class="pea-preview-head"><strong>Vista previa editable</strong><span class="pea-total" id="pea-total">Total: 0%</span></div><div class="pea-empty" id="pea-empty"><i class="fa-solid fa-list-check"></i><p>Todavía no hay evaluaciones. Puedes agregarlas manualmente o pedir a Gemini que prepare la propuesta completa.</p></div><div class="pea-table-wrap"><table class="pea-table"><thead><tr><th>Nombre de la evaluación</th><th>Cómo se evaluará</th><th>Porcentaje</th><th>Fecha desde / hasta</th><th></th></tr></thead><tbody id="pea-body"></tbody></table></div><div class="pea-foot">Puedes modificar cualquier celda antes de imprimir. Para entregar a los alumnos, la suma de porcentajes debe quedar en <b>100%</b>.</div></div>`;
+      <div class="pea-preview"><div class="pea-preview-head"><strong>Vista previa editable</strong><span class="pea-total" id="pea-total">Total: 0/20 pts</span></div><div class="pea-empty" id="pea-empty"><i class="fa-solid fa-list-check"></i><p>Todavía no hay evaluaciones. Puedes agregarlas manualmente o pedir a Gemini que prepare la propuesta completa.</p></div><div class="pea-table-wrap"><table class="pea-table"><thead><tr><th>Actividad / contenido evaluado</th><th>Cómo se evaluará</th><th>Espacio</th><th>Puntos</th><th>Fecha desde / hasta</th><th></th></tr></thead><tbody id="pea-body"></tbody></table></div><div class="pea-foot">Puedes modificar cualquier celda antes de imprimir. El total del plan debe quedar en <b>20 puntos</b> y cada actividad debe indicar Aula, Cancha o Gimnasio.</div></div>`;
     sec.appendChild(card);
 
     // Sincroniza los nuevos selectores con los campos ya existentes del módulo.
@@ -15590,4 +15620,158 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function init(){if(enhance())return;let n=0;const tm=setInterval(()=>{n++;if(enhance()||n>40)clearInterval(tm)},250)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
-/* EDUGESTION_PLAN_EVALUACION_ALUMNOS_V29_END */
+/* EDUGESTION_PLAN_EVALUACION_ALUMNOS_V31_END */
+
+/* ================================================================
+   EduGestión · CRONOGRAMA POR SECCIÓN · V3.2
+   Una hoja carta horizontal por sección: horario + aula/cancha/gimnasio
+   + actividades del lapso + evaluaciones/puntos + superclases.
+   ================================================================ */
+(() => {
+  const TAB_ID='tab-cronograma-seccion';
+  const SECTION_ID='section-cronograma-seccion';
+  const STYLE_ID='style-cronograma-seccion-v32';
+  const WEEKLY_PREFIX='edugestion_weekly_planning_v1_';
+  const PLAN_PREFIX='edugestion_plan_alumnos_puntos_v1_';
+  const ASSIGN_KEY='edugestion_cuadernillo_ef_lapsos_v1';
+  const LAPSO_NAMES={'1':'1er Lapso','2':'2do Lapso','3':'3er Lapso'};
+  const dayIdx={domingo:0,lunes:1,martes:2,miercoles:3,miércoles:3,jueves:4,viernes:5,sabado:6,sábado:6};
+  const dayName=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  let currentSection='';
+  let currentLapso='1';
+
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))||f}catch(_){return f}};
+  const teacherKey=()=>String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'docente').replace(/[^a-z0-9_-]/gi,'_');
+  const weeklyKey=()=>WEEKLY_PREFIX+String(window.profesorActual?.id||window.profesorActual?.usuario||'docente');
+  const weeklyState=()=>readJSON(weeklyKey(),{start:'2026-09-21',end:'2027-07-31',locations:{},overrides:{},manual:[],lapsos:{'1':{},'2':{},'3':{}}});
+  const academicNum=v=>Number(String(v||'').match(/\d+/)?.[0]||0);
+  const sameGrade=(a,b)=>academicNum(a)>0&&academicNum(a)===academicNum(b);
+  const isoLocal=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const fromISO=v=>{const p=String(v||'').split('-').map(Number);return p.length===3&&!p.some(Number.isNaN)?new Date(p[0],p[1]-1,p[2],12):null};
+  const fmtDate=v=>{const d=fromISO(v);return d?d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}):String(v||'')};
+  const blockKey=h=>[h.dia,h.horaInicio,h.horaFin,h.ano,h.seccion,h.turno].map(x=>String(x||'')).join('|');
+  const sectionKey=(ano,seccion)=>`${ano}|||${seccion}`;
+  const parseSectionKey=key=>{const [ano,seccion]=String(key||'').split('|||');return {ano:ano||'',seccion:seccion||''}};
+  const schoolEvent=date=>{try{return typeof recordatoriosEscolares!=='undefined'&&recordatoriosEscolares[date]?String(recordatoriosEscolares[date]):''}catch(_){return ''}};
+  const noClass=date=>/asueto|no laborable/i.test(schoolEvent(date));
+
+  function style(){
+    if($(STYLE_ID))return;
+    const s=document.createElement('style');s.id=STYLE_ID;s.textContent=`
+      .cps-hero{margin:0 0 18px;padding:24px 26px;border-radius:24px;background:linear-gradient(135deg,#173d72,#167d84);color:#fff}.cps-hero small{display:inline-flex;align-items:center;gap:7px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;opacity:.9}.cps-hero h2{margin:8px 0 5px;font-size:1.9rem}.cps-hero p{margin:0;max-width:900px;line-height:1.5;opacity:.9}
+      .cps-tools{display:grid;grid-template-columns:minmax(250px,1.25fr) minmax(150px,.55fr) auto auto auto;gap:10px;align-items:end;margin-bottom:15px;padding:16px;border:1px solid #d7e4ef;border-radius:18px;background:#fff}.cps-tools label{display:flex;flex-direction:column;gap:6px}.cps-tools label span{font-size:.76rem;font-weight:900;text-transform:uppercase;color:#577087;letter-spacing:.04em}.cps-tools select{min-height:44px;border:1px solid #cbd9e5;border-radius:11px;padding:9px 11px;background:#fff;color:#243d53;font-weight:800}.cps-btn{min-height:44px;border:0;border-radius:11px;padding:0 14px;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}.cps-btn.primary{background:#245ed0;color:#fff}.cps-btn.print{background:#0f766e;color:#fff}.cps-btn.download{background:#7c3aed;color:#fff}
+      .cps-info{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin:0 0 14px}.cps-info article{border:1px solid #dbe7ef;background:#fff;border-radius:14px;padding:11px 12px}.cps-info span{display:block;color:#6b7e90;font-size:.72rem;font-weight:850;text-transform:uppercase}.cps-info strong{display:block;margin-top:3px;color:#203b54;font-size:.96rem;line-height:1.25}
+      .cps-preview-shell{overflow:auto;background:#dde7ef;border-radius:18px;padding:16px;border:1px solid #cfdae4}.cps-sheet{width:10.55in;min-height:7.75in;margin:auto;background:#fff;color:#111;padding:.22in .25in;box-sizing:border-box;box-shadow:0 4px 22px #0002;font-family:Arial,sans-serif}.cps-head{text-align:center;border-bottom:1.5px solid #111;padding-bottom:5px}.cps-head .inst{font-size:8.4px;font-weight:700}.cps-head h1{font-size:14px;margin:4px 0 2px}.cps-head h2{font-size:10px;margin:0;font-weight:700}.cps-meta{display:grid;grid-template-columns:1.05fr .95fr 1fr 1fr;gap:3px 9px;margin:7px 0 6px;font-size:7.4px}.cps-meta div{border-bottom:1px solid #555;padding:2px 0}.cps-meta b{font-weight:800}.cps-schedule-line{font-size:7.2px;border:1px solid #9ca8b3;background:#f5f8fa;padding:4px 5px;margin:4px 0 6px}.cps-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:6.75px;line-height:1.16}.cps-table th,.cps-table td{border:1px solid #555;padding:2.6px 3px;vertical-align:middle;overflow-wrap:anywhere}.cps-table th{background:#e8eef3;text-align:center;font-size:6.55px;text-transform:uppercase}.cps-table .c{text-align:center}.cps-table tr.is-gym td{background:#f7ecff}.cps-table tr.is-eval td{font-weight:700}.cps-table tr.is-noclass td{background:#f1f3f5;color:#6b7280;font-style:italic}.cps-space{font-weight:800}.cps-aula{color:#2563eb}.cps-cancha{color:#059669}.cps-gimnasio{color:#a21caf}.cps-eval{color:#b45309}.cps-foot{display:flex;justify-content:space-between;gap:10px;margin-top:5px;font-size:6.8px}.cps-foot strong{font-weight:900}.cps-empty{padding:45px;text-align:center;color:#6b7f91;background:#fff;border-radius:14px}
+      .dark-mode .cps-tools,.edugestion-dark .cps-tools{background:#172334;border-color:#34495d}.dark-mode .cps-tools select,.edugestion-dark .cps-tools select{background:#142131;color:#edf4fb;border-color:#3b5268}
+      @media(max-width:1050px){.cps-tools{grid-template-columns:1fr 1fr}.cps-btn{width:100%}.cps-info{grid-template-columns:1fr 1fr}}
+      @media(max-width:620px){.cps-tools,.cps-info{grid-template-columns:1fr}.cps-preview-shell{padding:8px}}
+    `;document.head.appendChild(s);
+  }
+
+  function sections(){
+    const map=new Map();
+    (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{const ano=String(h.ano||'').trim(),seccion=String(h.seccion||'').trim();if(!ano||!seccion)return;const k=sectionKey(ano,seccion);if(!map.has(k))map.set(k,{key:k,ano,seccion,turno:String(h.turno||'').trim()})});
+    return [...map.values()].sort((a,b)=>`${academicNum(a.ano)}${a.seccion}`.localeCompare(`${academicNum(b.ano)}${b.seccion}`,'es',{numeric:true}));
+  }
+  function labelSection(x){return `${x.ano} · Sección ${x.seccion}${x.turno?` · ${x.turno==='Manana'?'Mañana':x.turno}`:''}`}
+  function schedulesFor(key){const {ano,seccion}=parseSectionKey(key);return (Array.isArray(horariosProfesor)?horariosProfesor:[]).filter(h=>String(h.ano)===ano&&String(h.seccion)===seccion).sort((a,b)=>(dayIdx[norm(a.dia)]??9)-(dayIdx[norm(b.dia)]??9)||String(a.horaInicio||'').localeCompare(String(b.horaInicio||'')))}
+  function rangeForLapso(k){const st=weeklyState(),cfg=st.lapsos?.[String(k)]||{};if(k==='1')return {start:cfg.start||'2026-09-21',end:cfg.end||'2026-12-15'};return {start:cfg.start||'',end:cfg.end||''}}
+  function baseLocation(h,idx,state){return state.locations?.[blockKey(h)]||(idx%2===0?'Aula':'Cancha')}
+
+  function occurrences(key,lapso){
+    const st=weeklyState(),range=rangeForLapso(lapso),{ano,seccion}=parseSectionKey(key),start=fromISO(range.start),end=fromISO(range.end),blocks=schedulesFor(key),out=[];
+    if(!start||!end||!ano||!seccion)return [];
+    for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+      const date=isoLocal(d),dow=d.getDay();
+      blocks.forEach((h,idx)=>{
+        if((dayIdx[norm(h.dia)]??-1)!==dow)return;
+        const id=`auto|${ano}|${seccion}|${date}|${h.horaInicio||''}|${h.horaFin||''}`,over=st.overrides?.[id]||{},status=over.status||(noClass(date)?'Sin clase':'Clase');
+        out.push({id,date,dow,ano,seccion,turno:h.turno||'',horaInicio:h.horaInicio||'',horaFin:h.horaFin||'',location:over.location||baseLocation(h,idx,st),status,event:schoolEvent(date),...over});
+      });
+    }
+    (Array.isArray(st.manual)?st.manual:[]).filter(x=>String(x.ano)===ano&&String(x.seccion)===seccion&&x.date>=range.start&&x.date<=range.end).forEach(x=>{const over=st.overrides?.[x.id]||{};const d=fromISO(x.date);out.push({status:'Clase',location:'Aula',dow:d?.getDay()??0,...x,...over,event:schoolEvent(x.date),manual:true})});
+    return out.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.horaInicio).localeCompare(String(b.horaInicio)));
+  }
+
+  function curriculumGradeKey(ano){const data=window.EDUGESTION_CEF_DATA||{},n=academicNum(ano);return Object.keys(data).find(k=>academicNum(k)===n&&/año/i.test(k))||Object.keys(data).find(k=>academicNum(k)===n)||''}
+  function topicKey(grado,item){const n=v=>String(v||'').trim().replace(/\s+/g,' ');return `${n(grado)}|||${n(item?.tema)}|||p:${n(item?.pagina)}|||d:${n(item?.descripcion||item?.tejido||item?.referentes||'')}`}
+  function assignedTopics(ano,lapso){
+    const grade=curriculumGradeKey(ano),data=window.EDUGESTION_CEF_DATA||{},rows=Array.isArray(data[grade])?data[grade]:[],assign=readJSON(ASSIGN_KEY,{}),lapName=LAPSO_NAMES[String(lapso)]||'1er Lapso';
+    return rows.filter(x=>{const u=topicKey(grade,x),legacy=`${String(grade).trim()}|||${String(x.tema||'').trim()}`;const same=rows.filter(y=>String(y.tema||'').trim()===String(x.tema||'').trim());const val=Object.prototype.hasOwnProperty.call(assign,u)?assign[u]:(same.length===1?assign[legacy]:'');return val===lapName});
+  }
+  function planRows(ano,lapso){
+    const store=readJSON(PLAN_PREFIX+teacherKey(),{}),lapName=LAPSO_NAMES[String(lapso)]||'1er Lapso';
+    const item=Object.values(store).find(x=>x&&sameGrade(x.grado,ano)&&norm(x.lapso)===norm(lapName));
+    return Array.isArray(item?.rows)?item.rows:[];
+  }
+
+  function mapEvaluations(occs,rows,ano,seccion){
+    const map=new Map(),used=new Set();
+    const effective=occs.filter(o=>o.status!=='Sin clase');
+    rows.forEach((r,ri)=>{
+      const a=String(r.fechaDesde||''),b=String(r.fechaHasta||r.fechaDesde||'');if(!a&&!b)return;
+      let candidates=effective.filter(o=>(!a||o.date>=a)&&(!b||o.date<=b));
+      if(r.espacio)candidates=candidates.sort((x,y)=>(x.location===r.espacio?-1:0)-(y.location===r.espacio?-1:0));
+      let pick=candidates.find(o=>!used.has(o.id)&&(!r.espacio||o.location===r.espacio))||candidates.find(o=>!used.has(o.id))||candidates[0];
+      if(!pick)return;used.add(pick.id);const arr=map.get(pick.id)||[];arr.push({nombre:r.nombre||'Evaluación',puntos:Number(r.puntos)||0,espacio:r.espacio||pick.location,como:r.como||''});map.set(pick.id,arr);
+    });
+    // También incorpora evaluaciones antiguas guardadas por sección/fecha.
+    (Array.isArray(planesProfesor)?planesProfesor:[]).filter(p=>sameGrade(p.ano,ano)&&String(p.seccion||'').trim()===String(seccion||'').trim()).forEach(p=>{
+      const date=String(p.fecha||'').slice(0,10),occ=effective.find(o=>o.date===date);if(!occ)return;const arr=map.get(occ.id)||[];const name=String(p.actividad||p.nombre||'Evaluación');if(!arr.some(x=>norm(x.nombre)===norm(name)))arr.push({nombre:name,puntos:Number(p.puntos)||0,espacio:occ.location,como:''});map.set(occ.id,arr);
+    });
+    return map;
+  }
+
+  function plannedRows(key,lapso){
+    const {ano,seccion}=parseSectionKey(key),occs=occurrences(key,lapso),topics=assignedTopics(ano,lapso),evalRows=planRows(ano,lapso),evalMap=mapEvaluations(occs,evalRows,ano,seccion),effective=occs.filter(o=>o.status!=='Sin clase');
+    const ordinary=effective.filter(o=>!o.specialClass&&!/^superclase/i.test(String(o.tema||''))),topicFor=new Map();
+    ordinary.forEach((o,i)=>{if(!topics.length)return;const idx=Math.min(topics.length-1,Math.floor(i*topics.length/Math.max(1,ordinary.length)));topicFor.set(o.id,topics[idx]?.tema||'')});
+    return occs.filter(o=>o.status!=='Sin clase').map((o,i)=>{
+      const evals=evalMap.get(o.id)||[],fallbackTopic=topicFor.get(o.id)||'',activity=String(o.tema||'').trim()||fallbackTopic||(evals[0]?.nombre||'Clase de desarrollo y seguimiento');
+      const evalText=evals.length?evals.map(e=>`${e.nombre}${e.puntos?` (${e.puntos} pts)`:''}`).join(' · '):'—';
+      return {...o,n:i+1,day:dayName[o.dow]||'',activity,evals,evalText,points:evals.reduce((s,e)=>s+(Number(e.puntos)||0),0)};
+    });
+  }
+
+  function weeklySummary(key){
+    const st=weeklyState(),blocks=schedulesFor(key);return blocks.map((h,i)=>`${h.dia} ${h.horaInicio||''}–${h.horaFin||''} · ${st.locations?.[blockKey(h)]||baseLocation(h,i,st)}`).join('  |  ');
+  }
+  function specialDates(rows){return rows.filter(r=>r.location==='Gimnasio'||/^superclase/i.test(r.activity)).map(r=>`${fmtDate(r.date)} ${r.horaInicio||''}–${r.horaFin||''}`).join(' · ')}
+
+  function render(){
+    const sec=$(SECTION_ID),sel=$('cps-section');if(!sec||!sel)return;
+    currentSection=sel.value||currentSection;currentLapso=$('cps-lapso')?.value||currentLapso;
+    const range=rangeForLapso(currentLapso),rows=plannedRows(currentSection,currentLapso),{ano,seccion}=parseSectionKey(currentSection),blocks=schedulesFor(currentSection),first=rows[0]?.date||range.start,doc=window.profesorActual?.nombre||'Docente',mat=window.profesorActual?.materia||'Educación Física',turno=blocks[0]?.turno||'',inst=$('input-institucion')?.value||'U.E.N. “MIGUEL ÁNGEL LÓPEZ CÁRDENAS”';
+    const totalPts=rows.reduce((s,r)=>s+r.points,0),aula=rows.filter(r=>r.location==='Aula').length,cancha=rows.filter(r=>r.location==='Cancha').length,gym=rows.filter(r=>r.location==='Gimnasio').length,evalCount=rows.filter(r=>r.evals.length).length;
+    $('cps-count').textContent=String(rows.length);$('cps-aula').textContent=String(aula);$('cps-cancha').textContent=String(cancha);$('cps-gym').textContent=String(gym);$('cps-evals').textContent=String(evalCount);
+    const helper=$('cps-helper');if(helper)helper.textContent=rows.length?`Cronograma actualizado: ${rows.length} clases efectivas, ${evalCount} fechas evaluativas y ${totalPts} puntos vinculados.`:'No hay clases para esta sección en el lapso seleccionado.';
+    const host=$('cps-preview');if(!host)return;if(!rows.length){host.innerHTML='<div class="cps-empty"><i class="fa-solid fa-calendar-xmark"></i><p>No hay fechas de clase en este lapso para la sección seleccionada.</p></div>';return}
+    const weekly=weeklySummary(currentSection),gyms=specialDates(rows),body=rows.map(r=>`<tr class="${r.location==='Gimnasio'?'is-gym ':''}${r.evals.length?'is-eval':''}"><td class="c">${r.n}</td><td class="c">${esc(fmtDate(r.date))}</td><td class="c">${esc(r.day)}</td><td class="c">${esc(`${r.horaInicio||''}–${r.horaFin||''}`)}</td><td class="c cps-space cps-${norm(r.location)}">${esc(r.location)}</td><td>${esc(r.activity)}</td><td>${r.evals.length?`<span class="cps-eval">${esc(r.evalText)}</span>`:'—'}</td><td class="c"><b>${r.points||'—'}</b></td></tr>`).join('');
+    host.innerHTML=`<div class="cps-sheet" id="cps-sheet"><header class="cps-head"><div class="inst">${esc(inst)}</div><h1>CRONOGRAMA DE CLASES, ACTIVIDADES Y EVALUACIONES POR SECCIÓN</h1><h2>${esc(mat)} · ${esc(LAPSO_NAMES[currentLapso])}</h2></header><div class="cps-meta"><div><b>Docente:</b> ${esc(doc)}</div><div><b>Año:</b> ${esc(ano)}</div><div><b>Sección:</b> ${esc(seccion)}${turno?` · ${esc(turno)}`:''}</div><div><b>Inicio de clases:</b> ${esc(fmtDate(first))}</div><div><b>Período:</b> ${esc(fmtDate(range.start))} al ${esc(fmtDate(range.end))}</div><div><b>Clases:</b> ${rows.length}</div><div><b>Evaluaciones:</b> ${evalCount}</div><div><b>Puntos planificados:</b> ${totalPts||'—'}</div></div><div class="cps-schedule-line"><b>Días y horas de la sección:</b> ${esc(weekly||'Horario no disponible')}${gyms?`<br><b>Superclases en gimnasio:</b> ${esc(gyms)}`:''}</div><table class="cps-table"><colgroup><col style="width:3%"><col style="width:8.5%"><col style="width:7%"><col style="width:8%"><col style="width:7.5%"><col style="width:32%"><col style="width:29%"><col style="width:5%"></colgroup><thead><tr><th>N°</th><th>Fecha</th><th>Día</th><th>Hora</th><th>Espacio</th><th>Tema / actividad planificada</th><th>Evaluación</th><th>Pts</th></tr></thead><tbody>${body}</tbody></table><div class="cps-foot"><span><strong>Resumen:</strong> Aula ${aula} · Cancha ${cancha} · Gimnasio ${gym} · Evaluaciones ${evalCount}</span><span><strong>Total de puntos vinculados:</strong> ${totalPts||'—'}</span></div></div>`;
+  }
+
+  function printCss(){return `@page{size:letter landscape;margin:4.5mm}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif;color:#111}.cps-sheet{width:10.55in;height:7.75in;overflow:hidden;margin:0 auto;background:#fff;padding:.12in .16in;box-shadow:none}.cps-head{text-align:center;border-bottom:1.4px solid #111;padding-bottom:4px}.cps-head .inst{font-size:8px;font-weight:700}.cps-head h1{font-size:13px;margin:3px 0 1px}.cps-head h2{font-size:9px;margin:0}.cps-meta{display:grid;grid-template-columns:1.05fr .95fr 1fr 1fr;gap:2px 8px;margin:5px 0 4px;font-size:7px}.cps-meta div{border-bottom:1px solid #555;padding:1.5px 0}.cps-schedule-line{font-size:6.8px;border:1px solid #8d99a5;background:#f5f8fa;padding:3px 4px;margin:3px 0 4px}.cps-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:6.2px;line-height:1.08}.cps-table th,.cps-table td{border:1px solid #555;padding:1.7px 2px;vertical-align:middle;overflow-wrap:anywhere}.cps-table th{background:#e8eef3;text-align:center;font-size:6px}.cps-table .c{text-align:center}.cps-table tr.is-gym td{background:#f7ecff}.cps-space{font-weight:700}.cps-eval{font-weight:700}.cps-foot{display:flex;justify-content:space-between;margin-top:3px;font-size:6.3px}`}
+  function cloneSheet(){const sheet=$('cps-sheet');return sheet?sheet.cloneNode(true):null}
+  function printOne(){const clone=cloneSheet();if(!clone)return;const w=window.open('','_blank','width=1250,height=850');if(!w)return alert('El navegador bloqueó la ventana de impresión.');w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cronograma por sección</title><style>${printCss()}</style></head><body>${clone.outerHTML}<script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`);w.document.close();w.focus()}
+  async function downloadPdf(){const clone=cloneSheet();if(!clone)return;if(typeof html2pdf!=='function')return alert('No se pudo cargar el generador PDF. Usa Imprimir y selecciona Guardar como PDF.');const {ano,seccion}=parseSectionKey(currentSection),lap=LAPSO_NAMES[currentLapso].replace(/\s+/g,'_');const host=document.createElement('div');host.style.cssText='position:fixed;left:-20000px;top:0;background:white;';const st=document.createElement('style');st.textContent=printCss();host.appendChild(st);host.appendChild(clone);document.body.appendChild(host);try{await html2pdf().set({margin:[0.05,0.05,0.05,0.05],filename:`Cronograma_${String(ano).replace(/\s+/g,'_')}_Seccion_${String(seccion).replace(/\s+/g,'_')}_${lap}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#fff'},jsPDF:{unit:'in',format:'letter',orientation:'landscape'},pagebreak:{mode:['avoid-all']}}).from(clone).save()}finally{host.remove()}}
+
+  function syncSelectors(){
+    const items=sections(),sel=$('cps-section');if(!sel)return;if(!items.some(x=>x.key===currentSection))currentSection=items[0]?.key||'';sel.innerHTML=items.length?items.map(x=>`<option value="${esc(x.key)}">${esc(labelSection(x))}</option>`).join(''):'<option value="">Sin secciones en Mi Horario</option>';if(currentSection)sel.value=currentSection;const lap=$('cps-lapso');if(lap)lap.value=currentLapso;render();
+  }
+  function create(){
+    const nav=$('app-nav'),main=$('app-main');if(!nav||!main)return false;if($(TAB_ID))return true;style();
+    const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Cronograma por sección';tab.dataset.description='Imprime en una sola hoja el orden de clases, espacios, superclases, evaluaciones, puntos y horarios de cada sección.';tab.innerHTML='<i class="fa-solid fa-table-list"></i><span>Cronograma sección</span>';
+    const before=$('tab-actas');if(before)nav.insertBefore(tab,before);else nav.appendChild(tab);
+    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`<header class="cps-hero"><small><i class="fa-solid fa-table-list"></i> Formato docente de seguimiento</small><h2>Cronograma por sección</h2><p>Una sola hoja por sección con todas las fechas reales del lapso, día y hora del horario, Aula/Cancha/Gimnasio, actividades planificadas, las 3 superclases y las evaluaciones con sus puntos.</p></header><div class="cps-tools"><label><span>Año / sección</span><select id="cps-section"></select></label><label><span>Lapso</span><select id="cps-lapso"><option value="1">1er Lapso</option><option value="2">2do Lapso</option><option value="3">3er Lapso</option></select></label><button class="cps-btn primary" id="cps-refresh" type="button"><i class="fa-solid fa-arrows-rotate"></i> Actualizar</button><button class="cps-btn print" id="cps-print" type="button"><i class="fa-solid fa-print"></i> Imprimir 1 hoja</button><button class="cps-btn download" id="cps-download" type="button"><i class="fa-solid fa-file-arrow-down"></i> Descargar PDF</button></div><div class="cps-info"><article><span>Clases</span><strong id="cps-count">0</strong></article><article><span>Aula</span><strong id="cps-aula">0</strong></article><article><span>Cancha</span><strong id="cps-cancha">0</strong></article><article><span>Gimnasio</span><strong id="cps-gym">0</strong></article><article><span>Evaluaciones</span><strong id="cps-evals">0</strong></article></div><p id="cps-helper" style="margin:0 0 10px;color:#657b8f;font-size:.84rem">Selecciona una sección para generar el cronograma.</p><div class="cps-preview-shell" id="cps-preview"></div>`;main.appendChild(sec);
+    tab.addEventListener('click',()=>{if(typeof cambiarPestana==='function')cambiarPestana(tab,sec);else{document.querySelectorAll('#app-main>section').forEach(x=>x.classList.add('hidden'));sec.classList.remove('hidden')}syncSelectors()});
+    $('cps-section')?.addEventListener('change',e=>{currentSection=e.target.value;render()});$('cps-lapso')?.addEventListener('change',e=>{currentLapso=e.target.value;render()});$('cps-refresh')?.addEventListener('click',()=>{syncSelectors();if(typeof mostrarToast==='function')mostrarToast('Cronograma actualizado con el horario, la planificación y el plan de evaluación.','success','Cronograma por sección')});$('cps-print')?.addEventListener('click',printOne);$('cps-download')?.addEventListener('click',downloadPdf);
+    syncSelectors();return true;
+  }
+  function init(){if(create())return;let n=0;const tm=setInterval(()=>{n++;if(create()||n>40)clearInterval(tm)},250)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(syncSelectors,80));
+})();
+/* EDUGESTION_CRONOGRAMA_SECCION_V32_END */
