@@ -14985,3 +14985,130 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(syncControls,50));
 })();
 /* EDUGESTION_WEEKLY_PLANNING_V2_END */
+
+/* ================================================================
+   EduGestión · Formato oficial para Control de Estudio · V1
+   Vista previa carta horizontal · 2 hojas · autollenado desde planificación
+   ================================================================ */
+(() => {
+  const TAB_ID='tab-formato-control-estudio';
+  const SECTION_ID='section-formato-control-estudio';
+  const STYLE_ID='style-formato-control-estudio';
+  const ASSIGN_KEY='edugestion_cuadernillo_ef_lapsos_v1';
+  const CUSTOM_KEY_PREFIX='edugestion_formato_control_v1_';
+  const LAPSOS={'1':'1er Lapso','2':'2do Lapso','3':'3er Lapso'};
+  const MOMENTOS={'1':'1er Momento','2':'2do Momento','3':'3er Momento'};
+  const dayIndex={domingo:0,lunes:1,martes:2,miercoles:3,miércoles:3,jueves:4,viernes:5,sabado:6,sábado:6};
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9áéíóúñü\s]/g,' ').replace(/\s+/g,' ').trim();
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))||f}catch(_){return f}};
+  const writeJSON=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const topicKey=(grado,tema)=>`${String(grado||'').trim().replace(/\s+/g,' ')}|||${String(tema||'').trim().replace(/\s+/g,' ')}`;
+  let currentSection='';
+  let currentLapso='1';
+
+  function teacherId(){return String(profesorActual?.id||profesorActual?.usuario||'docente')}
+  function weeklyKey(){return `edugestion_weekly_planning_v1_${teacherId()}`}
+  function formatKey(){return `${CUSTOM_KEY_PREFIX}${teacherId()}`}
+  function weeklyState(){return readJSON(weeklyKey(),{start:'2026-09-16',end:'2027-07-31',locations:{},overrides:{},manual:[],lapsos:{'1':{},'2':{},'3':{}}})}
+  function formatState(){return readJSON(formatKey(),{institution:{republic:'REPÚBLICA BOLIVARIANA DE VENEZUELA',school:'U.E.N. “MIGUEL ÁNGEL LÓPEZ CÁRDENAS”',dea:'CÓDIGO DEA: S1576D0105',address:'URB. RAÚL LEONI – CASALTA III – ENTRE BLO. 5 Y 6',circuit:'CIRCUITO ESCOLAR – PARROQUIA SUCRE – CARACAS'},edits:{}})}
+  function saveFormatState(s){writeJSON(formatKey(),s)}
+  function isoLocal(date){const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,'0'),d=String(date.getDate()).padStart(2,'0');return `${y}-${m}-${d}`}
+  function fromISO(v){const p=String(v||'').split('-').map(Number);return p.length===3&&!p.some(Number.isNaN)?new Date(p[0],p[1]-1,p[2],12):null}
+  function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+  function normalizeDay(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()}
+  function blockKey(h){return [h.dia,h.horaInicio,h.horaFin,h.ano,h.seccion,h.turno].map(x=>String(x||'')).join('|')}
+  function sectionKey(ano,seccion){return `${ano}|||${seccion}`}
+  function parseSectionKey(key){const [ano,seccion]=String(key||'').split('|||');return {ano:ano||'',seccion:seccion||''}}
+  function normalizeAcademicKey(v){const raw=String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();const compact=raw.replace(/[º°ª.]/g,'').replace(/\s+/g,'');const num=compact.match(/\d+/)?.[0];return num?`n:${Number(num)}`:`t:${compact.replace(/[^a-z0-9]/g,'')}`}
+
+  function styles(){
+    if(document.getElementById(STYLE_ID))return;
+    const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      #${SECTION_ID}{padding-bottom:38px}.fce-hero{border-radius:24px;padding:24px 28px;background:linear-gradient(135deg,#26356e,#157a8a);color:#fff;margin-bottom:18px}.fce-hero small{font-weight:900;letter-spacing:.08em;text-transform:uppercase}.fce-hero h2{margin:6px 0 6px;font-size:1.8rem}.fce-hero p{margin:0;max-width:950px;line-height:1.55;opacity:.94}
+      .fce-toolbar{background:var(--card-bg,#fff);border:1px solid var(--border-color,#d8e3ec);border-radius:18px;padding:15px;margin-bottom:18px;display:grid;grid-template-columns:1.25fr .9fr .9fr auto auto;gap:10px;align-items:end}.fce-toolbar label span{display:block;font-size:.73rem;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:#62778b;margin-bottom:5px}.fce-toolbar select,.fce-toolbar input{width:100%;min-height:44px;border:1px solid #cad8e5;border-radius:11px;padding:9px 11px;background:var(--card-bg,#fff);color:var(--text-color,#24384c);font:inherit;font-weight:750}.fce-btn{min-height:44px;border:0;border-radius:11px;padding:10px 13px;font-weight:900;cursor:pointer;white-space:nowrap}.fce-btn.primary{background:#176f9f;color:#fff}.fce-btn.print{background:#183d66;color:#fff}.fce-helper{grid-column:1/-1;border-radius:11px;background:#eff8f3;color:#246a50;padding:10px 12px;font-size:.82rem;line-height:1.45}.fce-helper b{font-weight:900}
+      .fce-pages{display:flex;flex-direction:column;gap:24px;align-items:center}.fce-page-wrap{width:100%;overflow:auto;padding:6px 2px 14px}.fce-page{width:10.3in;min-height:7.55in;margin:0 auto;background:#fff;color:#111;border:1px solid #b9c3cc;box-shadow:0 14px 38px rgba(25,46,67,.14);padding:.22in .25in .2in;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}.fce-headline{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:10px;align-items:start;margin-bottom:5px}.fce-brand{font-size:8.2px;line-height:1.3;font-weight:700}.fce-brand.center{text-align:center;font-size:9px}.fce-brand.right{text-align:right}.fce-title{text-align:center;text-decoration:underline;font-size:12px;font-weight:800;margin:3px 0 8px}.fce-meta{display:grid;grid-template-columns:1fr .7fr 1.1fr 1.45fr 1.05fr;gap:7px;align-items:end;margin-bottom:7px;font-size:8.7px}.fce-meta-item{display:grid;grid-template-columns:auto 1fr;gap:4px;align-items:end;white-space:nowrap}.fce-meta-item b{font-size:8.5px}.fce-line{border-bottom:1px solid #111;min-height:16px;padding:0 3px;font-size:8.7px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.fce-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7.7px}.fce-table th,.fce-table td{border:1px solid #111;vertical-align:top;padding:4px;overflow-wrap:anywhere}.fce-table th{text-align:center;font-weight:800;font-size:8.2px;line-height:1.2;height:34px;vertical-align:middle}.fce-table td{height:1.42in;line-height:1.28}.fce-table th:nth-child(1),.fce-table td:nth-child(1){width:13%}.fce-table th:nth-child(2),.fce-table td:nth-child(2){width:14%}.fce-table th:nth-child(3),.fce-table td:nth-child(3){width:16%}.fce-table th:nth-child(4),.fce-table td:nth-child(4){width:15%}.fce-table th:nth-child(5),.fce-table td:nth-child(5){width:17%}.fce-table th:nth-child(6),.fce-table td:nth-child(6){width:14%}.fce-table th:nth-child(7),.fce-table td:nth-child(7){width:11%}.fce-cell-edit{min-height:100%;outline:none}.fce-cell-edit:focus{background:#fffbe8;box-shadow:inset 0 0 0 2px #e6b83f}.fce-emphasis{display:flex;flex-direction:column;gap:3px;font-size:6.8px;line-height:1.18}.fce-emphasis label{display:flex;gap:3px;align-items:flex-start}.fce-emphasis input{width:9px;height:9px;margin:1px 0 0;accent-color:#111;flex:0 0 auto}.fce-footer{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:6.9px;color:#333}.fce-page-no{font-weight:700}.fce-empty-row{color:#888;text-align:center;font-style:italic;padding-top:20px!important}
+      .edugestion-dark .fce-page{color:#111;background:#fff}.edugestion-dark .fce-toolbar select,.edugestion-dark .fce-toolbar input{background:#17283a;color:#e8f1f8;border-color:#3d5368}
+      @media(max-width:1100px){.fce-toolbar{grid-template-columns:1fr 1fr}.fce-btn{width:100%}.fce-helper{grid-column:1/-1}.fce-page{transform-origin:top left}}
+      @media(max-width:650px){.fce-toolbar{grid-template-columns:1fr}.fce-page-wrap{padding-bottom:2px}.fce-page{width:10.3in}}
+      @media print{
+        body *{visibility:hidden!important}#${SECTION_ID},#${SECTION_ID} .fce-pages,#${SECTION_ID} .fce-pages *{visibility:visible!important}#${SECTION_ID}{position:absolute!important;left:0;top:0;width:100%;padding:0!important;margin:0!important;background:#fff!important}.fce-hero,.fce-toolbar{display:none!important}.fce-pages{display:block!important}.fce-page-wrap{overflow:visible!important;padding:0!important;margin:0!important}.fce-page{box-shadow:none!important;border:0!important;width:10.3in!important;min-height:7.55in!important;margin:0!important;page-break-after:always!important;break-after:page!important}.fce-page-wrap:last-child .fce-page{page-break-after:auto!important;break-after:auto!important}.fce-cell-edit:focus{background:transparent!important;box-shadow:none!important}@page{size:letter landscape;margin:.18in}
+      }
+    `;document.head.appendChild(st);
+  }
+
+  function sections(){
+    const map=new Map();(Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{const k=sectionKey(h.ano,h.seccion);if(!map.has(k))map.set(k,{key:k,ano:String(h.ano||''),seccion:String(h.seccion||''),turno:String(h.turno||'')})});
+    return [...map.values()].sort((a,b)=>`${a.ano}${a.seccion}`.localeCompare(`${b.ano}${b.seccion}`,'es',{numeric:true}));
+  }
+  function labelSection(x){return `${x.ano} · Sección ${x.seccion}${x.turno?` · ${x.turno==='Manana'?'Mañana':x.turno}`:''}`}
+  function curriculumGradeKey(ano){const data=window.EDUGESTION_CEF_DATA||{},candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));if(candidates.length<=1)return candidates[0]||'';const raw=String(ano||'').toLowerCase();const yr=candidates.find(g=>/año/i.test(g));if(/año|ano|media|1ero|2do|3ro|4to|5to/.test(raw)&&yr)return yr;return candidates[0]||''}
+  function topicsFor(ano,lapso){const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];const a=readJSON(ASSIGN_KEY,{}),name=LAPSOS[String(lapso)];return data[grade].map(x=>({...x,grado:grade,lapso:a[topicKey(grade,x.tema)]||''})).filter(x=>x.lapso===name)}
+  function schoolYearText(){const s=weeklyState(),a=fromISO(s.start),b=fromISO(s.end);return a&&b?`${a.getFullYear()} - ${b.getFullYear()}`:'2026 - 2027'}
+  function lapsoRange(lapso){const s=weeklyState(),cfg=s.lapsos?.[String(lapso)]||{};return {start:cfg.start||'',end:cfg.end||''}}
+  function sectionSchedules(secKey){const {ano,seccion}=parseSectionKey(secKey);return (Array.isArray(horariosProfesor)?horariosProfesor:[]).filter(h=>String(h.ano)===ano&&String(h.seccion)===seccion)}
+  function buildOccurrences(secKey){
+    const state=weeklyState(),{ano,seccion}=parseSectionKey(secKey),start=fromISO(state.start),end=fromISO(state.end);if(!ano||!seccion||!start||!end)return[];
+    const schedules=sectionSchedules(secKey),out=[];for(let d=new Date(start);d<=end;d=addDays(d,1)){const date=isoLocal(d),dow=d.getDay();schedules.filter(h=>(dayIndex[normalizeDay(h.dia)]??-1)===dow).forEach((h,i)=>{const id=`auto|${ano}|${seccion}|${date}|${h.horaInicio||''}|${h.horaFin||''}`,over=state.overrides?.[id]||{},location=over.location||state.locations?.[blockKey(h)]||(i%2===0?'Aula':'Cancha');out.push({id,date,ano,seccion,horaInicio:h.horaInicio||'',horaFin:h.horaFin||'',location,status:over.status||'Clase',...over})})}
+    (Array.isArray(state.manual)?state.manual:[]).filter(x=>String(x.ano)===ano&&String(x.seccion)===seccion).forEach(x=>{const over=state.overrides?.[x.id]||{};out.push({status:'Clase',location:'Aula',...x,...over,manual:true})});
+    return out.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.horaInicio).localeCompare(String(b.horaInicio)));
+  }
+  function plannedOccurrences(secKey,lapso){const range=lapsoRange(lapso);return buildOccurrences(secKey).filter(x=>x.status!=='Sin clase'&&(!range.start||x.date>=range.start)&&(!range.end||x.date<=range.end)&&(x.tema||x.objetivo||x.estrategias||x.inicio||x.desarrollo||x.cierre||x.evaluacion))}
+  function tokens(v){return new Set(norm(v).split(' ').filter(x=>x.length>=4&&!['para','como','desde','entre','sobre','hacia','segun','física','fisica'].includes(x)))}
+  function scoreTopic(topic,occ){const a=tokens(`${topic.tema||''} ${topic.tejido||''} ${topic.referentes||''}`),b=tokens(`${occ.tema||''} ${occ.objetivo||''} ${occ.estrategias||''}`);let n=0;b.forEach(x=>{if(a.has(x))n++});return n}
+  function matchPlans(topic,plans){const ranked=plans.map(p=>({p,s:scoreTopic(topic,p)})).sort((a,b)=>b.s-a.s);const max=ranked[0]?.s||0;return max?ranked.filter(x=>x.s>=Math.max(1,max-1)).slice(0,3).map(x=>x.p):[]}
+  function uniqueJoin(arr,max=520){const clean=[...new Set(arr.map(x=>String(x||'').trim()).filter(Boolean))];let out='';for(const x of clean){const part=out?` · ${x}`:x;if((out+part).length>max)break;out+=part}return out}
+  function emphasisAuto(text){const t=norm(text),set=new Set(['ef']);if(/medida|antropometr|frecuencia|calculo|numero|estadistic/.test(t))set.add('mat');if(/oral|escrit|lectur|dialog|cuestionario|reflex/.test(t))set.add('oral');if(/lengua|señas|senas|cultura|idioma|tradicion/.test(t))set.add('cult');if(/historia|patria|ciudadan|venezuela|territor/.test(t))set.add('geo');if(/tecnolog|ciencia|innovacion|fisiolog|anatom/.test(t))set.add('cyt');if(/ambiente|ambiental|sostenible|naturaleza|espacio natural/.test(t))set.add('amb');return set}
+  function rowId(topic,index){return `${String(topic?.tema||`fila-${index}`).trim().replace(/\s+/g,' ')}|p:${String(topic?.pagina||'')}|i:${index}|${String(topic?.tejido||'').slice(0,42)}`.slice(0,190)}
+  function customFor(rowIdValue){const fs=formatState();return fs.edits?.[`${currentSection}|||${currentLapso}|||${rowIdValue}`]||{}}
+  function saveCell(rowIdValue,field,value){const fs=formatState();fs.edits=fs.edits||{};const k=`${currentSection}|||${currentLapso}|||${rowIdValue}`;fs.edits[k]={...(fs.edits[k]||{}),[field]:value};saveFormatState(fs)}
+  function buildRows(){
+    const {ano}=parseSectionKey(currentSection),topics=topicsFor(ano,currentLapso),plans=plannedOccurrences(currentSection,currentLapso);
+    let base=topics.length?topics:plans.map((p,i)=>({tema:p.tema||`Planificación ${i+1}`,temaIndispensable:'',tejido:'',referentes:'',_plan:p}));
+    return base.map((topic,index)=>{
+      const matched=topic._plan?[topic._plan]:matchPlans(topic,plans),custom=customFor(rowId(topic,index));
+      const objectives=uniqueJoin(matched.map(x=>x.objetivo),420),activities=uniqueJoin(matched.flatMap(x=>[x.estrategias,x.inicio,x.desarrollo,x.cierre]),650),evals=uniqueJoin(matched.map(x=>x.evaluacion),300);
+      const theoretical=topic.referentes||topic.tejido||topic.descripcion||'';
+      const generated=topic.tema||matched[0]?.tema||'';
+      const indispensable=topic.temaIndispensable||generated;
+      const potential=objectives||topic.intencionalidad||'';
+      const intentions=uniqueJoin([topic.intencionalidad,objectives,evals],430);
+      const emph=emphasisAuto(`${generated} ${theoretical} ${activities} ${intentions}`);
+      return {id:rowId(topic,index),temaIndispensable:custom.temaIndispensable??indispensable,temaGenerador:custom.temaGenerador??generated,referente:custom.referente??theoretical,potencialidades:custom.potencialidades??potential,actividades:custom.actividades??activities,intencionalidades:custom.intencionalidades??intentions,emphasis:custom.emphasis?new Set(custom.emphasis):emph};
+    });
+  }
+
+  function emphasisHtml(row){const opts=[['mat','Matemática para la vida'],['oral','Oralidad, escritura y lectura'],['ef','Educación física para la vida'],['cult','Culturas e idiomas para una ciudadanía mundial multicéntrica y pluripolar'],['geo','Geografía, historia, patria y ciudadanía'],['cyt','Ciencia, tecnología, innovación para productividad'],['amb','Educación ambiental para el desarrollo sostenible y sustentable, la preservación de la vida del planeta y la especie humana']];return `<div class="fce-emphasis">${opts.map(([k,label])=>`<label><input type="checkbox" data-emph="${k}" ${row.emphasis.has(k)?'checked':''}><span>${esc(label)}</span></label>`).join('')}</div>`}
+  function cell(row,field){return `<div class="fce-cell-edit" contenteditable="true" spellcheck="true" data-edit="${field}">${esc(row[field]||'')}</div>`}
+  function tableRows(rows){if(!rows.length)return `<tr><td class="fce-empty-row" colspan="7">No hay temas asignados o planificaciones disponibles para este momento.</td></tr>`;return rows.map(r=>`<tr data-row-id="${esc(r.id)}"><td>${cell(r,'temaIndispensable')}</td><td>${cell(r,'temaGenerador')}</td><td>${cell(r,'referente')}</td><td>${cell(r,'potencialidades')}</td><td>${cell(r,'actividades')}</td><td>${emphasisHtml(r)}</td><td>${cell(r,'intencionalidades')}</td></tr>`).join('')}
+  function pageHtml(rows,pageNo,totalPages){
+    const fs=formatState(),inst=fs.institution||{},sec=sections().find(x=>x.key===currentSection)||{ano:'',seccion:'',turno:''};
+    const area=profesorActual?.materia||'Educación Física',teacher=profesorActual?.nombre||'',year=document.getElementById('fce-school-year')?.value||schoolYearText();
+    return `<div class="fce-page-wrap"><article class="fce-page" data-page="${pageNo}">
+      <div class="fce-headline"><div class="fce-brand"><div>${esc(inst.republic||'')}</div><div>${esc(inst.school||'')}</div><div>${esc(inst.dea||'')}</div><div>${esc(inst.address||'')}</div><div>${esc(inst.circuit||'')}</div></div><div class="fce-brand center"><div>Gobierno Bolivariano de Venezuela</div><div>Ministerio del Poder Popular</div><div>para la Educación</div><div>Zona Educativa Distrito Capital</div></div><div class="fce-brand right"><div>${esc(inst.school||'')}</div><div>Jurisdicción Educativa</div><div>${esc(year)}</div></div></div>
+      <div class="fce-title">PLANIFICACIÓN EDUCACIÓN MEDIA:</div>
+      <div class="fce-meta"><div class="fce-meta-item"><b>Año Escolar:</b><span class="fce-line" data-meta-edit="year">${esc(year)}</span></div><div class="fce-meta-item"><b>Momento:</b><span class="fce-line">${esc(MOMENTOS[currentLapso]||currentLapso)}</span></div><div class="fce-meta-item"><b>Año y Sección:</b><span class="fce-line">${esc(`${sec.ano} ${sec.seccion}`)}</span></div><div class="fce-meta-item"><b>AREA:</b><span class="fce-line">${esc(area)}</span></div><div class="fce-meta-item"><b>Docente:</b><span class="fce-line">${esc(teacher)}</span></div></div>
+      <table class="fce-table"><thead><tr><th>Tema<br>Indispensable</th><th>Tema Generador</th><th>Referente Teórico<br>Práctico</th><th>Potencialidades</th><th>Actividades</th><th>Énfasis curricular</th><th>Intencionalidades<br>Pedagógicas</th></tr></thead><tbody>${tableRows(rows)}</tbody></table>
+      <div class="fce-footer"><span>Dirección: Urbanización Raúl Leoni, avenida principal entre los bloques N° 5 y N° 6, Casalta III.</span><span class="fce-page-no">Hoja ${pageNo} de ${totalPages}</span></div>
+    </article></div>`;
+  }
+  function renderPreview(){
+    const box=document.getElementById('fce-pages');if(!box)return;const rows=buildRows(),mid=Math.ceil(rows.length/2),pages=[rows.slice(0,mid),rows.slice(mid)];box.innerHTML=pageHtml(pages[0],1,2)+pageHtml(pages[1],2,2);bindPreviewEdits();
+    const helper=document.getElementById('fce-helper');if(helper){const planned=plannedOccurrences(currentSection,currentLapso).length,topics=topicsFor(parseSectionKey(currentSection).ano,currentLapso).length;helper.innerHTML=`<b>Vista previa lista:</b> ${topics} tema${topics===1?'':'s'} curricular${topics===1?'':'es'} y ${planned} clase${planned===1?'':'s'} planificada${planned===1?'':'s'} encontradas. Puedes corregir cualquier celda directamente antes de imprimir. La impresión saldrá en <b>2 hojas carta horizontales</b>.`}
+  }
+  function bindPreviewEdits(){document.querySelectorAll('#fce-pages tr[data-row-id]').forEach(tr=>{const rid=tr.dataset.rowId;tr.querySelectorAll('[data-edit]').forEach(el=>el.addEventListener('input',()=>saveCell(rid,el.dataset.edit,el.innerText.trim())));tr.querySelectorAll('[data-emph]').forEach(ch=>ch.addEventListener('change',()=>{const values=[...tr.querySelectorAll('[data-emph]:checked')].map(x=>x.dataset.emph);saveCell(rid,'emphasis',values)}))})}
+
+  function create(){
+    if(document.getElementById(SECTION_ID))return true;const nav=document.getElementById('app-nav')||document.querySelector('.app-sidebar nav'),main=document.getElementById('app-main')||document.querySelector('main');if(!nav||!main)return false;styles();
+    const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Formato Control de Estudio';tab.dataset.description='Vista previa e impresión automática de la planificación en el formato institucional.';tab.innerHTML='<i class="fa-solid fa-file-lines"></i><span>Formato Control</span>';
+    const ref=document.getElementById('tab-plan-semanal')||document.getElementById('tab-planificacion');if(ref?.nextSibling)nav.insertBefore(tab,ref.nextSibling);else nav.appendChild(tab);
+    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`<header class="fce-hero"><small><i class="fa-solid fa-file-signature"></i> Formato institucional</small><h2>Planificación para Control de Estudio</h2><p>EduGestión toma los temas del Panel por lapso y las clases de Planificación semanal, llena automáticamente el cuadro institucional y lo divide en dos hojas tamaño carta para que puedas revisar, corregir e imprimir.</p></header><div class="fce-toolbar"><label><span>Año y sección</span><select id="fce-section"></select></label><label><span>Momento / lapso</span><select id="fce-lapso"><option value="1">1er Momento</option><option value="2">2do Momento</option><option value="3">3er Momento</option></select></label><label><span>Año escolar</span><input id="fce-school-year" type="text" value="${esc(schoolYearText())}"></label><button class="fce-btn primary" id="fce-refresh" type="button"><i class="fa-solid fa-arrows-rotate"></i> Actualizar vista previa</button><button class="fce-btn print" id="fce-print" type="button"><i class="fa-solid fa-print"></i> Imprimir 2 hojas</button><div class="fce-helper" id="fce-helper">Selecciona año/sección y momento. La vista previa se llenará con la planificación guardada.</div></div><div class="fce-pages" id="fce-pages"></div>`;main.appendChild(sec);
+    tab.addEventListener('click',()=>open(tab,sec));sec.querySelector('#fce-section')?.addEventListener('change',e=>{currentSection=e.target.value;renderPreview()});sec.querySelector('#fce-lapso')?.addEventListener('change',e=>{currentLapso=e.target.value;renderPreview()});sec.querySelector('#fce-school-year')?.addEventListener('input',renderPreview);sec.querySelector('#fce-refresh')?.addEventListener('click',()=>{syncSelectors();renderPreview();if(typeof mostrarToast==='function')mostrarToast('Vista previa actualizada con la planificación más reciente.','success','Formato Control de Estudio')});sec.querySelector('#fce-print')?.addEventListener('click',()=>window.print());syncSelectors();renderPreview();return true;
+  }
+  function syncSelectors(){const items=sections(),sel=document.getElementById('fce-section');if(!items.some(x=>x.key===currentSection))currentSection=items[0]?.key||'';if(sel){sel.innerHTML=items.length?items.map(x=>`<option value="${esc(x.key)}">${esc(labelSection(x))}</option>`).join(''):'<option value="">No hay secciones en Mi Horario</option>';sel.value=currentSection}const lap=document.getElementById('fce-lapso');if(lap)lap.value=currentLapso;const yr=document.getElementById('fce-school-year');if(yr&&!yr.value)yr.value=schoolYearText()}
+  function open(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;syncSelectors();renderPreview();window.scrollTo({top:0,behavior:'smooth'})}
+  function init(){try{return create()}catch(e){console.warn('EduGestión Formato Control de Estudio:',e);return false}}
+  if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>40)clearInterval(tm)},250)}
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{syncSelectors();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))renderPreview()},100));
+})();
+/* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V1_END */
