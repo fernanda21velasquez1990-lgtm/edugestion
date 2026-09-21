@@ -14654,6 +14654,98 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function ensureLocationDefaults(state,key=selectedSection) {
     schedulesFor(key).forEach((h,i)=>{ const k=blockKey(h); if(!state.locations[k]) state.locations[k]=i%2===0?'Aula':'Cancha'; });
   }
+
+  const GYM_SUPERCLASSES=[
+    {
+      id:'acondicionamiento', weekStart:'2026-10-05', weekEnd:'2026-10-11',
+      tema:'Superclase de acondicionamiento físico general',
+      objetivo:'Desarrollar de forma progresiva la resistencia, la fuerza básica, la movilidad, la coordinación y el control corporal, aplicando hábitos de seguridad, hidratación y autorregulación del esfuerzo.',
+      estrategias:'Circuito por estaciones, demostración guiada, trabajo por intervalos, control de intensidad, pausas de hidratación y retroalimentación entre pares.',
+      inicio:'Recepción y explicación de normas de seguridad. Movilidad articular general, activación cardiovascular progresiva y ejercicios dinámicos de coordinación. Verificación breve de hidratación y percepción inicial del esfuerzo.',
+      desarrollo:'Circuito de acondicionamiento físico general por estaciones: desplazamientos y coordinación, resistencia aeróbica moderada, fuerza básica con el propio peso corporal y ejercicios de estabilidad. Se alternan tiempos de trabajo y recuperación, cuidando postura, respiración y ejecución técnica.',
+      cierre:'Vuelta a la calma con caminata suave, respiración controlada y estiramientos generales. Conversatorio breve sobre sensaciones corporales, intensidad del esfuerzo, hidratación y hábitos para una práctica física segura.',
+      evaluacion:'Evaluación formativa mediante escala de estimación: participación activa, ejecución técnica, control del esfuerzo, cumplimiento de normas de seguridad, hidratación y actitud cooperativa.'
+    },
+    {
+      id:'pelotas', weekStart:'2026-10-12', weekEnd:'2026-10-18',
+      tema:'Superclase de acondicionamiento físico con pelotas',
+      objetivo:'Fortalecer la coordinación óculo-manual y óculo-podal, los desplazamientos, la agilidad, el equilibrio y la resistencia mediante ejercicios variados con pelotas.',
+      estrategias:'Demostración guiada, estaciones con pelotas, retos progresivos individuales y por parejas, circuitos motrices y trabajo cooperativo.',
+      inicio:'Activación dinámica con desplazamientos, movilidad articular y familiarización con la pelota mediante pases, rebotes, conducción y cambios de dirección a baja intensidad.',
+      desarrollo:'Circuito con pelotas: conducción en zigzag, pases y recepciones, lanzamientos a objetivos, desplazamientos con cambios de ritmo, coordinación mano-ojo y pie-ojo, y retos cooperativos por parejas o pequeños grupos. Se aumenta progresivamente la dificultad respetando el nivel del grupo.',
+      cierre:'Vuelta a la calma, respiración guiada y estiramientos suaves. Reflexión breve sobre coordinación, precisión, cooperación y control corporal durante las actividades con pelotas.',
+      evaluacion:'Evaluación formativa mediante observación directa y lista de cotejo: coordinación, precisión, control del implemento, desplazamiento seguro, participación y trabajo cooperativo.'
+    },
+    {
+      id:'ligas', weekStart:'2026-10-19', weekEnd:'2026-10-25',
+      tema:'Superclase de acondicionamiento físico con ligas',
+      objetivo:'Desarrollar fuerza-resistencia, estabilidad, control postural y coordinación mediante ejercicios seguros y progresivos con ligas elásticas.',
+      estrategias:'Demostración técnica, trabajo por estaciones, series cortas con pausas, progresión de resistencia, autocontrol postural y acompañamiento entre pares.',
+      inicio:'Movilidad articular, activación general y explicación del uso seguro de las ligas: agarre, distancia, tensión adecuada y postura. Ensayo de movimientos básicos sin máxima resistencia.',
+      desarrollo:'Circuito con ligas elásticas para tren superior, tren inferior y zona media: tracciones, empujes, abducciones, sentadillas asistidas, desplazamientos laterales y ejercicios de estabilidad. Se controlan postura, respiración, tensión y rango de movimiento, con pausas programadas.',
+      cierre:'Liberación progresiva de tensión, movilidad suave, respiración y estiramientos. Autoevaluación breve del esfuerzo y recordatorio de medidas de seguridad para el trabajo con resistencia elástica.',
+      evaluacion:'Evaluación formativa mediante escala de estimación: ejecución técnica, postura, control de la resistencia, seguridad, constancia, autorregulación del esfuerzo y participación responsable.'
+    }
+  ];
+
+  function gymSuperclassFor(dateISO,ano) {
+    if(normalizeAcademicKey(ano)!=='n:1') return null;
+    return GYM_SUPERCLASSES.find(x=>dateISO>=x.weekStart&&dateISO<=x.weekEnd)||null;
+  }
+
+  function firstYearSectionKeys() {
+    const map=new Map();
+    (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{
+      if(normalizeAcademicKey(h.ano)!=='n:1')return;
+      const key=sectionKey(h.ano,h.seccion);
+      if(!map.has(key))map.set(key,key);
+    });
+    return [...map.values()];
+  }
+
+  function ensureGymSuperclasses(state) {
+    if(state.gymSuperclassesV1) return false;
+    const keys=firstYearSectionKeys();
+    if(!keys.length) return false;
+    let created=0;
+    keys.forEach(key=>{
+      const {ano,seccion}=parseSectionKey(key), blocks=schedulesFor(key);
+      if(!blocks.length)return;
+      // Se prioriza el bloque práctico (Cancha/Gimnasio). Si cae en asueto, se usa otro bloque real de esa misma semana.
+      const preferred=blocks.find(h=>state.locations[blockKey(h)]==='Cancha'||state.locations[blockKey(h)]==='Gimnasio') || blocks[Math.min(1,blocks.length-1)];
+      const ordered=[preferred,...blocks.filter(h=>h!==preferred)];
+      GYM_SUPERCLASSES.forEach(spec=>{
+        const start=fromISO(spec.weekStart);
+        if(!start)return;
+        let chosen=null, date='';
+        for(const block of ordered){
+          const dow=dayIndex[normalizeDay(block.dia)];
+          if(dow==null)continue;
+          const delta=(dow-start.getDay()+7)%7, d=addDays(start,delta), candidate=isoLocal(d);
+          if(candidate>spec.weekEnd||isSchoolNoClass(candidate))continue;
+          chosen=block; date=candidate; break;
+        }
+        if(!chosen||!date)return;
+        const id=`auto|${ano}|${seccion}|${date}|${chosen.horaInicio||''}|${chosen.horaFin||''}`;
+        const current=state.overrides[id]||{};
+        state.overrides[id]={
+          ...current,
+          location:'Gimnasio',
+          tema:String(current.tema||'').trim()?current.tema:spec.tema,
+          objetivo:String(current.objetivo||'').trim()?current.objetivo:spec.objetivo,
+          estrategias:String(current.estrategias||'').trim()?current.estrategias:spec.estrategias,
+          inicio:String(current.inicio||'').trim()?current.inicio:spec.inicio,
+          desarrollo:String(current.desarrollo||'').trim()?current.desarrollo:spec.desarrollo,
+          cierre:String(current.cierre||'').trim()?current.cierre:spec.cierre,
+          evaluacion:String(current.evaluacion||'').trim()?current.evaluacion:spec.evaluacion,
+          specialClass:`gym-${spec.id}`
+        };
+        created++;
+      });
+    });
+    if(created){ state.gymSuperclassesV1=true; return true; }
+    return false;
+  }
   function normalizeAcademicKey(value) {
     const raw=String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
     const compact=raw.replace(/[º°ª.]/g,'').replace(/\s+/g,'');
@@ -14787,6 +14879,8 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
       if(items.some(x=>x.key===wanted)) sel.value=wanted;
     });
     if($('weekly-section-select')) $('weekly-section-select').value=selectedSection;
+    ensureLocationDefaults(state,selectedSection);
+    if(ensureGymSuperclasses(state)) saveState(state);
     renderScheduleMap(); renderAll(false);
   }
 
@@ -14795,10 +14889,10 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     const state=loadState(); ensureLocationDefaults(state); saveState(state);
     const blocks=schedulesFor();
     if(!blocks.length){ box.innerHTML='<div class="weekly-empty-inline"><i class="fa-solid fa-clock"></i> Esta sección todavía no tiene bloques en Mi Horario.</div>'; return; }
-    const warning=blocks.length===2?'':`<p class="weekly-schedule-warning"><i class="fa-solid fa-triangle-exclamation"></i> Hay ${blocks.length} bloques semanales para esta sección. Puedes asignar Aula/Cancha individualmente.</p>`;
+    const warning=blocks.length===2?'':`<p class="weekly-schedule-warning"><i class="fa-solid fa-triangle-exclamation"></i> Hay ${blocks.length} bloques semanales para esta sección. Puedes asignar Aula, Cancha o Gimnasio individualmente.</p>`;
     box.innerHTML=`<div class="weekly-schedule-title"><strong>Distribución semanal del espacio</strong><small>La plataforma detectó ${blocks.length} ${blocks.length===1?'clase':'clases'} por semana en tu horario.</small></div>${warning}<div class="weekly-schedule-items">${blocks.map((h,i)=>{
       const k=blockKey(h), loc=state.locations[k]||'Aula';
-      return `<label class="weekly-schedule-item"><span><b>${esc(h.dia)}</b><small>${esc(h.horaInicio)}–${esc(h.horaFin)}</small></span><select data-weekly-block="${esc(k)}"><option value="Aula" ${loc==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${loc==='Cancha'?'selected':''}>Cancha</option></select></label>`;
+      return `<label class="weekly-schedule-item"><span><b>${esc(h.dia)}</b><small>${esc(h.horaInicio)}–${esc(h.horaFin)}</small></span><select data-weekly-block="${esc(k)}"><option value="Aula" ${loc==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${loc==='Cancha'?'selected':''}>Cancha</option><option value="Gimnasio" ${loc==='Gimnasio'?'selected':''}>Gimnasio</option></select></label>`;
     }).join('')}</div>`;
     box.querySelectorAll('[data-weekly-block]').forEach(sel=>sel.addEventListener('change',()=>{ const s=loadState(); s.locations[sel.dataset.weeklyBlock]=sel.value; saveState(s); renderAll(false); }));
   }
@@ -14809,6 +14903,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     $('weekly-stat-total').textContent=String(eff.length);
     $('weekly-stat-aula').textContent=String(eff.filter(x=>x.location==='Aula').length);
     $('weekly-stat-cancha').textContent=String(eff.filter(x=>x.location==='Cancha').length);
+    if($('weekly-stat-gimnasio')) $('weekly-stat-gimnasio').textContent=String(eff.filter(x=>x.location==='Gimnasio').length);
     $('weekly-stat-eval').textContent=String(eff.filter(x=>evaluationFor(x).length).length);
   }
 
@@ -14828,8 +14923,8 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
       if(schoolStart&&info.start<schoolStart)warnings.push(`${info.name} comienza antes del inicio del año escolar.`);
       if(schoolEnd&&info.end>schoolEnd)warnings.push(`${info.name} termina después del fin del año escolar.`);
       const all=occurrences.filter(x=>x.date>=info.start&&x.date<=info.end), eff=all.filter(effective), evalCount=eff.filter(x=>evaluationFor(x).length).length;
-      const aula=eff.filter(x=>x.location==='Aula').length, cancha=eff.filter(x=>x.location==='Cancha').length, ped=Math.max(0,eff.length-evalCount), off=all.filter(x=>!effective(x)).length;
-      if(statsEl)statsEl.innerHTML=`<div class="weekly-lapso-metric"><b>${eff.length}</b><span>Clases efectivas</span></div><div class="weekly-lapso-metric is-aula"><b>${aula}</b><span>Aula</span></div><div class="weekly-lapso-metric is-cancha"><b>${cancha}</b><span>Cancha</span></div><div class="weekly-lapso-metric is-eval"><b>${evalCount}</b><span>Evaluaciones</span></div><div class="weekly-lapso-metric is-ped"><b>${ped}</b><span>Clases pedagógicas</span></div><div class="weekly-lapso-metric is-off"><b>${off}</b><span>Sin clase</span></div>`;
+      const aula=eff.filter(x=>x.location==='Aula').length, cancha=eff.filter(x=>x.location==='Cancha').length, gimnasio=eff.filter(x=>x.location==='Gimnasio').length, ped=Math.max(0,eff.length-evalCount), off=all.filter(x=>!effective(x)).length;
+      if(statsEl)statsEl.innerHTML=`<div class="weekly-lapso-metric"><b>${eff.length}</b><span>Clases efectivas</span></div><div class="weekly-lapso-metric is-aula"><b>${aula}</b><span>Aula</span></div><div class="weekly-lapso-metric is-cancha"><b>${cancha}</b><span>Cancha</span></div><div class="weekly-lapso-metric is-gimnasio"><b>${gimnasio}</b><span>Gimnasio</span></div><div class="weekly-lapso-metric is-eval"><b>${evalCount}</b><span>Evaluaciones</span></div><div class="weekly-lapso-metric is-ped"><b>${ped}</b><span>Clases pedagógicas</span></div><div class="weekly-lapso-metric is-off"><b>${off}</b><span>Sin clase</span></div>`;
     });
     const ordered=[...ranges].sort((a,b)=>a.start.localeCompare(b.start));
     for(let i=1;i<ordered.length;i++) if(ordered[i].start<=ordered[i-1].end)warnings.push(`${ordered[i-1].name} y ${ordered[i].name} se superponen.`);
@@ -14861,7 +14956,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     const offset=(first.getDay()+6)%7, cells=[]; for(let i=0;i<offset;i++)cells.push('<span class="weekly-calendar-blank"></span>');
     for(let day=1;day<=days;day++) {
       const date=isoLocal(new Date(y,m,day,12)), items=occurrences.filter(x=>x.date===date), event=schoolEvent(date), isToday=date===isoLocal(new Date());
-      const chips=items.map(x=>`<span class="weekly-cal-chip ${x.status==='Sin clase'?'is-noclass':x.location==='Cancha'?'is-cancha':'is-aula'}" title="${esc(`${x.horaInicio} ${x.location}`)}">${x.status==='Sin clase'?'Sin clase':x.location}</span>`).join('');
+      const chips=items.map(x=>`<span class="weekly-cal-chip ${x.status==='Sin clase'?'is-noclass':x.location==='Gimnasio'?'is-gimnasio':x.location==='Cancha'?'is-cancha':'is-aula'}" title="${esc(`${x.horaInicio} ${x.location}`)}">${x.status==='Sin clase'?'Sin clase':x.location}</span>`).join('');
       const evalCount=items.reduce((n,x)=>n+evaluationFor(x).length,0);
       cells.push(`<button type="button" class="weekly-calendar-day ${isToday?'is-today':''} ${items.length?'has-class':''}" data-weekly-date="${date}"><b>${day}</b>${event?'<i class="fa-solid fa-star" title="Fecha del calendario escolar"></i>':''}<span class="weekly-cal-chips">${chips}</span>${evalCount?`<em><i class="fa-solid fa-clipboard-check"></i>${evalCount}</em>`:''}</button>`);
     }
@@ -14885,10 +14980,10 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     const date=fromISO(occ.date), evals=evaluationFor(occ), event=occ.schoolEvent||'', planned=Boolean(occ.inicio||occ.desarrollo||occ.cierre||occ.estrategias||occ.tema);
     const evalHtml=evals.length?`<div class="weekly-linked-eval"><i class="fa-solid fa-clipboard-check"></i><div><strong>Plan de evaluación vinculado</strong>${evals.map(e=>`<span>${esc(e.actividad||e.nombre||'Evaluación')} ${e.puntos?`· ${esc(e.puntos)} pts`:''}</span>`).join('')}</div></div>`:'';
     return `<article class="weekly-class-card ${occ.status==='Sin clase'?'is-noclass':''}" data-occ-id="${esc(occ.id)}">
-      <header><div class="weekly-class-date"><span>${esc(date?dateFmt.format(date):occ.date)}</span><strong>${esc(occ.horaInicio)}–${esc(occ.horaFin)}</strong></div><div class="weekly-class-badges"><span class="${occ.location==='Cancha'?'is-cancha':'is-aula'}">${occ.location==='Cancha'?'<i class="fa-solid fa-person-running"></i>':'<i class="fa-solid fa-chalkboard-user"></i>'}${esc(occ.location)}</span>${lapsoForDate(occ.date)?`<span class="is-lapso"><i class="fa-solid fa-layer-group"></i>${esc(lapsoForDate(occ.date).name)}</span>`:''}${planned?'<span class="is-planned"><i class="fa-solid fa-wand-magic-sparkles"></i>Planificada</span>':''}${occ.manual?'<span class="is-manual">Manual</span>':''}</div></header>
+      <header><div class="weekly-class-date"><span>${esc(date?dateFmt.format(date):occ.date)}</span><strong>${esc(occ.horaInicio)}–${esc(occ.horaFin)}</strong></div><div class="weekly-class-badges"><span class="${occ.location==='Gimnasio'?'is-gimnasio':occ.location==='Cancha'?'is-cancha':'is-aula'}">${occ.location==='Gimnasio'?'<i class="fa-solid fa-dumbbell"></i>':occ.location==='Cancha'?'<i class="fa-solid fa-person-running"></i>':'<i class="fa-solid fa-chalkboard-user"></i>'}${esc(occ.location)}</span>${lapsoForDate(occ.date)?`<span class="is-lapso"><i class="fa-solid fa-layer-group"></i>${esc(lapsoForDate(occ.date).name)}</span>`:''}${planned?'<span class="is-planned"><i class="fa-solid fa-wand-magic-sparkles"></i>Planificada</span>':''}${occ.specialClass?'<span class="is-special"><i class="fa-solid fa-star"></i>Superclase</span>':''}${occ.manual?'<span class="is-manual">Manual</span>':''}</div></header>
       ${event?`<div class="weekly-school-event"><i class="fa-solid fa-calendar-day"></i><span><b>Calendario escolar:</b> ${esc(event)}</span></div>`:''}
       ${evalHtml}
-      <div class="weekly-class-controls"><label><span>Espacio</span><select data-field="location"><option value="Aula" ${occ.location==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${occ.location==='Cancha'?'selected':''}>Cancha</option></select></label><label><span>Estado</span><select data-field="status"><option value="Clase" ${occ.status==='Clase'?'selected':''}>Clase efectiva</option><option value="Sin clase" ${occ.status==='Sin clase'?'selected':''}>Sin clase / suspendida</option></select></label>${occ.manual?'<button type="button" class="weekly-delete-manual" data-delete-manual><i class="fa-solid fa-trash"></i></button>':''}</div>
+      <div class="weekly-class-controls"><label><span>Espacio</span><select data-field="location"><option value="Aula" ${occ.location==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${occ.location==='Cancha'?'selected':''}>Cancha</option><option value="Gimnasio" ${occ.location==='Gimnasio'?'selected':''}>Gimnasio</option></select></label><label><span>Estado</span><select data-field="status"><option value="Clase" ${occ.status==='Clase'?'selected':''}>Clase efectiva</option><option value="Sin clase" ${occ.status==='Sin clase'?'selected':''}>Sin clase / suspendida</option></select></label>${occ.manual?'<button type="button" class="weekly-delete-manual" data-delete-manual><i class="fa-solid fa-trash"></i></button>':''}</div>
       <div class="weekly-pedagogy ${occ.status==='Sin clase'?'is-disabled':''}">
        <div class="weekly-pedagogy-top"><label><span>Tema</span><input data-field="tema" value="${esc(occ.tema||'')}" placeholder="Tema de esta clase"></label><label><span>Objetivo / propósito</span><input data-field="objetivo" value="${esc(occ.objetivo||'')}" placeholder="Propósito de aprendizaje"></label></div>
        <label><span>Estrategias metodológicas</span><textarea data-field="estrategias" rows="2" placeholder="Demostración, estaciones, trabajo cooperativo…">${esc(occ.estrategias||'')}</textarea></label>
@@ -14932,12 +15027,12 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
       const prompt=`Actúa como especialista en planificación docente venezolana y en secuenciación pedagógica. Genera la planificación SEMANAL de ${materia} para ${ano}, sección ${seccion}.
 
 REGLAS OBLIGATORIAS:
-1. Respeta exactamente cada fecha, hora, espacio (Aula o Cancha), lapso, evaluación vinculada y evento del calendario escolar.
+1. Respeta exactamente cada fecha, hora, espacio (Aula, Cancha o Gimnasio), lapso, evaluación vinculada y evento del calendario escolar.
 2. Mantén continuidad real con las clases previas guardadas: no reinicies el contenido cada semana ni repitas un tema sin necesidad pedagógica.
 3. Mira también las clases y evaluaciones próximas para dejar una progresión lógica hacia lo que sigue.
 4. Si el Panel por lapso tiene temas curriculares asignados, úsalos como BASE CURRICULAR prioritaria y avanza de manera progresiva entre ellos. No inventes otros temas oficiales.
 5. Si una clase tiene una evaluación vinculada, organiza la sesión alrededor de esa evaluación y consérvala claramente en el campo evaluacion.
-6. En AULA prioriza explicación, análisis, saberes previos, trabajo conceptual/reflexivo y producciones pertinentes. En CANCHA prioriza activación, demostración, práctica, estaciones/circuitos, aplicación motriz, seguridad y vuelta a la calma.
+6. En AULA prioriza explicación, análisis, saberes previos, trabajo conceptual/reflexivo y producciones pertinentes. En CANCHA prioriza activación, demostración, práctica, estaciones/circuitos, aplicación motriz, seguridad y vuelta a la calma. En GIMNASIO prioriza acondicionamiento físico, técnica segura, progresión de cargas o resistencia, control postural, hidratación, pausas y uso adecuado de implementos.
 7. Si algún campo ya tiene contenido escrito por el docente, tómalo como restricción y complétalo coherentemente, no lo contradigas.
 8. Usa lenguaje profesional, concreto y realizable para el tiempo de clase disponible.
 

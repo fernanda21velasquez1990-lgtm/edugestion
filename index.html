@@ -829,7 +829,7 @@
 
       <div class="weekly-lapso-card">
        <div class="weekly-lapso-heading">
-        <div><span class="weekly-icon weekly-icon--lapso"><i class="fa-solid fa-layer-group"></i></span><div><strong>Organización por lapsos</strong><small>Define las fechas reales de cada lapso. EduGestión calculará automáticamente las clases disponibles, aula, cancha, evaluaciones y clases pedagógicas restantes.</small></div></div>
+        <div><span class="weekly-icon weekly-icon--lapso"><i class="fa-solid fa-layer-group"></i></span><div><strong>Organización por lapsos</strong><small>Define las fechas reales de cada lapso. EduGestión calculará automáticamente las clases disponibles, aula, cancha, gimnasio, evaluaciones y clases pedagógicas restantes.</small></div></div>
         <span class="weekly-sequence-badge"><i class="fa-solid fa-arrow-trend-up"></i> Secuencia pedagógica activa</span>
        </div>
        <div class="weekly-lapso-grid">
@@ -856,6 +856,7 @@
        <article><i class="fa-solid fa-calendar-check"></i><div><strong id="weekly-stat-total">0</strong><span>Clases efectivas</span></div></article>
        <article class="is-aula"><i class="fa-solid fa-chalkboard-user"></i><div><strong id="weekly-stat-aula">0</strong><span>Clases en aula</span></div></article>
        <article class="is-cancha"><i class="fa-solid fa-person-running"></i><div><strong id="weekly-stat-cancha">0</strong><span>Clases en cancha</span></div></article>
+       <article class="is-gimnasio"><i class="fa-solid fa-dumbbell"></i><div><strong id="weekly-stat-gimnasio">0</strong><span>Clases en gimnasio</span></div></article>
        <article class="is-eval"><i class="fa-solid fa-clipboard-check"></i><div><strong id="weekly-stat-eval">0</strong><span>Fechas con evaluación</span></div></article>
       </div>
 
@@ -867,7 +868,7 @@
         </div>
         <div class="weekly-calendar-weekdays"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
         <div id="weekly-calendar-grid" class="weekly-calendar-grid"></div>
-        <div class="weekly-calendar-legend"><span><i class="legend-aula"></i>Aula</span><span><i class="legend-cancha"></i>Cancha</span><span><i class="legend-eval"></i>Evaluación</span><span><i class="legend-noclass"></i>Sin clase / asueto</span></div>
+        <div class="weekly-calendar-legend"><span><i class="legend-aula"></i>Aula</span><span><i class="legend-cancha"></i>Cancha</span><span><i class="legend-gimnasio"></i>Gimnasio</span><span><i class="legend-eval"></i>Evaluación</span><span><i class="legend-noclass"></i>Sin clase / asueto</span></div>
        </article>
 
        <article class="weekly-manual-card">
@@ -876,7 +877,7 @@
          <label><span>Fecha</span><input id="weekly-manual-date" type="date" required></label>
          <div class="weekly-two-cols"><label><span>Entrada</span><input id="weekly-manual-start" type="time" value="08:00" required></label><label><span>Salida</span><input id="weekly-manual-end" type="time" value="09:00" required></label></div>
          <label><span>Sección</span><select id="weekly-manual-section" required></select></label>
-         <label><span>Espacio</span><select id="weekly-manual-location"><option value="Aula">Aula</option><option value="Cancha">Cancha</option></select></label>
+         <label><span>Espacio</span><select id="weekly-manual-location"><option value="Aula">Aula</option><option value="Cancha">Cancha</option><option value="Gimnasio">Gimnasio</option></select></label>
          <label><span>Observación (opcional)</span><input id="weekly-manual-note" type="text" maxlength="160" placeholder="Ej: recuperación, cambio de horario…"></label>
          <button type="submit"><i class="fa-solid fa-plus"></i> Agregar al calendario</button>
         </form>
