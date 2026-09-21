@@ -10634,6 +10634,7 @@ Archivo enviado directamente desde EduGestión.`);
   const TRACK_KEY='edugestion_cuadernillo_ef_seguimiento_v1';
   const HISTORY_KEY='edugestion_cuadernillo_ef_historial_v1';
   const SELECT_KEY='edugestion_cuadernillo_ef_seleccion';
+  const PANEL_STATE_KEY='edugestion_panel_lapso_ui_v1';
   const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
@@ -10647,9 +10648,11 @@ Archivo enviado directamente desde EduGestión.`);
   }
   const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(_){return f}};
   const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-  let gradoActual='';
-  let lapsoActual='1er Lapso';
-  let filtroEstado='Todos';
+  const panelState=()=>readJSON(PANEL_STATE_KEY,{grado:'',lapso:'1er Lapso',filtro:'Todos'});
+  function savePanelState(){writeJSON(PANEL_STATE_KEY,{grado:gradoActual,lapso:lapsoActual,filtro:filtroEstado})}
+  let gradoActual=panelState().grado||'';
+  let lapsoActual=panelState().lapso||'1er Lapso';
+  let filtroEstado=panelState().filtro||'Todos';
 
   function styles(){
     if(document.getElementById(STYLE_ID))return;
@@ -10666,6 +10669,27 @@ Archivo enviado directamente desde EduGestión.`);
   function assignmentMap(){return readJSON(ASSIGN_KEY,{})}
   function trackMap(){return readJSON(TRACK_KEY,{})}
   function historyMap(){return readJSON(HISTORY_KEY,{})}
+  function canonicalPrimerLapsoRows(data){
+    const grado=Object.keys(data||{}).find(g=>/^1er\s+año$/i.test(String(g).trim()))||'1er Año';
+    const rows=Array.isArray(data?.[grado])?data[grado]:[];
+    const specs=[
+      ['La Educación Física como base de salud integral',21],
+      ['Salud y desarrollo integral del ser humano',22],
+      ['El movimiento humano como fuente de salud y vida',22],
+      ['Habilidades motrices como principio de la práctica de actividad física',22],
+      ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
+      ['Variables sociales para una vida saludable',22],
+    ];
+    return {grado,rows:specs.map(([tema,pagina])=>rows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean)};
+  }
+  function seedPrimerLapsoIfEmpty(){
+    const data=window.EDUGESTION_CEF_DATA||{},pack=canonicalPrimerLapsoRows(data),rows=pack.rows;if(rows.length!==6)return;
+    const m=assignmentMap(),all=data[pack.grado]||[];
+    const assignedNow=all.filter(x=>assignmentFor(m,pack.grado,x,all)).length;
+    if(assignedNow>0)return;
+    rows.forEach(x=>{m[topicKey(pack.grado,x)]='1er Lapso'});
+    writeJSON(ASSIGN_KEY,m);
+  }
   function setAssignment(grado,item,lapso){
     const rows=(window.EDUGESTION_CEF_DATA?.[grado]||[]),m=assignmentMap(),k=topicKey(grado,item),prev=assignmentFor(m,grado,item,rows);
     if(lapso)m[k]=lapso;else delete m[k];
@@ -10681,7 +10705,11 @@ Archivo enviado directamente desde EduGestión.`);
     const nav=document.getElementById('app-nav')||document.querySelector('.app-sidebar nav');
     const main=document.getElementById('app-main')||document.querySelector('main');
     const data=window.EDUGESTION_CEF_DATA;if(!nav||!main||!data)return false;
-    styles();gradoActual=gradoActual||Object.keys(data)[0]||'';
+    styles();seedPrimerLapsoIfEmpty();
+    if(!gradoActual||!Object.prototype.hasOwnProperty.call(data,gradoActual))gradoActual=Object.prototype.hasOwnProperty.call(data,'1er Año')?'1er Año':(Object.keys(data)[0]||'');
+    if(!LAPSOS.includes(lapsoActual))lapsoActual='1er Lapso';
+    if(!['Todos','Pendiente','Planificado','Trabajado','Evaluado'].includes(filtroEstado))filtroEstado='Todos';
+    savePanelState();
     const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Panel por lapso';tab.dataset.description='Organiza los temas del Cuadernillo de Educación Física por lapso y prepara planificaciones con IA.';tab.innerHTML='<i class="fa-solid fa-calendar-week"></i><span>Panel por lapso</span>';
     const ref=document.getElementById('tab-resumen-curricular-ef')||document.getElementById('tab-plan-evaluacion-ef')||document.getElementById('tab-cuadernillo-ef');if(ref?.nextSibling)nav.insertBefore(tab,ref.nextSibling);else nav.appendChild(tab);
     const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
@@ -10690,14 +10718,14 @@ Archivo enviado directamente desde EduGestión.`);
       <div class="pl-summary" id="pl-summary"></div><div class="pl-list" id="pl-list"></div><div class="pl-note"><i class="fa-solid fa-circle-info"></i> El lapso es una organización interna de EduGestión. No modifica el contenido curricular original del cuadernillo.</div>`;
     main.appendChild(sec);
     tab.addEventListener('click',()=>openSection(tab,sec));
-    const gs=sec.querySelector('#pl-grade');gs.innerHTML=Object.keys(data).map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');gs.value=gradoActual;gs.addEventListener('change',()=>{gradoActual=gs.value;render()});
+    const gs=sec.querySelector('#pl-grade');gs.innerHTML=Object.keys(data).map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');gs.value=gradoActual;gs.addEventListener('change',()=>{gradoActual=gs.value;savePanelState();render()});
     sec.querySelector('#pl-open-grade').addEventListener('click',openGrade);
     sec.querySelector('#pl-plan-lapso').addEventListener('click',planLapso);
     renderLapsos();renderStatusFilters();render();return true;
   }
   function openSection(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;window.scrollTo({top:0,behavior:'smooth'});render()}
-  function renderLapsos(){const box=document.getElementById('pl-lapsos');if(!box)return;box.innerHTML=LAPSOS.map(l=>`<button type="button" class="pl-pill ${l===lapsoActual?'active':''}" data-lapso="${l}">${l}</button>`).join('');box.querySelectorAll('[data-lapso]').forEach(b=>b.addEventListener('click',()=>{lapsoActual=b.dataset.lapso;renderLapsos();render()}))}
-  function renderStatusFilters(){const box=document.getElementById('pl-statusfilters');if(!box)return;const opts=['Todos','Pendiente','Planificado','Trabajado','Evaluado'];box.innerHTML=opts.map(s=>`<button type="button" class="pl-pill ${s===filtroEstado?'active':''}" data-status="${s}">${s}</button>`).join('');box.querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>{filtroEstado=b.dataset.status;renderStatusFilters();render()}))}
+  function renderLapsos(){const box=document.getElementById('pl-lapsos');if(!box)return;box.innerHTML=LAPSOS.map(l=>`<button type="button" class="pl-pill ${l===lapsoActual?'active':''}" data-lapso="${l}">${l}</button>`).join('');box.querySelectorAll('[data-lapso]').forEach(b=>b.addEventListener('click',()=>{lapsoActual=b.dataset.lapso;savePanelState();renderLapsos();render()}))}
+  function renderStatusFilters(){const box=document.getElementById('pl-statusfilters');if(!box)return;const opts=['Todos','Pendiente','Planificado','Trabajado','Evaluado'];box.innerHTML=opts.map(s=>`<button type="button" class="pl-pill ${s===filtroEstado?'active':''}" data-status="${s}">${s}</button>`).join('');box.querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>{filtroEstado=b.dataset.status;savePanelState();renderStatusFilters();render()}))}
   function rowsForGrade(){const data=window.EDUGESTION_CEF_DATA||{},assign=assignmentMap(),track=trackMap(),rows=data[gradoActual]||[];return rows.map(x=>{const legacy=legacyTopicKey(gradoActual,x.tema);return {...x,grado:gradoActual,lapso:assignmentFor(assign,gradoActual,x,rows),estado:track[legacy]?.estado||'Pendiente'}})}
   function render(){
     const list=document.getElementById('pl-list'),sum=document.getElementById('pl-summary');if(!list||!sum)return;
@@ -15097,7 +15125,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_WEEKLY_PLANNING_V2_END */
 
 /* ================================================================
-   EduGestión · Formato oficial para Control de Estudio · V3
+   EduGestión · Formato oficial para Control de Estudio · V2.9
    Vista previa carta horizontal · 2 hojas · autollenado desde planificación
    ================================================================ */
 (() => {
@@ -15153,8 +15181,27 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     return [...map.values()].sort((a,b)=>`${a.ano}${a.seccion}`.localeCompare(`${b.ano}${b.seccion}`,'es',{numeric:true}));
   }
   function labelSection(x){return `${x.ano} · Sección ${x.seccion}${x.turno?` · ${x.turno==='Manana'?'Mañana':x.turno}`:''}`}
+  function sectionsForAno(ano){return sections().filter(x=>normalizeAcademicKey(x.ano)===normalizeAcademicKey(ano))}
+  function combinedSectionLabel(ano){const items=sectionsForAno(ano),secs=[...new Set(items.map(x=>String(x.seccion||'').trim()).filter(Boolean))];return secs.length?`${ano} · Secciones ${secs.join(' y ')}`:String(ano||'')}
   function curriculumGradeKey(ano){const data=window.EDUGESTION_CEF_DATA||{},candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));if(candidates.length<=1)return candidates[0]||'';const raw=String(ano||'').toLowerCase();const yr=candidates.find(g=>/año/i.test(g));if(/año|ano|media|1ero|2do|3ro|4to|5to/.test(raw)&&yr)return yr;return candidates[0]||''}
-  function topicsFor(ano,lapso){const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];const a=readJSON(ASSIGN_KEY,{}),name=LAPSOS[String(lapso)],rows=data[grade];return rows.map(x=>{const unique=topicKey(grade,x),legacy=legacyTopicKey(grade,x.tema),same=rows.filter(y=>String(y.tema||'').trim().replace(/\s+/g,' ')===String(x.tema||'').trim().replace(/\s+/g,' '));const assigned=Object.prototype.hasOwnProperty.call(a,unique)?(a[unique]||''):(same.length===1?(a[legacy]||''):'');return {...x,grado:grade,lapso:assigned}}).filter(x=>x.lapso===name)}
+  function topicOrderScore(x){const t=norm(x?.tema||''),p=String(x?.pagina||'');if(/educacion fisica como base de salud integral/.test(t))return 10;if(/salud y desarrollo integral del ser humano/.test(t))return 20;if(/movimiento humano como fuente de salud y vida/.test(t)&&p==='22')return 30;if(/habilidades motrices como principio/.test(t))return 40;if(/habitos, habilidades, destrezas, actitud y aptitud/.test(t)&&p==='22')return 50;if(/variables sociales para una vida saludable/.test(t)&&p==='22')return 60;return 1000+Number(p||999)}
+  function canonicalPrimerLapsoTopics(ano){
+    const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||normalizeAcademicKey(grade)!=='n:1'||!/año/i.test(grade)||!Array.isArray(data[grade]))return[];
+    const rows=data[grade],specs=[
+      ['La Educación Física como base de salud integral',21],
+      ['Salud y desarrollo integral del ser humano',22],
+      ['El movimiento humano como fuente de salud y vida',22],
+      ['Habilidades motrices como principio de la práctica de actividad física',22],
+      ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
+      ['Variables sociales para una vida saludable',22],
+    ];
+    return specs.map(([tema,pagina])=>rows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean).map(x=>({...x,grado:grade,lapso:'1er Lapso'}));
+  }
+  function topicsFor(ano,lapso){
+    if(String(lapso)==='1'){const canonical=canonicalPrimerLapsoTopics(ano);if(canonical.length===6)return canonical}
+    const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];const a=readJSON(ASSIGN_KEY,{}),name=LAPSOS[String(lapso)],rows=data[grade];
+    return rows.map(x=>{const unique=topicKey(grade,x),legacy=legacyTopicKey(grade,x.tema),same=rows.filter(y=>String(y.tema||'').trim().replace(/\s+/g,' ')===String(x.tema||'').trim().replace(/\s+/g,' '));const assigned=Object.prototype.hasOwnProperty.call(a,unique)?(a[unique]||''):(same.length===1?(a[legacy]||''):'');return {...x,grado:grade,lapso:assigned}}).filter(x=>x.lapso===name).sort((a,b)=>topicOrderScore(a)-topicOrderScore(b))
+  }
   function schoolYearText(){const s=weeklyState(),a=fromISO(s.start),b=fromISO(s.end);return a&&b?`${a.getFullYear()} - ${b.getFullYear()}`:'2026 - 2027'}
   function lapsoRange(lapso){const s=weeklyState(),cfg=s.lapsos?.[String(lapso)]||{};return {start:cfg.start||'',end:cfg.end||''}}
   function sectionSchedules(secKey){const {ano,seccion}=parseSectionKey(secKey);return (Array.isArray(horariosProfesor)?horariosProfesor:[]).filter(h=>String(h.ano)===ano&&String(h.seccion)===seccion)}
@@ -15169,21 +15216,65 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function scoreTopic(topic,occ){const a=tokens(`${topic.tema||''} ${topic.tejido||''} ${topic.referentes||''}`),b=tokens(`${occ.tema||''} ${occ.objetivo||''} ${occ.estrategias||''}`);let n=0;b.forEach(x=>{if(a.has(x))n++});return n}
   function matchPlans(topic,plans){const ranked=plans.map(p=>({p,s:scoreTopic(topic,p)})).sort((a,b)=>b.s-a.s);const max=ranked[0]?.s||0;return max?ranked.filter(x=>x.s>=Math.max(1,max-1)).slice(0,3).map(x=>x.p):[]}
   function uniqueJoin(arr,max=520){const clean=[...new Set(arr.map(x=>String(x||'').trim()).filter(Boolean))];let out='';for(const x of clean){const part=out?` · ${x}`:x;if((out+part).length>max)break;out+=part}return out}
+  function curriculumDefaults(topic){
+    const t=norm(topic?.tema||''),p=String(topic?.pagina||'');
+    if(/educacion fisica como base de salud integral/.test(t))return {
+      potencialidades:'Comprender la importancia de la Educación Física, sus medios y su relación con la salud integral, fortaleciendo hábitos de autocuidado, participación y convivencia.',
+      actividades:'Conversatorio diagnóstico; lectura y análisis guiado de los artículos 111 de la CRBV, 16 de la LOE y 8 de la LODAFEF; mapa conceptual sobre los medios de la Educación Física; reflexión sobre salud integral.',
+      intencionalidades:'Promover una comprensión crítica de la Educación Física como derecho, medio formativo y herramienta para la salud integral, favoreciendo la participación responsable y el buen vivir.'
+    };
+    if(/salud y desarrollo integral del ser humano/.test(t))return {
+      potencialidades:'Reconocer y desarrollar cualidades y potencialidades físicas, diferenciando el trabajo físico, deportivo y recreativo y aplicando principios básicos de seguridad y autorregulación.',
+      actividades:'Ejercicios estáticos y con desplazamientos; estaciones de capacidades físicas; registro de sensaciones antes y después del esfuerzo; superclase de acondicionamiento físico general en gimnasio.',
+      intencionalidades:'Desarrollar progresivamente la condición física y el autocuidado mediante prácticas seguras que relacionen movimiento, salud, esfuerzo, hidratación y bienestar integral.'
+    };
+    if(/movimiento humano como fuente de salud y vida/.test(t)&&p==='22')return {
+      potencialidades:'Identificar segmentos y partes del cuerpo, mejorar la movilidad articular y los desplazamientos, y relacionar alimentación, hidratación y movimiento con la salud.',
+      actividades:'Reconocimiento de segmentos corporales; movilidad articular y elongación; desplazamientos variados; análisis del trompo de los alimentos; juegos motores vinculados con hábitos de alimentación e hidratación.',
+      intencionalidades:'Favorecer el conocimiento y cuidado del cuerpo, integrando movimiento, alimentación, hidratación y actividad lúdica como componentes de una vida saludable.'
+    };
+    if(/habilidades motrices como principio/.test(t))return {
+      potencialidades:'Fortalecer habilidades motrices fundamentales y capacidades coordinativas y condicionales mediante situaciones de movimiento, equilibrio, fuerza, velocidad, resistencia, agilidad y flexibilidad.',
+      actividades:'Circuitos de desplazamiento, saltos, equilibrio y coordinación; ejercicios con y sin desplazamiento; retos cooperativos; superclase en gimnasio con pelotas para lanzamientos, recepción, control, equilibrio y coordinación óculo-manual.',
+      intencionalidades:'Potenciar la autonomía motriz, la coordinación y la condición física a través de experiencias progresivas, seguras, cooperativas y adaptadas a las posibilidades del grupo.'
+    };
+    if(/habitos, habilidades, destrezas, actitud y aptitud/.test(t)&&p==='22')return {
+      potencialidades:'Consolidar hábitos de higiene e hidratación, expresión corporal, actitud positiva hacia la actividad física y destrezas básicas con y sin implementos.',
+      actividades:'Rutinas de higiene e hidratación; expresión corporal, mima y dramatización; ejercicios de destreza con y sin implementos; superclase en gimnasio con ligas para fuerza-resistencia, movilidad, control postural y ejecución segura.',
+      intencionalidades:'Fortalecer hábitos saludables, disciplina, expresión corporal, responsabilidad y disposición positiva hacia el trabajo físico, valorando el esfuerzo propio y colectivo.'
+    };
+    if(/variables sociales para una vida saludable/.test(t)&&p==='22')return {
+      potencialidades:'Valorar la condición física mediante medidas antropométricas y pruebas básicas, interpretando resultados con respeto a las diferencias individuales y promoviendo hábitos saludables.',
+      actividades:'Registro de peso y talla; flexión ventral, rapidez, lanzamiento de balón medicinal, flexión y extensión de codos, salto de longitud, abdominales y resistencia; registro y análisis formativo de resultados.',
+      intencionalidades:'Promover el autoconocimiento corporal y la toma de decisiones saludables mediante la valoración responsable de la condición física y el seguimiento de sus resultados.'
+    };
+    return {
+      potencialidades:'Desarrollar conocimientos, habilidades, actitudes y valores vinculados con el contenido curricular mediante experiencias teórico-prácticas significativas.',
+      actividades:'Actividades de exploración, demostración guiada, práctica progresiva, trabajo cooperativo, reflexión y evaluación formativa relacionadas con el contenido.',
+      intencionalidades:'Favorecer aprendizajes integrales, participación responsable, convivencia y aplicación del contenido en situaciones de la vida cotidiana.'
+    };
+  }
   function emphasisAuto(text){const t=norm(text),set=new Set(['ef']);if(/medida|antropometr|frecuencia|calculo|numero|estadistic/.test(t))set.add('mat');if(/oral|escrit|lectur|dialog|cuestionario|reflex/.test(t))set.add('oral');if(/lengua|señas|senas|cultura|idioma|tradicion/.test(t))set.add('cult');if(/historia|patria|ciudadan|venezuela|territor/.test(t))set.add('geo');if(/tecnolog|ciencia|innovacion|fisiolog|anatom/.test(t))set.add('cyt');if(/ambiente|ambiental|sostenible|naturaleza|espacio natural/.test(t))set.add('amb');return set}
   function rowId(topic,index){return `${String(topic?.tema||`fila-${index}`).trim().replace(/\s+/g,' ')}|p:${String(topic?.pagina||'')}|i:${index}|${String(topic?.tejido||'').slice(0,42)}`.slice(0,190)}
   function customFor(rowIdValue){const fs=formatState();return fs.edits?.[`${currentSection}|||${currentLapso}|||${rowIdValue}`]||{}}
   function saveCell(rowIdValue,field,value){const fs=formatState();fs.edits=fs.edits||{};const k=`${currentSection}|||${currentLapso}|||${rowIdValue}`;fs.edits[k]={...(fs.edits[k]||{}),[field]:value};saveFormatState(fs)}
   function buildRows(){
-    const {ano}=parseSectionKey(currentSection),topics=topicsFor(ano,currentLapso),plans=plannedOccurrences(currentSection,currentLapso);
-    let base=topics.length?topics:plans.map((p,i)=>({tema:p.tema||`Planificación ${i+1}`,temaIndispensable:'',tejido:'',referentes:'',_plan:p}));
+    const {ano}=parseSectionKey(currentSection),topics=topicsFor(ano,currentLapso),allGradeSections=sectionsForAno(ano);
+    const plans=allGradeSections.flatMap(s=>plannedOccurrences(s.key,currentLapso));
+    const base=topics.length?topics:plans.map((p,i)=>({tema:p.tema||`Planificación ${i+1}`,temaIndispensable:'',tejido:'',referentes:'',_plan:p}));
     return base.map((topic,index)=>{
-      const matched=topic._plan?[topic._plan]:matchPlans(topic,plans),custom=customFor(rowId(topic,index));
-      const objectives=uniqueJoin(matched.map(x=>x.objetivo),420),activities=uniqueJoin(matched.flatMap(x=>[x.estrategias,x.inicio,x.desarrollo,x.cierre]),650),evals=uniqueJoin(matched.map(x=>x.evaluacion),300);
-      const theoretical=topic.referentes||topic.tejido||topic.descripcion||'';
-      const generated=topic.tema||matched[0]?.tema||'';
-      const indispensable=topic.temaIndispensable||generated;
-      const potential=objectives||topic.intencionalidad||'';
-      const intentions=uniqueJoin([topic.intencionalidad,objectives,evals],430);
+      const matched=topic._plan?[topic._plan]:matchPlans(topic,plans),custom=customFor(rowId(topic,index)),defs=curriculumDefaults(topic);
+      const objectives=uniqueJoin(matched.map(x=>x.objetivo),420),baseActivities=uniqueJoin(matched.flatMap(x=>[x.estrategias,x.inicio,x.desarrollo,x.cierre]),520),evals=uniqueJoin(matched.map(x=>x.evaluacion),260);
+      const theoretical=uniqueJoin([topic.tejido?`Tejido temático: ${topic.tejido}`:'',topic.referentes?`Referentes teórico-prácticos: ${topic.referentes}`:'',topic.descripcion||''],620);
+      const generated=topic.tema||matched[0]?.tema||'Contenido curricular';
+      const indispensable=topic.temaIndispensable||'#17 Actividad física, deporte y recreación.';
+      const potential=uniqueJoin([objectives,topic.intencionalidad,defs.potencialidades],520)||defs.potencialidades;
+      const gt=norm(generated);let special='';
+      if(String(currentLapso)==='1'&&/salud y desarrollo integral del ser humano/.test(gt))special='Superclase de acondicionamiento físico general en gimnasio: resistencia, fuerza básica, movilidad, coordinación, hidratación y autorregulación del esfuerzo.';
+      if(String(currentLapso)==='1'&&/habilidades motrices como principio/.test(gt))special='Superclase en gimnasio con pelotas: coordinación, desplazamientos, lanzamientos, recepción, equilibrio y trabajo cooperativo.';
+      if(String(currentLapso)==='1'&&/habitos, habilidades, destrezas, actitud y aptitud/.test(gt))special='Superclase en gimnasio con ligas: fuerza-resistencia, control postural, movilidad, coordinación y ejecución segura.';
+      const activities=uniqueJoin([defs.actividades,baseActivities,special],820)||defs.actividades;
+      const intentions=uniqueJoin([topic.intencionalidad,objectives,evals,defs.intencionalidades],520)||defs.intencionalidades;
       const emph=emphasisAuto(`${generated} ${theoretical} ${activities} ${intentions}`);
       return {id:rowId(topic,index),temaIndispensable:custom.temaIndispensable??indispensable,temaGenerador:custom.temaGenerador??generated,referente:custom.referente??theoretical,potencialidades:custom.potencialidades??potential,actividades:custom.actividades??activities,intencionalidades:custom.intencionalidades??intentions,emphasis:custom.emphasis?new Set(custom.emphasis):emph};
     });
@@ -15198,14 +15289,14 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     return `<div class="fce-page-wrap"><article class="fce-page" data-page="${pageNo}">
       <div class="fce-headline"><div class="fce-brand"><div>${esc(inst.republic||'')}</div><div>${esc(inst.school||'')}</div><div>${esc(inst.dea||'')}</div><div>${esc(inst.address||'')}</div><div>${esc(inst.circuit||'')}</div></div><div class="fce-brand center"><div>Gobierno Bolivariano de Venezuela</div><div>Ministerio del Poder Popular</div><div>para la Educación</div><div>Zona Educativa Distrito Capital</div></div><div class="fce-brand right"><div>${esc(inst.school||'')}</div><div>Jurisdicción Educativa</div><div>${esc(year)}</div></div></div>
       <div class="fce-title">PLANIFICACIÓN EDUCACIÓN MEDIA:</div>
-      <div class="fce-meta"><div class="fce-meta-item"><b>Año Escolar:</b><span class="fce-line" data-meta-edit="year">${esc(year)}</span></div><div class="fce-meta-item"><b>Momento:</b><span class="fce-line">${esc(MOMENTOS[currentLapso]||currentLapso)}</span></div><div class="fce-meta-item"><b>Año y Sección:</b><span class="fce-line">${esc(`${sec.ano} ${sec.seccion}`)}</span></div><div class="fce-meta-item"><b>AREA:</b><span class="fce-line">${esc(area)}</span></div><div class="fce-meta-item"><b>Docente:</b><span class="fce-line">${esc(teacher)}</span></div></div>
+      <div class="fce-meta"><div class="fce-meta-item"><b>Año Escolar:</b><span class="fce-line" data-meta-edit="year">${esc(year)}</span></div><div class="fce-meta-item"><b>Momento:</b><span class="fce-line">${esc(MOMENTOS[currentLapso]||currentLapso)}</span></div><div class="fce-meta-item"><b>Año y Sección:</b><span class="fce-line">${esc(combinedSectionLabel(sec.ano))}</span></div><div class="fce-meta-item"><b>AREA:</b><span class="fce-line">${esc(area)}</span></div><div class="fce-meta-item"><b>Docente:</b><span class="fce-line">${esc(teacher)}</span></div></div>
       <table class="fce-table"><thead><tr><th>Tema<br>Indispensable</th><th>Tema Generador</th><th>Referente Teórico<br>Práctico</th><th>Potencialidades</th><th>Actividades</th><th>Énfasis curricular</th><th>Intencionalidades<br>Pedagógicas</th></tr></thead><tbody>${tableRows(rows)}</tbody></table>
       <div class="fce-footer"><span>Dirección: Urbanización Raúl Leoni, avenida principal entre los bloques N° 5 y N° 6, Casalta III.</span><span class="fce-page-no">Hoja ${pageNo} de ${totalPages}</span></div>
     </article></div>`;
   }
   function renderPreview(){
     const box=document.getElementById('fce-pages');if(!box)return;const rows=buildRows(),mid=Math.ceil(rows.length/2),pages=[rows.slice(0,mid),rows.slice(mid)];box.innerHTML=pageHtml(pages[0],1,2)+pageHtml(pages[1],2,2);bindPreviewEdits();
-    const helper=document.getElementById('fce-helper');if(helper){const planned=plannedOccurrences(currentSection,currentLapso).length,topics=topicsFor(parseSectionKey(currentSection).ano,currentLapso).length;helper.innerHTML=`<b>Vista previa lista:</b> ${topics} tema${topics===1?'':'s'} curricular${topics===1?'':'es'} y ${planned} clase${planned===1?'':'s'} planificada${planned===1?'':'s'} encontradas. Puedes corregir cualquier celda directamente antes de imprimir. La impresión saldrá en <b>2 hojas carta horizontales</b>.`}
+    const helper=document.getElementById('fce-helper');if(helper){const planned=plannedOccurrences(currentSection,currentLapso).length,topics=topicsFor(parseSectionKey(currentSection).ano,currentLapso).length;helper.innerHTML=`<b>Vista previa lista:</b> ${topics} tema${topics===1?'':'s'} curricular${topics===1?'':'es'} del lapso. La misma planificación se presenta para <b>${esc(combinedSectionLabel(parseSectionKey(currentSection).ano))}</b>. Las 3 superclases de gimnasio se incorporan dentro de Actividades, no como temas adicionales. Puedes corregir cualquier celda antes de imprimir. La impresión saldrá en <b>2 hojas carta horizontales</b>.`}
   }
   function bindPreviewEdits(){document.querySelectorAll('#fce-pages tr[data-row-id]').forEach(tr=>{const rid=tr.dataset.rowId;tr.querySelectorAll('[data-edit]').forEach(el=>el.addEventListener('input',()=>saveCell(rid,el.dataset.edit,el.innerText.trim())));tr.querySelectorAll('[data-emph]').forEach(ch=>ch.addEventListener('change',()=>{const values=[...tr.querySelectorAll('[data-emph]:checked')].map(x=>x.dataset.emph);saveCell(rid,'emphasis',values)}))})}
 
@@ -15213,19 +15304,19 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if(document.getElementById(SECTION_ID))return true;const nav=document.getElementById('app-nav')||document.querySelector('.app-sidebar nav'),main=document.getElementById('app-main')||document.querySelector('main');if(!nav||!main)return false;styles();
     const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Formato Control de Estudio';tab.dataset.description='Vista previa e impresión automática de la planificación en el formato institucional.';tab.innerHTML='<i class="fa-solid fa-file-lines"></i><span>Formato Control</span>';
     const ref=document.getElementById('tab-plan-semanal')||document.getElementById('tab-planificacion');if(ref?.nextSibling)nav.insertBefore(tab,ref.nextSibling);else nav.appendChild(tab);
-    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`<header class="fce-hero"><small><i class="fa-solid fa-file-signature"></i> Formato institucional</small><h2>Planificación para Control de Estudio</h2><p>EduGestión toma los temas del Panel por lapso y las clases de Planificación semanal, llena automáticamente el cuadro institucional y lo divide en dos hojas tamaño carta para que puedas revisar, corregir e imprimir.</p></header><div class="fce-toolbar"><label><span>Año y sección</span><select id="fce-section"></select></label><label><span>Momento / lapso</span><select id="fce-lapso"><option value="1">1er Momento</option><option value="2">2do Momento</option><option value="3">3er Momento</option></select></label><label><span>Año escolar</span><input id="fce-school-year" type="text" value="${esc(schoolYearText())}"></label><button class="fce-btn primary" id="fce-refresh" type="button"><i class="fa-solid fa-arrows-rotate"></i> Actualizar vista previa</button><button class="fce-btn print" id="fce-print" type="button"><i class="fa-solid fa-print"></i> Imprimir 2 hojas</button><div class="fce-helper" id="fce-helper">Selecciona año/sección y momento. La vista previa se llenará con la planificación guardada.</div></div><div class="fce-pages" id="fce-pages"></div>`;main.appendChild(sec);
+    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`<header class="fce-hero"><small><i class="fa-solid fa-file-signature"></i> Formato institucional</small><h2>Planificación para Control de Estudio</h2><p>EduGestión toma los temas del Panel por lapso y las clases de Planificación semanal, llena automáticamente el cuadro institucional y lo divide en dos hojas tamaño carta para que puedas revisar, corregir e imprimir.</p></header><div class="fce-toolbar"><label><span>Año / secciones</span><select id="fce-section"></select></label><label><span>Momento / lapso</span><select id="fce-lapso"><option value="1">1er Momento</option><option value="2">2do Momento</option><option value="3">3er Momento</option></select></label><label><span>Año escolar</span><input id="fce-school-year" type="text" value="${esc(schoolYearText())}"></label><button class="fce-btn primary" id="fce-refresh" type="button"><i class="fa-solid fa-arrows-rotate"></i> Actualizar vista previa</button><button class="fce-btn print" id="fce-print" type="button"><i class="fa-solid fa-print"></i> Imprimir 2 hojas</button><div class="fce-helper" id="fce-helper">Selecciona año/sección y momento. La vista previa se llenará con la planificación guardada.</div></div><div class="fce-pages" id="fce-pages"></div>`;main.appendChild(sec);
     tab.addEventListener('click',()=>open(tab,sec));sec.querySelector('#fce-section')?.addEventListener('change',e=>{currentSection=e.target.value;renderPreview()});sec.querySelector('#fce-lapso')?.addEventListener('change',e=>{currentLapso=e.target.value;renderPreview()});sec.querySelector('#fce-school-year')?.addEventListener('input',renderPreview);sec.querySelector('#fce-refresh')?.addEventListener('click',()=>{syncSelectors();renderPreview();if(typeof mostrarToast==='function')mostrarToast('Vista previa actualizada con la planificación más reciente.','success','Formato Control de Estudio')});sec.querySelector('#fce-print')?.addEventListener('click',()=>window.print());syncSelectors();renderPreview();return true;
   }
-  function syncSelectors(){const items=sections(),sel=document.getElementById('fce-section');if(!items.some(x=>x.key===currentSection))currentSection=items[0]?.key||'';if(sel){sel.innerHTML=items.length?items.map(x=>`<option value="${esc(x.key)}">${esc(labelSection(x))}</option>`).join(''):'<option value="">No hay secciones en Mi Horario</option>';sel.value=currentSection}const lap=document.getElementById('fce-lapso');if(lap)lap.value=currentLapso;const yr=document.getElementById('fce-school-year');if(yr&&!yr.value)yr.value=schoolYearText()}
+  function syncSelectors(){const raw=sections(),grouped=[];const seen=new Set();raw.forEach(x=>{const k=normalizeAcademicKey(x.ano);if(seen.has(k))return;seen.add(k);grouped.push({...x,label:combinedSectionLabel(x.ano)})});const sel=document.getElementById('fce-section');if(!grouped.some(x=>x.key===currentSection))currentSection=grouped[0]?.key||'';if(sel){sel.innerHTML=grouped.length?grouped.map(x=>`<option value="${esc(x.key)}">${esc(x.label)}</option>`).join(''):'<option value="">No hay años en Mi Horario</option>';sel.value=currentSection}const lap=document.getElementById('fce-lapso');if(lap)lap.value=currentLapso;const yr=document.getElementById('fce-school-year');if(yr&&!yr.value)yr.value=schoolYearText()}
   function open(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;syncSelectors();renderPreview();window.scrollTo({top:0,behavior:'smooth'})}
   function init(){try{return create()}catch(e){console.warn('EduGestión Formato Control de Estudio:',e);return false}}
   if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>40)clearInterval(tm)},250)}
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{syncSelectors();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))renderPreview()},100));
 })();
-/* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V3_END */
+/* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V4_END */
 
 /* ================================================================
-   EduGestión · PLAN DE EVALUACIÓN PARA ALUMNOS · V2.6
+   EduGestión · PLAN DE EVALUACIÓN PARA ALUMNOS · V2.9
    Documento separado del Formato Control de Estudio.
    Gemini propone: nombre de evaluación + cómo se evaluará + % + fechas.
    ================================================================ */
@@ -15249,6 +15340,17 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const toast=(m,t='success')=>{ if(typeof mostrarToast==='function')mostrarToast(m,t,'Plan para alumnos'); else alert(m); };
   const teacherKey=()=>String(window.profesorActual?.id||window.profesorActual?.usuario||'local').replace(/[^a-z0-9_-]/gi,'_');
   const storeKey=()=>STORE_PREFIX+teacherKey();
+  const WEEKLY_PREFIX='edugestion_weekly_planning_v1_';
+  const weeklyKey=()=>WEEKLY_PREFIX+String(window.profesorActual?.id||window.profesorActual?.usuario||'docente');
+  const weeklyState=()=>readJSON(weeklyKey(),{lapsos:{'1':{},'2':{},'3':{}},start:'2026-09-21',end:'2027-07-31'});
+  const academicNum=v=>Number(String(v||'').match(/\d+/)?.[0]||0);
+  const sameGrade=(a,b)=>academicNum(a)&&academicNum(a)===academicNum(b);
+  const dayIdx={domingo:0,lunes:1,martes:2,miercoles:3,miércoles:3,jueves:4,viernes:5,sabado:6,sábado:6};
+  const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  function sectionsForGrade(grado){const arr=(Array.isArray(window.horariosProfesor)?window.horariosProfesor:(typeof horariosProfesor!=='undefined'&&Array.isArray(horariosProfesor)?horariosProfesor:[])).filter(h=>sameGrade(h.ano,grado));return [...new Set(arr.map(h=>String(h.seccion||'').trim()).filter(Boolean))]}
+  function sectionTextForGrade(grado){const secs=sectionsForGrade(grado);return secs.length?secs.join(' y '):'A y B'}
+  function rangeForLapso(lapso){const idx=String(lapso).startsWith('2')?'2':String(lapso).startsWith('3')?'3':'1',cfg=weeklyState().lapsos?.[idx]||{};return {desde:cfg.start||(idx==='1'?'2026-09-21':''),hasta:cfg.end||(idx==='1'?'2026-12-15':'')}}
+  function classDatesForGrade(grado,desde,hasta){if(!desde||!hasta)return '';const hs=(Array.isArray(window.horariosProfesor)?window.horariosProfesor:(typeof horariosProfesor!=='undefined'&&Array.isArray(horariosProfesor)?horariosProfesor:[])).filter(h=>sameGrade(h.ano,grado)),a=new Date(desde+'T12:00:00'),b=new Date(hasta+'T12:00:00');if(!hs.length||Number.isNaN(a.getTime())||Number.isNaN(b.getTime()))return '';const by={};for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){const dow=d.getDay();hs.filter(h=>(dayIdx[String(h.dia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim()]??-1)===dow).forEach(h=>{const sec=String(h.seccion||'').trim()||'Sin sección';(by[sec]||(by[sec]=[])).push(isoLocalDate(d))})}return Object.entries(by).map(([sec,dates])=>`Sección ${sec}: ${dates.join(', ')}`).join('\n')}
 
   function styles(){
     if($(STYLE_ID))return;
@@ -15276,16 +15378,32 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function selectedTopics(){return readJSON(TOPICS_KEY,[])}
   function assignedTopics(grado,lapso){
     const data=window.EDUGESTION_CEF_DATA||{},assign=readJSON(ASSIGN_KEY,{}),rows=Array.isArray(data[grado])?data[grado]:[];
-    return rows.filter(x=>{const unique=topicKey(grado,x),legacy=legacyTopicKey(grado,x.tema),same=rows.filter(y=>norm(y.tema)===norm(x.tema));const value=Object.prototype.hasOwnProperty.call(assign,unique)?(assign[unique]||''):(same.length===1?(assign[legacy]||''):'');return value===lapso}).map(x=>({...x,grado,fuente:'Cuadernillo Curricular MPPE · Educación Física',agregadoEn:new Date().toISOString()}));
+    const order=x=>{const t=norm(x?.tema||'').toLowerCase(),p=String(x?.pagina||'');if(t.includes('educación física como base de salud integral')||t.includes('educacion fisica como base de salud integral'))return 10;if(t.includes('salud y desarrollo integral del ser humano'))return 20;if(t.includes('movimiento humano como fuente de salud y vida')&&p==='22')return 30;if(t.includes('habilidades motrices como principio'))return 40;if((t.includes('hábitos, habilidades, destrezas, actitud y aptitud')||t.includes('habitos, habilidades, destrezas, actitud y aptitud'))&&p==='22')return 50;if(t.includes('variables sociales para una vida saludable')&&p==='22')return 60;return 1000+Number(p||999)};
+    let found=rows.filter(x=>{const unique=topicKey(grado,x),legacy=legacyTopicKey(grado,x.tema),same=rows.filter(y=>norm(y.tema)===norm(x.tema));const value=Object.prototype.hasOwnProperty.call(assign,unique)?(assign[unique]||''):(same.length===1?(assign[legacy]||''):'');return value===lapso}).sort((a,b)=>order(a)-order(b));
+    if(lapso==='1er Lapso'&&/1er\s+año/i.test(grado)&&found.length!==6){
+      const specs=[
+        ['La Educación Física como base de salud integral',21],
+        ['Salud y desarrollo integral del ser humano',22],
+        ['El movimiento humano como fuente de salud y vida',22],
+        ['Habilidades motrices como principio de la práctica de actividad física',22],
+        ['Hábitos, habilidades, destrezas, actitud y aptitud para el trabajo físico',22],
+        ['Variables sociales para una vida saludable',22],
+      ];
+      const canonical=specs.map(([tema,pagina])=>rows.find(x=>norm(x.tema)===norm(tema)&&Number(x.pagina)===pagina)).filter(Boolean);
+      if(canonical.length===6)found=canonical;
+    }
+    return found.map(x=>({...x,grado,fuente:'Cuadernillo Curricular MPPE · Educación Física',agregadoEn:new Date().toISOString()}));
   }
   function loadTopicsFromLapso(){
     const grado=$('pea-grade')?.value||'',lapso=$('pev-lapso')?.value||$('pea-lapso')?.value||'1er Lapso';
     const topics=assignedTopics(grado,lapso);
     if(!topics.length)return toast(`No hay temas de ${grado} asignados al ${lapso} en Panel por lapso.`,'warning');
     writeJSON(TOPICS_KEY,topics);
-    $('pev-seccion') && ($('pev-seccion').placeholder='Ej.: A y B');
+    const rango=rangeForLapso(lapso),secs=sectionTextForGrade(grado);
+    if($('pev-seccion')){$('pev-seccion').placeholder='Ej.: A y B';$('pev-seccion').value=secs}
+    if($('pev-desde')&&rango.desde)$('pev-desde').value=rango.desde;if($('pev-hasta')&&rango.hasta)$('pev-hasta').value=rango.hasta;
     document.getElementById(TAB_ID)?.click();
-    setTimeout(()=>{syncHeaderFields();toast(`Se cargaron ${topics.length} temas del ${lapso}.`,'success')},80);
+    setTimeout(()=>{syncHeaderFields();const md=$('pea-desde-mirror'),mh=$('pea-hasta-mirror');if(md&&rango.desde)md.value=rango.desde;if(mh&&rango.hasta)mh.value=rango.hasta;toast(`Se cargaron ${topics.length} temas del ${lapso} para las secciones ${secs}.`,'success')},80);
   }
 
   function planStore(){return readJSON(storeKey(),{})}
@@ -15297,10 +15415,10 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     writeJSON(storeKey(),all);
   }
   function restoreMeta(){
-    const item=planStore()[currentPlanKey()]; if(!item)return;
-    if($('pev-seccion')&&!$('pev-seccion').value)$('pev-seccion').value=item.secciones||'';
-    if($('pev-desde')&&!$('pev-desde').value)$('pev-desde').value=item.desde||'';
-    if($('pev-hasta')&&!$('pev-hasta').value)$('pev-hasta').value=item.hasta||'';
+    const grado=$('pea-grade')?.value||'',lapso=$('pev-lapso')?.value||'1er Lapso',rango=rangeForLapso(lapso),item=planStore()[currentPlanKey()];
+    if($('pev-seccion')&&!$('pev-seccion').value)$('pev-seccion').value=item?.secciones||sectionTextForGrade(grado);
+    if($('pev-desde')&&!$('pev-desde').value)$('pev-desde').value=item?.desde||rango.desde||'';
+    if($('pev-hasta')&&!$('pev-hasta').value)$('pev-hasta').value=item?.hasta||rango.hasta||'';
   }
 
   function extractJson(text){
@@ -15357,13 +15475,16 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const desde=$('pev-desde')?.value||'',hasta=$('pev-hasta')?.value||'',secciones=norm($('pev-seccion')?.value||'A y B');
     if(!desde||!hasta)return toast('Coloca la fecha de inicio y la fecha de cierre del período.','warning');
     const bloques=topics.map((t,i)=>`${i+1}. ${t.tema}${t.tejido?` | Contenido: ${String(t.tejido).replace(/\s+/g,' ').slice(0,420)}`:''}${t.intencionalidad?` | Intencionalidad: ${String(t.intencionalidad).replace(/\s+/g,' ').slice(0,280)}`:''}`).join('\n');
-    const prompt=`Actúa como docente especialista en Educación Física de educación media venezolana. Diseña el PLAN DE EVALUACIÓN QUE SE ENTREGARÁ A LOS ALUMNOS EN EL SALÓN DE CLASE. Este documento es diferente del formato institucional que se entrega a Control de Estudio.\n\nDATOS\n- Área: ${window.profesorActual?.materia||'Educación Física'}\n- Año: ${grado}\n- Secciones que usan la misma planificación: ${secciones}\n- Lapso: ${lapso}\n- Período disponible: ${desde} hasta ${hasta}\n\nTEMAS CURRICULARES DEL LAPSO\n${bloques}\n\nINSTRUCCIONES OBLIGATORIAS\n1. Propón entre 3 y 5 evaluaciones claras, realistas y adecuadas a Educación Física.\n2. Para cada evaluación escribe SOLO: nombre de la evaluación, cómo se evaluará, porcentaje y fecha desde/hasta.\n3. "Cómo se evaluará" debe explicarse en lenguaje comprensible para el alumno e indicar de forma breve la actividad, técnica/instrumento y qué se observará o valorará.\n4. Combina cuando sea pertinente evaluaciones prácticas en cancha y evaluaciones teóricas o reflexivas en aula.\n5. Los porcentajes DEBEN sumar exactamente 100%.\n6. Las fechas deben estar dentro del período indicado. Como la misma planificación se usa para varias secciones, expresa cada evaluación como un rango desde/hasta; puede ser el mismo día en ambos campos si corresponde.\n7. No incluyas Tema Indispensable, Tema Generador, Referentes, Potencialidades, Énfasis curricular ni Intencionalidades Pedagógicas: esos pertenecen al formato de Control de Estudio, no al documento para alumnos.\n8. No inventes contenidos curriculares fuera de los temas proporcionados.\n\nDevuelve ÚNICAMENTE JSON válido, sin markdown, con esta estructura exacta:\n{"evaluaciones":[{"nombre":"","comoSeEvaluara":"","porcentaje":0,"fechaDesde":"YYYY-MM-DD","fechaHasta":"YYYY-MM-DD"}]}`;
+    const fechasClases=classDatesForGrade(grado,desde,hasta);
+    const superclases=lapso==='1er Lapso'?`\nSUPERCLASES PRÁCTICAS DEL LAPSO (son actividades, NO temas adicionales y NO deben crear evaluaciones extra)\n- Superclase 1: acondicionamiento físico general en gimnasio.\n- Superclase 2: ejercicios y circuito con pelotas en gimnasio.\n- Superclase 3: trabajo con ligas en gimnasio.\nIntegra estas tres superclases dentro de las evaluaciones correspondientes a habilidades motrices y hábitos/aptitudes para el trabajo físico.`:'';
+    const prompt=`Actúa como docente especialista en Educación Física de educación media venezolana. Diseña el PLAN DE EVALUACIÓN QUE SE ENTREGARÁ A LOS ALUMNOS EN EL SALÓN DE CLASE. Este documento es diferente del formato institucional que se entrega a Control de Estudio.\n\nDATOS\n- Área: ${window.profesorActual?.materia||'Educación Física'}\n- Año: ${grado}\n- Secciones que usan EXACTAMENTE la misma planificación: ${secciones}\n- Lapso: ${lapso}\n- Período completo del lapso: ${desde} hasta ${hasta}\n\nTEMAS CURRICULARES DEL LAPSO (deben mantenerse los 6, sin añadir ni eliminar)\n${bloques}${superclases}\n\nFECHAS REALES DE CLASE DISPONIBLES POR SECCIÓN\n${fechasClases||'Usa únicamente fechas dentro del período del lapso.'}\n\nINSTRUCCIONES OBLIGATORIAS\n1. Genera EXACTAMENTE 6 evaluaciones: una por cada uno de los 6 temas curriculares, respetando el mismo orden.\n2. Las 3 superclases de gimnasio se integran como evidencias/actividades prácticas dentro de evaluaciones existentes; NO son temas nuevos y NO generan filas adicionales.\n3. Para cada evaluación escribe SOLO: nombre de la evaluación, cómo se evaluará, porcentaje y fecha desde/hasta.\n4. "Cómo se evaluará" debe estar escrito para los alumnos e indicar brevemente actividad, técnica/instrumento y qué se valorará.\n5. Combina evaluación teórica/reflexiva en aula con desempeño práctico en cancha o gimnasio, según corresponda al tema.\n6. Los seis porcentajes DEBEN sumar exactamente 100%.\n7. Distribuye las 6 evaluaciones a lo largo de TODO el lapso, desde el 21/09/2026 hasta el 15/12/2026, sin concentrarlas todas al inicio.\n8. El rango fechaDesde/fechaHasta representa la aplicación de la MISMA evaluación en las dos secciones. Elige fechas reales de clase: fechaDesde será la primera aplicación entre las secciones y fechaHasta la última aplicación.\n9. No uses fechas fuera de ${desde} a ${hasta}.\n10. No incluyas Tema Indispensable, Tema Generador, Referentes, Potencialidades, Énfasis curricular ni Intencionalidades Pedagógicas: pertenecen al Formato Control de Estudio.\n11. No inventes temas fuera de los seis proporcionados.\n\nDevuelve ÚNICAMENTE JSON válido, sin markdown, con esta estructura exacta:\n{"evaluaciones":[{"nombre":"","comoSeEvaluara":"","porcentaje":0,"fechaDesde":"YYYY-MM-DD","fechaHasta":"YYYY-MM-DD"}]}`;
     busy=true;$('pea-loader')?.classList.add('show');const btn=$('pea-generate');if(btn)btn.disabled=true;
     try{
       const response=await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:prompt})});
       const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(data?.message||'No se pudo consultar Gemini.');
       const parsed=extractJson(data.answer),rows=(Array.isArray(parsed?.evaluaciones)?parsed.evaluaciones:[]).map(normalizeRow).filter(x=>x.nombre);
       if(!rows.length)throw new Error('Gemini no devolvió evaluaciones aplicables.');
+      if(topics.length===6&&rows.length!==6)throw new Error(`Gemini devolvió ${rows.length} evaluaciones. Para este lapso deben ser exactamente 6, una por cada tema. Vuelve a generarla.`);
       const sum=total(rows);if(Math.abs(sum-100)>.01)throw new Error(`La propuesta de Gemini suma ${sum}% y debe sumar 100%. Vuelve a generarla.`);
       saveRows(rows);renderRows(rows);toast(`Gemini preparó ${rows.length} evaluaciones con un total de 100%.`,'success');
     }catch(e){console.error('Plan alumnos Gemini:',e);toast(e.message||'No se pudo generar el plan.','error')}
@@ -15404,7 +15525,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const grade=$('pea-grade');const selected=selectedTopics();if(grade&&selected[0]?.grado&&[...grade.options].some(o=>o.value===selected[0].grado))grade.value=selected[0].grado;
 
     const card=document.createElement('div');card.id='pea-card';card.className='pea-card';card.innerHTML=`
-      <div class="pea-head"><div><h3><i class="fa-solid fa-users"></i> Plan de evaluación para entregar a los alumnos</h3><p>Gemini prepara un cuadro sencillo con el <b>nombre de cada evaluación</b>, <b>cómo se evaluará</b>, su <b>porcentaje</b> y la <b>fecha desde/hasta</b> porque la misma planificación puede aplicarse a varias secciones.</p></div><span class="pea-badge"><i class="fa-solid fa-graduation-cap"></i> Documento para el salón</span></div>
+      <div class="pea-head"><div><h3><i class="fa-solid fa-users"></i> Plan de evaluación para entregar a los alumnos</h3><p>Gemini prepara <b>6 evaluaciones, una por cada tema del 1.er lapso</b>, distribuidas entre el 21/09/2026 y el 15/12/2026. Las tres superclases de gimnasio se integran como actividades prácticas, y la misma planificación se aplica a ambas secciones.</p></div><span class="pea-badge"><i class="fa-solid fa-graduation-cap"></i> Documento para el salón</span></div>
       <div class="pea-distinction"><div class="pea-note"><strong><i class="fa-solid fa-users"></i> Para los alumnos</strong>Nombre de la evaluación · cómo se evaluará · porcentaje · fecha desde/hasta.</div><div class="pea-note control"><strong><i class="fa-solid fa-building-columns"></i> Para Control de Estudio</strong>Se mantiene separado en la pestaña <b>Formato Control</b> con el cuadro institucional: Tema Indispensable, Tema Generador, Referente Teórico Práctico, Potencialidades, Actividades, Énfasis curricular e Intencionalidades Pedagógicas.</div></div>
       <div class="pea-config"><label class="pea-field"><span>Año</span><select id="pea-grade-mirror">${gradeOptions()}</select></label><label class="pea-field"><span>Lapso</span><select id="pea-lapso">${LAPSOS.map(x=>`<option>${x}</option>`).join('')}</select></label><label class="pea-field"><span>Fecha inicial</span><input id="pea-desde-mirror" type="date"></label><label class="pea-field"><span>Fecha final</span><input id="pea-hasta-mirror" type="date"></label></div>
       <div class="pea-actions"><button type="button" class="pea-btn ai" id="pea-generate"><i class="fa-solid fa-wand-magic-sparkles"></i> Gemini: generar plan para alumnos</button><button type="button" class="pea-btn soft" id="pea-add"><i class="fa-solid fa-plus"></i> Agregar evaluación manual</button><button type="button" class="pea-btn green" id="pea-save"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button><button type="button" class="pea-btn primary" id="pea-print"><i class="fa-solid fa-print"></i> Vista previa / Imprimir</button><span class="pea-loader" id="pea-loader"><i class="fa-solid fa-circle-notch fa-spin"></i> Gemini está preparando el plan…</span></div>
@@ -15431,4 +15552,4 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function init(){if(enhance())return;let n=0;const tm=setInterval(()=>{n++;if(enhance()||n>40)clearInterval(tm)},250)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
-/* EDUGESTION_PLAN_EVALUACION_ALUMNOS_V25_END */
+/* EDUGESTION_PLAN_EVALUACION_ALUMNOS_V29_END */
