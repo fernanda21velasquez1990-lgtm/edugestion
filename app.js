@@ -14987,7 +14987,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_WEEKLY_PLANNING_V2_END */
 
 /* ================================================================
-   EduGestión · Formato oficial para Control de Estudio · V1
+   EduGestión · Formato oficial para Control de Estudio · V3
    Vista previa carta horizontal · 2 hojas · autollenado desde planificación
    ================================================================ */
 (() => {
@@ -15111,4 +15111,4 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>40)clearInterval(tm)},250)}
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{syncSelectors();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))renderPreview()},100));
 })();
-/* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V1_END */
+/* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V3_END */
