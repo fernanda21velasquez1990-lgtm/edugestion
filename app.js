@@ -15112,3 +15112,211 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{syncSelectors();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))renderPreview()},100));
 })();
 /* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V3_END */
+
+/* ================================================================
+   EduGestión · PLAN DE EVALUACIÓN PARA ALUMNOS · V2.5
+   Documento separado del Formato Control de Estudio.
+   Gemini propone: nombre de evaluación + cómo se evaluará + % + fechas.
+   ================================================================ */
+(() => {
+  const SECTION_ID='section-plan-evaluacion-ef';
+  const TAB_ID='tab-plan-evaluacion-ef';
+  const TOPICS_KEY='edugestion_plan_evaluacion_ef_temas';
+  const ASSIGN_KEY='edugestion_cuadernillo_ef_lapsos_v1';
+  const STORE_PREFIX='edugestion_plan_alumnos_v1_';
+  const STYLE_ID='style-plan-alumnos-v25';
+  const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
+  let busy=false;
+
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const norm=v=>String(v||'').trim().replace(/\s+/g,' ');
+  const topicKey=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(_){return f}};
+  const writeJSON=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const toast=(m,t='success')=>{ if(typeof mostrarToast==='function')mostrarToast(m,t,'Plan para alumnos'); else alert(m); };
+  const teacherKey=()=>String(window.profesorActual?.id||window.profesorActual?.usuario||'local').replace(/[^a-z0-9_-]/gi,'_');
+  const storeKey=()=>STORE_PREFIX+teacherKey();
+
+  function styles(){
+    if($(STYLE_ID))return;
+    const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      .pea-separator{margin:18px 0;border:0;border-top:1px solid var(--border-color,#dbe4ec)}
+      .pea-card{margin-top:18px;background:var(--card-bg,#fff);border:1px solid var(--border-color,#d7e3ed);border-radius:22px;padding:18px;box-shadow:0 8px 24px rgba(31,61,89,.05)}
+      .pea-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:14px}.pea-head h3{margin:0;color:var(--text-color,#1f3348);font-size:1.2rem}.pea-head p{margin:5px 0 0;color:#667d91;max-width:780px;line-height:1.5}.pea-badge{background:#ecfdf5;color:#087c59;border:1px solid #bfe8d7;border-radius:999px;padding:8px 11px;font-weight:900;font-size:.8rem;white-space:nowrap}
+      .pea-distinction{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 15px}.pea-note{border-radius:14px;padding:12px 13px;font-size:.86rem;line-height:1.45;border:1px solid #d6e5ef;background:#f6fbff;color:#35546e}.pea-note strong{display:block;margin-bottom:3px}.pea-note.control{background:#fff8eb;border-color:#f4dab0;color:#805514}
+      .pea-config{display:grid;grid-template-columns:1.2fr .9fr .9fr .9fr;gap:10px;margin-bottom:12px}.pea-field{display:flex;flex-direction:column;gap:6px}.pea-field span{font-size:.78rem;font-weight:900;color:#48647d;text-transform:uppercase;letter-spacing:.035em}.pea-field input,.pea-field select{border:1px solid #cad9e5;border-radius:11px;padding:10px 11px;background:var(--card-bg,#fff);color:var(--text-color,#24384c);font:inherit;font-weight:750;min-width:0}
+      .pea-actions{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.pea-btn{border:0;border-radius:11px;padding:10px 13px;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;gap:7px}.pea-btn.primary{background:#1769aa;color:white}.pea-btn.ai{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white}.pea-btn.soft{background:#edf5fb;color:#145d8d}.pea-btn.green{background:#e9f9f1;color:#087957}.pea-btn:disabled{opacity:.55;cursor:wait}
+      .pea-preview{border:1px solid #d9e4ec;border-radius:16px;overflow:hidden;background:#fff}.pea-preview-head{padding:13px 14px;background:#f4f8fb;border-bottom:1px solid #d9e4ec;display:flex;justify-content:space-between;gap:10px;align-items:center}.pea-preview-head strong{color:#233d54}.pea-total{font-weight:950;color:#334155}.pea-total.good{color:#047857}.pea-total.bad{color:#b45309}
+      .pea-table-wrap{overflow:auto}.pea-table{width:100%;border-collapse:collapse;min-width:780px}.pea-table th{background:#f8fafc;color:#4d647a;text-transform:uppercase;letter-spacing:.035em;font-size:.73rem;text-align:left;padding:10px;border-bottom:1px solid #dbe5ed}.pea-table td{padding:8px 9px;border-bottom:1px solid #edf1f4;vertical-align:top}.pea-table input,.pea-table textarea{width:100%;box-sizing:border-box;border:1px solid #d2dee8;border-radius:9px;padding:8px 9px;font:inherit;color:#263c50;background:#fff}.pea-table textarea{min-height:72px;resize:vertical}.pea-table input[type=number]{min-width:92px}.pea-remove{border:0;background:#fff0f0;color:#b42318;width:34px;height:34px;border-radius:9px;cursor:pointer}.pea-empty{padding:28px;text-align:center;color:#72869a}.pea-foot{padding:11px 13px;background:#fbfdff;color:#6b7f91;font-size:.82rem;line-height:1.45}.pea-loader{display:none;align-items:center;gap:8px;color:#5b4fc4;font-weight:850}.pea-loader.show{display:flex}
+      .pea-source-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}.pea-source-tools select{border:1px solid #cad9e5;border-radius:10px;padding:8px 10px;background:var(--card-bg,#fff);color:var(--text-color,#24384c);font-weight:800}
+      .dark-mode .pea-card,.edugestion-dark .pea-card{background:#172334;border-color:#34495d}.dark-mode .pea-preview,.edugestion-dark .pea-preview{background:#172334;border-color:#34495d}.dark-mode .pea-preview-head,.edugestion-dark .pea-preview-head{background:#1d2b3b;border-color:#34495d}.dark-mode .pea-table th,.edugestion-dark .pea-table th{background:#1d2b3b;color:#c9d6e2}.dark-mode .pea-table td,.edugestion-dark .pea-table td{border-color:#2d4255}.dark-mode .pea-table input,.dark-mode .pea-table textarea,.edugestion-dark .pea-table input,.edugestion-dark .pea-table textarea{background:#142131;color:#edf4fb;border-color:#3b5268}.dark-mode .pea-note,.edugestion-dark .pea-note{background:#1b2d3e;color:#c6d5e2;border-color:#36526a}.dark-mode .pea-note.control,.edugestion-dark .pea-note.control{background:#3a2d18;color:#ffe0a8;border-color:#65502d}
+      @media(max-width:850px){.pea-config{grid-template-columns:1fr 1fr}.pea-distinction{grid-template-columns:1fr}}@media(max-width:560px){.pea-config{grid-template-columns:1fr}.pea-btn{width:100%;justify-content:center}.pea-source-tools{align-items:stretch}.pea-source-tools select{width:100%}}
+    `;document.head.appendChild(st);
+  }
+
+  function gradeOptions(){
+    const data=window.EDUGESTION_CEF_DATA||{};
+    const keys=Object.keys(data).filter(k=>/año/i.test(k));
+    return (keys.length?keys:Object.keys(data)).map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('');
+  }
+
+  function selectedTopics(){return readJSON(TOPICS_KEY,[])}
+  function assignedTopics(grado,lapso){
+    const data=window.EDUGESTION_CEF_DATA||{},assign=readJSON(ASSIGN_KEY,{}),rows=Array.isArray(data[grado])?data[grado]:[];
+    return rows.filter(x=>assign[topicKey(grado,x.tema)]===lapso).map(x=>({...x,grado,fuente:'Cuadernillo Curricular MPPE · Educación Física',agregadoEn:new Date().toISOString()}));
+  }
+  function loadTopicsFromLapso(){
+    const grado=$('pea-grade')?.value||'',lapso=$('pev-lapso')?.value||$('pea-lapso')?.value||'1er Lapso';
+    const topics=assignedTopics(grado,lapso);
+    if(!topics.length)return toast(`No hay temas de ${grado} asignados al ${lapso} en Panel por lapso.`,'warning');
+    writeJSON(TOPICS_KEY,topics);
+    $('pev-seccion') && ($('pev-seccion').placeholder='Ej.: A y B');
+    document.getElementById(TAB_ID)?.click();
+    setTimeout(()=>{syncHeaderFields();toast(`Se cargaron ${topics.length} temas del ${lapso}.`,'success')},80);
+  }
+
+  function planStore(){return readJSON(storeKey(),{})}
+  function currentPlanKey(){const grado=$('pea-grade')?.value||'',lapso=$('pev-lapso')?.value||'1er Lapso';return `${grado}|||${lapso}`}
+  function currentRows(){return planStore()[currentPlanKey()]?.rows||[]}
+  function saveRows(rows){
+    const all=planStore(),key=currentPlanKey();
+    all[key]={grado:$('pea-grade')?.value||'',lapso:$('pev-lapso')?.value||'',secciones:$('pev-seccion')?.value||'',desde:$('pev-desde')?.value||'',hasta:$('pev-hasta')?.value||'',rows,updatedAt:new Date().toISOString()};
+    writeJSON(storeKey(),all);
+  }
+  function restoreMeta(){
+    const item=planStore()[currentPlanKey()]; if(!item)return;
+    if($('pev-seccion')&&!$('pev-seccion').value)$('pev-seccion').value=item.secciones||'';
+    if($('pev-desde')&&!$('pev-desde').value)$('pev-desde').value=item.desde||'';
+    if($('pev-hasta')&&!$('pev-hasta').value)$('pev-hasta').value=item.hasta||'';
+  }
+
+  function extractJson(text){
+    const cleaned=String(text||'').replace(/```json/gi,'').replace(/```/g,'').trim();
+    try{return JSON.parse(cleaned)}catch(_){}
+    const a=cleaned.indexOf('{'),b=cleaned.lastIndexOf('}');if(a>=0&&b>a){try{return JSON.parse(cleaned.slice(a,b+1))}catch(_){}}
+    throw new Error('Gemini devolvió un formato que no se pudo aplicar automáticamente.');
+  }
+  function iso(v){return /^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):''}
+  function normalizeRow(r={}){return {nombre:norm(r.nombre||r.evaluacion||r.actividad||'Evaluación'),como:norm(r.comoSeEvaluara||r.como||r.metodo||''),porcentaje:Math.max(0,Math.min(100,Number(r.porcentaje||r.ponderacion||0)||0)),fechaDesde:iso(r.fechaDesde||r.desde),fechaHasta:iso(r.fechaHasta||r.hasta||r.fechaDesde||r.desde)}}
+
+  function collectRowsFromDom(){
+    return [...document.querySelectorAll('#pea-body tr[data-row]')].map(tr=>({
+      nombre:tr.querySelector('[data-f="nombre"]')?.value.trim()||'',
+      como:tr.querySelector('[data-f="como"]')?.value.trim()||'',
+      porcentaje:Number(tr.querySelector('[data-f="porcentaje"]')?.value||0),
+      fechaDesde:tr.querySelector('[data-f="fechaDesde"]')?.value||'',
+      fechaHasta:tr.querySelector('[data-f="fechaHasta"]')?.value||''
+    })).filter(x=>x.nombre||x.como||x.porcentaje||x.fechaDesde||x.fechaHasta);
+  }
+  function total(rows){return rows.reduce((s,x)=>s+(Number(x.porcentaje)||0),0)}
+  function renderRows(rows=currentRows()){
+    const body=$('pea-body'),empty=$('pea-empty');if(!body)return;
+    body.innerHTML='';
+    if(!rows.length){if(empty)empty.style.display='block';updateTotal([]);return}else if(empty)empty.style.display='none';
+    rows.forEach((r,i)=>{r=normalizeRow(r);const tr=document.createElement('tr');tr.dataset.row=i;tr.innerHTML=`
+      <td><input data-f="nombre" value="${esc(r.nombre)}" placeholder="Ej.: Circuito de habilidades motrices"></td>
+      <td><textarea data-f="como" placeholder="Explica de forma clara cómo se evaluará">${esc(r.como)}</textarea></td>
+      <td><input data-f="porcentaje" type="number" min="0" max="100" step="1" value="${esc(r.porcentaje||'')}"></td>
+      <td><input data-f="fechaDesde" type="date" value="${esc(r.fechaDesde)}"><small style="display:block;color:#7a8d9e;margin:4px 0 2px">hasta</small><input data-f="fechaHasta" type="date" value="${esc(r.fechaHasta)}"></td>
+      <td><button type="button" class="pea-remove" title="Eliminar evaluación"><i class="fa-solid fa-trash"></i></button></td>`;
+      tr.querySelector('.pea-remove')?.addEventListener('click',()=>{const arr=collectRowsFromDom();arr.splice(i,1);saveRows(arr);renderRows(arr)});
+      tr.querySelectorAll('input,textarea').forEach(el=>el.addEventListener('input',()=>{const arr=collectRowsFromDom();saveRows(arr);updateTotal(arr)}));
+      body.appendChild(tr);
+    });
+    updateTotal(rows);
+  }
+  function updateTotal(rows=collectRowsFromDom()){
+    const n=Math.round(total(rows)*100)/100,el=$('pea-total');if(!el)return;el.textContent=`Total: ${n}%`;el.className=`pea-total ${Math.abs(n-100)<.01?'good':'bad'}`;
+  }
+
+  function addManual(){const arr=collectRowsFromDom();arr.push({nombre:'',como:'',porcentaje:0,fechaDesde:$('pev-desde')?.value||'',fechaHasta:$('pev-hasta')?.value||''});saveRows(arr);renderRows(arr);setTimeout(()=>document.querySelector('#pea-body tr:last-child [data-f="nombre"]')?.focus(),40)}
+
+  async function generate(){
+    if(busy)return;
+    let topics=selectedTopics();
+    const grado=$('pea-grade')?.value||'';
+    const lapso=$('pev-lapso')?.value||'1er Lapso';
+    if(!topics.length||!topics.some(t=>norm(t.grado)===norm(grado))){
+      const automatic=assignedTopics(grado,lapso);if(automatic.length){topics=automatic;writeJSON(TOPICS_KEY,topics);document.getElementById(TAB_ID)?.click();}
+    }
+    topics=topics.filter(t=>!t.grado||norm(t.grado)===norm(grado));
+    if(!topics.length)return toast('Primero asigna temas al lapso o añádelos desde el Cuadernillo.','warning');
+    const desde=$('pev-desde')?.value||'',hasta=$('pev-hasta')?.value||'',secciones=norm($('pev-seccion')?.value||'A y B');
+    if(!desde||!hasta)return toast('Coloca la fecha de inicio y la fecha de cierre del período.','warning');
+    const bloques=topics.map((t,i)=>`${i+1}. ${t.tema}${t.tejido?` | Contenido: ${String(t.tejido).replace(/\s+/g,' ').slice(0,420)}`:''}${t.intencionalidad?` | Intencionalidad: ${String(t.intencionalidad).replace(/\s+/g,' ').slice(0,280)}`:''}`).join('\n');
+    const prompt=`Actúa como docente especialista en Educación Física de educación media venezolana. Diseña el PLAN DE EVALUACIÓN QUE SE ENTREGARÁ A LOS ALUMNOS EN EL SALÓN DE CLASE. Este documento es diferente del formato institucional que se entrega a Control de Estudio.\n\nDATOS\n- Área: ${window.profesorActual?.materia||'Educación Física'}\n- Año: ${grado}\n- Secciones que usan la misma planificación: ${secciones}\n- Lapso: ${lapso}\n- Período disponible: ${desde} hasta ${hasta}\n\nTEMAS CURRICULARES DEL LAPSO\n${bloques}\n\nINSTRUCCIONES OBLIGATORIAS\n1. Propón entre 3 y 5 evaluaciones claras, realistas y adecuadas a Educación Física.\n2. Para cada evaluación escribe SOLO: nombre de la evaluación, cómo se evaluará, porcentaje y fecha desde/hasta.\n3. "Cómo se evaluará" debe explicarse en lenguaje comprensible para el alumno e indicar de forma breve la actividad, técnica/instrumento y qué se observará o valorará.\n4. Combina cuando sea pertinente evaluaciones prácticas en cancha y evaluaciones teóricas o reflexivas en aula.\n5. Los porcentajes DEBEN sumar exactamente 100%.\n6. Las fechas deben estar dentro del período indicado. Como la misma planificación se usa para varias secciones, expresa cada evaluación como un rango desde/hasta; puede ser el mismo día en ambos campos si corresponde.\n7. No incluyas Tema Indispensable, Tema Generador, Referentes, Potencialidades, Énfasis curricular ni Intencionalidades Pedagógicas: esos pertenecen al formato de Control de Estudio, no al documento para alumnos.\n8. No inventes contenidos curriculares fuera de los temas proporcionados.\n\nDevuelve ÚNICAMENTE JSON válido, sin markdown, con esta estructura exacta:\n{"evaluaciones":[{"nombre":"","comoSeEvaluara":"","porcentaje":0,"fechaDesde":"YYYY-MM-DD","fechaHasta":"YYYY-MM-DD"}]}`;
+    busy=true;$('pea-loader')?.classList.add('show');const btn=$('pea-generate');if(btn)btn.disabled=true;
+    try{
+      const response=await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:prompt})});
+      const data=await response.json().catch(()=>({}));if(!response.ok||!data?.ok)throw new Error(data?.message||'No se pudo consultar Gemini.');
+      const parsed=extractJson(data.answer),rows=(Array.isArray(parsed?.evaluaciones)?parsed.evaluaciones:[]).map(normalizeRow).filter(x=>x.nombre);
+      if(!rows.length)throw new Error('Gemini no devolvió evaluaciones aplicables.');
+      const sum=total(rows);if(Math.abs(sum-100)>.01)throw new Error(`La propuesta de Gemini suma ${sum}% y debe sumar 100%. Vuelve a generarla.`);
+      saveRows(rows);renderRows(rows);toast(`Gemini preparó ${rows.length} evaluaciones con un total de 100%.`,'success');
+    }catch(e){console.error('Plan alumnos Gemini:',e);toast(e.message||'No se pudo generar el plan.','error')}
+    finally{busy=false;$('pea-loader')?.classList.remove('show');if(btn)btn.disabled=false}
+  }
+
+  function fmtDate(v){if(!v)return 'Por definir';const d=new Date(`${v}T12:00:00`);return Number.isNaN(d.getTime())?v:d.toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'})}
+  function printPreview(){
+    const rows=collectRowsFromDom();if(!rows.length)return toast('No hay evaluaciones en la vista previa.','warning');
+    const sum=total(rows);if(Math.abs(sum-100)>.01&&!confirm(`La ponderación suma ${sum}%. ¿Deseas abrir la vista de impresión de todos modos?`))return;
+    saveRows(rows);
+    const inst=$('input-institucion')?.value||'Institución educativa';
+    const docente=window.profesorActual?.nombre||'Docente';
+    const materia=window.profesorActual?.materia||'Educación Física';
+    const grado=$('pea-grade')?.value||'';const lapso=$('pev-lapso')?.value||'';const secs=$('pev-seccion')?.value||'';
+    const desde=$('pev-desde')?.value||'',hasta=$('pev-hasta')?.value||'';
+    const body=rows.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.nombre)}</b></td><td>${esc(r.como)}</td><td class="pct">${esc(r.porcentaje)}%</td><td>${esc(fmtDate(r.fechaDesde))}<br><span>hasta</span><br>${esc(fmtDate(r.fechaHasta))}</td></tr>`).join('');
+    const w=window.open('','_blank','width=1100,height=800');if(!w)return toast('El navegador bloqueó la vista previa de impresión.','warning');
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Plan de evaluación - ${esc(grado)}</title><style>@page{size:letter landscape;margin:12mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#17202a;margin:0;background:#eef2f5}.sheet{max-width:1050px;margin:22px auto;background:#fff;padding:26px 30px;box-shadow:0 5px 24px #0002}.actions{text-align:right;margin-bottom:14px}.actions button{padding:9px 14px;border:0;border-radius:8px;background:#1769aa;color:#fff;font-weight:700;cursor:pointer}.head{text-align:center;border-bottom:2px solid #1d3348;padding-bottom:12px}.head h1{font-size:20px;margin:3px 0}.head h2{font-size:15px;margin:5px 0;color:#425b70}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 16px;margin:14px 0;font-size:12px}.meta b{color:#243d53}table{width:100%;border-collapse:collapse;font-size:11.5px}th,td{border:1px solid #7a8792;padding:8px;vertical-align:top}th{background:#eaf1f6;text-align:center}.pct{text-align:center;font-weight:700;font-size:14px}td span{font-size:9px;color:#64748b}.foot{margin-top:16px;display:flex;justify-content:space-between;font-size:11px}.note{margin-top:12px;font-size:10px;color:#64748b}@media print{body{background:#fff}.sheet{box-shadow:none;margin:0;max-width:none;padding:0}.actions{display:none}}</style></head><body><main class="sheet"><div class="actions"><button onclick="window.print()">Imprimir / Guardar PDF</button></div><div class="head"><div style="font-size:12px;font-weight:700">${esc(inst)}</div><h1>PLAN DE EVALUACIÓN PARA LOS ALUMNOS</h1><h2>${esc(materia)}</h2></div><div class="meta"><div><b>Docente:</b> ${esc(docente)}</div><div><b>Año:</b> ${esc(grado)}</div><div><b>Secciones:</b> ${esc(secs||'Por definir')}</div><div><b>Lapso:</b> ${esc(lapso)}</div><div><b>Desde:</b> ${esc(fmtDate(desde))}</div><div><b>Hasta:</b> ${esc(fmtDate(hasta))}</div></div><table><thead><tr><th style="width:4%">N°</th><th style="width:23%">Nombre de la evaluación</th><th>Cómo se evaluará</th><th style="width:10%">Porcentaje</th><th style="width:16%">Fecha</th></tr></thead><tbody>${body}<tr><td colspan="3" style="text-align:right;font-weight:700">TOTAL</td><td class="pct">${sum}%</td><td></td></tr></tbody></table><div class="note">Este documento informa a los alumnos las actividades evaluativas del lapso. Es independiente del formato institucional de planificación entregado a Control de Estudio.</div><div class="foot"><span>Firma del docente: __________________________</span><span>Fecha de entrega: __________________</span></div></main></body></html>`);w.document.close();w.focus();
+  }
+
+  function syncHeaderFields(){
+    const lap=$('pea-lapso');if(lap&&$('pev-lapso'))lap.value=$('pev-lapso').value;
+    restoreMeta();renderRows(currentRows());
+  }
+
+  function enhance(){
+    const sec=$(SECTION_ID);if(!sec||$('pea-card'))return false;styles();
+    const hero=sec.querySelector('.pev-hero p');if(hero)hero.innerHTML='Aquí trabajas el <b>plan de evaluación que se entrega a los alumnos</b>. Es un documento distinto del <b>Formato Control</b>, que conserva el cuadro institucional para Control de Estudio.';
+    const seccionLabel=$('pev-seccion')?.closest('.pev-field')?.querySelector('label');if(seccionLabel)seccionLabel.textContent='Secciones (misma planificación)';if($('pev-seccion'))$('pev-seccion').placeholder='Ej.: A y B';
+    const gen=$('pev-generate');if(gen)gen.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> Generar borrador técnico para el docente';
+    const summary=sec.querySelector('.pev-summary');if(summary)summary.innerHTML='<b>Borrador técnico interno:</b> Gemini puede proponer técnicas, instrumentos y criterios detallados para tu uso docente. El cuadro simplificado que entregarás a los alumnos aparece más abajo.';
+
+    const left=sec.querySelector('.pev-grid .pev-card');if(left){
+      const tools=document.createElement('div');tools.className='pea-source-tools';tools.innerHTML=`<select id="pea-grade" aria-label="Año para cargar temas">${gradeOptions()}</select><button type="button" class="pev-btn soft" id="pea-load-lapso"><i class="fa-solid fa-layer-group"></i> Cargar temas del lapso</button>`;
+      left.querySelector('.pev-actions')?.prepend(tools);
+    }
+    const grade=$('pea-grade');const selected=selectedTopics();if(grade&&selected[0]?.grado&&[...grade.options].some(o=>o.value===selected[0].grado))grade.value=selected[0].grado;
+
+    const card=document.createElement('div');card.id='pea-card';card.className='pea-card';card.innerHTML=`
+      <div class="pea-head"><div><h3><i class="fa-solid fa-users"></i> Plan de evaluación para entregar a los alumnos</h3><p>Gemini prepara un cuadro sencillo con el <b>nombre de cada evaluación</b>, <b>cómo se evaluará</b>, su <b>porcentaje</b> y la <b>fecha desde/hasta</b> porque la misma planificación puede aplicarse a varias secciones.</p></div><span class="pea-badge"><i class="fa-solid fa-graduation-cap"></i> Documento para el salón</span></div>
+      <div class="pea-distinction"><div class="pea-note"><strong><i class="fa-solid fa-users"></i> Para los alumnos</strong>Nombre de la evaluación · cómo se evaluará · porcentaje · fecha desde/hasta.</div><div class="pea-note control"><strong><i class="fa-solid fa-building-columns"></i> Para Control de Estudio</strong>Se mantiene separado en la pestaña <b>Formato Control</b> con el cuadro institucional: Tema Indispensable, Tema Generador, Referente Teórico Práctico, Potencialidades, Actividades, Énfasis curricular e Intencionalidades Pedagógicas.</div></div>
+      <div class="pea-config"><label class="pea-field"><span>Año</span><select id="pea-grade-mirror">${gradeOptions()}</select></label><label class="pea-field"><span>Lapso</span><select id="pea-lapso">${LAPSOS.map(x=>`<option>${x}</option>`).join('')}</select></label><label class="pea-field"><span>Fecha inicial</span><input id="pea-desde-mirror" type="date"></label><label class="pea-field"><span>Fecha final</span><input id="pea-hasta-mirror" type="date"></label></div>
+      <div class="pea-actions"><button type="button" class="pea-btn ai" id="pea-generate"><i class="fa-solid fa-wand-magic-sparkles"></i> Gemini: generar plan para alumnos</button><button type="button" class="pea-btn soft" id="pea-add"><i class="fa-solid fa-plus"></i> Agregar evaluación manual</button><button type="button" class="pea-btn green" id="pea-save"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button><button type="button" class="pea-btn primary" id="pea-print"><i class="fa-solid fa-print"></i> Vista previa / Imprimir</button><span class="pea-loader" id="pea-loader"><i class="fa-solid fa-circle-notch fa-spin"></i> Gemini está preparando el plan…</span></div>
+      <div class="pea-preview"><div class="pea-preview-head"><strong>Vista previa editable</strong><span class="pea-total" id="pea-total">Total: 0%</span></div><div class="pea-empty" id="pea-empty"><i class="fa-solid fa-list-check"></i><p>Todavía no hay evaluaciones. Puedes agregarlas manualmente o pedir a Gemini que prepare la propuesta completa.</p></div><div class="pea-table-wrap"><table class="pea-table"><thead><tr><th>Nombre de la evaluación</th><th>Cómo se evaluará</th><th>Porcentaje</th><th>Fecha desde / hasta</th><th></th></tr></thead><tbody id="pea-body"></tbody></table></div><div class="pea-foot">Puedes modificar cualquier celda antes de imprimir. Para entregar a los alumnos, la suma de porcentajes debe quedar en <b>100%</b>.</div></div>`;
+    sec.appendChild(card);
+
+    // Sincroniza los nuevos selectores con los campos ya existentes del módulo.
+    const mirrorGrade=$('pea-grade-mirror');if(mirrorGrade&&grade)mirrorGrade.value=grade.value;
+    const mirrorLap=$('pea-lapso');if(mirrorLap&&$('pev-lapso'))mirrorLap.value=$('pev-lapso').value;
+    const mirrorDesde=$('pea-desde-mirror'),mirrorHasta=$('pea-hasta-mirror');if(mirrorDesde&&$('pev-desde'))mirrorDesde.value=$('pev-desde').value;if(mirrorHasta&&$('pev-hasta'))mirrorHasta.value=$('pev-hasta').value;
+    mirrorGrade?.addEventListener('change',()=>{if(grade)grade.value=mirrorGrade.value;syncHeaderFields()});
+    mirrorLap?.addEventListener('change',()=>{if($('pev-lapso'))$('pev-lapso').value=mirrorLap.value;syncHeaderFields()});
+    mirrorDesde?.addEventListener('change',()=>{if($('pev-desde'))$('pev-desde').value=mirrorDesde.value;saveRows(collectRowsFromDom())});
+    mirrorHasta?.addEventListener('change',()=>{if($('pev-hasta'))$('pev-hasta').value=mirrorHasta.value;saveRows(collectRowsFromDom())});
+    $('pev-lapso')?.addEventListener('change',()=>{if(mirrorLap)mirrorLap.value=$('pev-lapso').value;syncHeaderFields()});
+    $('pev-desde')?.addEventListener('change',()=>{if(mirrorDesde)mirrorDesde.value=$('pev-desde').value});
+    $('pev-hasta')?.addEventListener('change',()=>{if(mirrorHasta)mirrorHasta.value=$('pev-hasta').value});
+    $('pea-load-lapso')?.addEventListener('click',()=>{if(mirrorGrade&&grade)mirrorGrade.value=grade.value;loadTopicsFromLapso()});
+    $('pea-generate')?.addEventListener('click',generate);$('pea-add')?.addEventListener('click',addManual);$('pea-save')?.addEventListener('click',()=>{const rows=collectRowsFromDom();saveRows(rows);updateTotal(rows);toast('Plan para alumnos guardado en este equipo.','success')});$('pea-print')?.addEventListener('click',printPreview);
+    restoreMeta();renderRows(currentRows());
+    return true;
+  }
+
+  function init(){if(enhance())return;let n=0;const tm=setInterval(()=>{n++;if(enhance()||n>40)clearInterval(tm)},250)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+/* EDUGESTION_PLAN_EVALUACION_ALUMNOS_V25_END */
