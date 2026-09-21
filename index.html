@@ -236,6 +236,10 @@
        Planificaci&oacute;n
       </span>
      </button>
+     <button aria-selected="false" class="nav-item" data-description="Cruza tu horario, calendario escolar y plan de evaluaci&oacute;n para organizar cada semana por secci&oacute;n." data-title="Planificaci&oacute;n semanal" id="tab-plan-semanal" type="button">
+      <i class="fa-solid fa-calendar-week"></i>
+      <span>Plan semanal</span>
+     </button>
      <button aria-selected="false" class="nav-item" data-description="Genera documentos y notificaciones para cada situaci&oacute;n escolar." data-title="Gesti&oacute;n de actas" id="tab-actas" type="button">
       <i class="fa-solid fa-file-signature">
       </i>
@@ -629,6 +633,7 @@
         <div><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Duraci&oacute;n</label><select id="plan-ia-duracion" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold"><option>45 minutos</option><option selected>60 minutos</option><option>90 minutos</option><option>2 horas</option></select></div>
         <div class="md:col-span-2"><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Objetivo</label><textarea id="plan-ia-objetivo" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold min-h-[88px]" placeholder="Ej: Fortalecer la coordinaci&oacute;n motriz mediante actividades din&aacute;micas."></textarea></div>
         <div><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Tipo de actividad</label><select id="plan-ia-tipo" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold"><option>Clase completa</option><option>Actividad pr&aacute;ctica</option><option>Actividad grupal</option><option>Evaluaci&oacute;n formativa</option><option>Proyecto breve</option></select></div>
+        <div class="md:col-span-2"><label class="block text-xs font-black text-gray-600 uppercase tracking-wide mb-1">Estrategias metodol&oacute;gicas</label><input id="plan-ia-estrategias" class="w-full px-3 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold" placeholder="Ej: demostraci&oacute;n guiada, estaciones, trabajo cooperativo…"></div>
        </div>
        <div class="mt-5 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <p class="text-xs text-gray-400"><i class="fa-solid fa-circle-info mr-1"></i> La respuesta se abrir&aacute; en Asistente IA y podr&aacute;s copiarla o adaptarla.</p>
@@ -797,6 +802,97 @@
         </div>
        </div>
       </div>
+     </section>
+     <section class="hidden weekly-planning-module" id="section-plan-semanal">
+      <header class="weekly-planning-hero">
+       <div>
+        <span class="weekly-planning-eyebrow"><i class="fa-solid fa-calendar-week"></i> Horario + calendario + evaluaci&oacute;n + IA</span>
+        <h2>Planificaci&oacute;n semanal por secci&oacute;n</h2>
+        <p>Genera las fechas reales de clase desde tu horario, diferencia aula y cancha, vincula evaluaciones y prepara cada semana automáticamente con Gemini.</p>
+       </div>
+       <div class="weekly-planning-ai-status"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Gemini integrado</span></div>
+      </header>
+
+      <div class="weekly-config-card">
+       <div class="weekly-config-heading">
+        <div><span class="weekly-icon"><i class="fa-solid fa-school"></i></span><div><strong>Configuración del año escolar</strong><small>Estas fechas delimitan el calendario de clases generado desde el horario docente.</small></div></div>
+        <button id="weekly-regenerate" type="button"><i class="fa-solid fa-arrows-rotate"></i> Actualizar desde mi horario</button>
+       </div>
+       <div class="weekly-config-grid">
+        <label><span>Inicio del año escolar</span><input id="weekly-school-start" type="date" value="2026-09-16"></label>
+        <label><span>Fin del año escolar</span><input id="weekly-school-end" type="date" value="2027-07-31"></label>
+        <label><span>Sección</span><select id="weekly-section-select"><option value="">Cargando secciones…</option></select></label>
+        <label class="weekly-auto-ai"><span>IA automática</span><span class="weekly-switch-row"><input id="weekly-auto-ai" type="checkbox" checked><small>Generar la semana con Gemini si está vacía</small></span></label>
+       </div>
+       <div id="weekly-schedule-map" class="weekly-schedule-map"></div>
+      </div>
+
+      <div class="weekly-lapso-card">
+       <div class="weekly-lapso-heading">
+        <div><span class="weekly-icon weekly-icon--lapso"><i class="fa-solid fa-layer-group"></i></span><div><strong>Organización por lapsos</strong><small>Define las fechas reales de cada lapso. EduGestión calculará automáticamente las clases disponibles, aula, cancha, evaluaciones y clases pedagógicas restantes.</small></div></div>
+        <span class="weekly-sequence-badge"><i class="fa-solid fa-arrow-trend-up"></i> Secuencia pedagógica activa</span>
+       </div>
+       <div class="weekly-lapso-grid">
+        <article class="weekly-lapso-panel" data-lapso-card="1">
+         <div class="weekly-lapso-panel__title"><div><span>1</span><strong>1er Lapso</strong></div><small id="weekly-lapso1-range">Configura las fechas</small></div>
+         <div class="weekly-lapso-dates"><label><span>Inicio</span><input id="weekly-lapso1-start" type="date"></label><label><span>Fin</span><input id="weekly-lapso1-end" type="date"></label></div>
+         <div class="weekly-lapso-metrics" id="weekly-lapso1-stats"></div>
+        </article>
+        <article class="weekly-lapso-panel" data-lapso-card="2">
+         <div class="weekly-lapso-panel__title"><div><span>2</span><strong>2do Lapso</strong></div><small id="weekly-lapso2-range">Configura las fechas</small></div>
+         <div class="weekly-lapso-dates"><label><span>Inicio</span><input id="weekly-lapso2-start" type="date"></label><label><span>Fin</span><input id="weekly-lapso2-end" type="date"></label></div>
+         <div class="weekly-lapso-metrics" id="weekly-lapso2-stats"></div>
+        </article>
+        <article class="weekly-lapso-panel" data-lapso-card="3">
+         <div class="weekly-lapso-panel__title"><div><span>3</span><strong>3er Lapso</strong></div><small id="weekly-lapso3-range">Configura las fechas</small></div>
+         <div class="weekly-lapso-dates"><label><span>Inicio</span><input id="weekly-lapso3-start" type="date"></label><label><span>Fin</span><input id="weekly-lapso3-end" type="date"></label></div>
+         <div class="weekly-lapso-metrics" id="weekly-lapso3-stats"></div>
+        </article>
+       </div>
+       <div id="weekly-lapso-warning" class="weekly-lapso-warning hidden"></div>
+      </div>
+
+      <div class="weekly-stats" aria-label="Resumen de clases">
+       <article><i class="fa-solid fa-calendar-check"></i><div><strong id="weekly-stat-total">0</strong><span>Clases efectivas</span></div></article>
+       <article class="is-aula"><i class="fa-solid fa-chalkboard-user"></i><div><strong id="weekly-stat-aula">0</strong><span>Clases en aula</span></div></article>
+       <article class="is-cancha"><i class="fa-solid fa-person-running"></i><div><strong id="weekly-stat-cancha">0</strong><span>Clases en cancha</span></div></article>
+       <article class="is-eval"><i class="fa-solid fa-clipboard-check"></i><div><strong id="weekly-stat-eval">0</strong><span>Fechas con evaluación</span></div></article>
+      </div>
+
+      <div class="weekly-main-grid">
+       <article class="weekly-calendar-card">
+        <div class="weekly-card-heading">
+         <div><span>Calendario por sección</span><h3 id="weekly-calendar-title">Mes</h3></div>
+         <div class="weekly-calendar-nav"><button id="weekly-month-prev" type="button" aria-label="Mes anterior"><i class="fa-solid fa-chevron-left"></i></button><button id="weekly-month-today" type="button">Hoy</button><button id="weekly-month-next" type="button" aria-label="Mes siguiente"><i class="fa-solid fa-chevron-right"></i></button></div>
+        </div>
+        <div class="weekly-calendar-weekdays"><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span></div>
+        <div id="weekly-calendar-grid" class="weekly-calendar-grid"></div>
+        <div class="weekly-calendar-legend"><span><i class="legend-aula"></i>Aula</span><span><i class="legend-cancha"></i>Cancha</span><span><i class="legend-eval"></i>Evaluación</span><span><i class="legend-noclass"></i>Sin clase / asueto</span></div>
+       </article>
+
+       <article class="weekly-manual-card">
+        <div class="weekly-card-heading"><div><span>Ajustes</span><h3>Agregar clase manual</h3></div><i class="fa-solid fa-plus"></i></div>
+        <form id="weekly-manual-form" class="weekly-manual-form">
+         <label><span>Fecha</span><input id="weekly-manual-date" type="date" required></label>
+         <div class="weekly-two-cols"><label><span>Entrada</span><input id="weekly-manual-start" type="time" value="08:00" required></label><label><span>Salida</span><input id="weekly-manual-end" type="time" value="09:00" required></label></div>
+         <label><span>Sección</span><select id="weekly-manual-section" required></select></label>
+         <label><span>Espacio</span><select id="weekly-manual-location"><option value="Aula">Aula</option><option value="Cancha">Cancha</option></select></label>
+         <label><span>Observación (opcional)</span><input id="weekly-manual-note" type="text" maxlength="160" placeholder="Ej: recuperación, cambio de horario…"></label>
+         <button type="submit"><i class="fa-solid fa-plus"></i> Agregar al calendario</button>
+        </form>
+        <p class="weekly-manual-note"><i class="fa-solid fa-circle-info"></i> Las clases del horario se crean automáticamente. Usa este formulario solo para recuperaciones, cambios o clases extraordinarias.</p>
+       </article>
+      </div>
+
+      <article class="weekly-week-card">
+       <div class="weekly-week-toolbar">
+        <div class="weekly-week-nav"><button id="weekly-week-prev" type="button"><i class="fa-solid fa-chevron-left"></i></button><div><span>Planificación de la semana</span><h3 id="weekly-week-title">Semana</h3></div><button id="weekly-week-next" type="button"><i class="fa-solid fa-chevron-right"></i></button></div>
+        <div class="weekly-week-actions"><button id="weekly-week-today" class="is-light" type="button">Semana actual</button><button id="weekly-generate-ai" type="button"><i class="fa-solid fa-wand-magic-sparkles"></i> Generar semana con Gemini</button></div>
+       </div>
+       <div id="weekly-week-context" class="weekly-week-context"></div>
+       <div id="weekly-ai-progress" class="weekly-ai-progress hidden"><i class="fa-solid fa-spinner fa-spin"></i><span>Gemini está preparando una secuencia continua: revisa la semana anterior, el lapso, las evaluaciones y las clases siguientes…</span></div>
+       <div id="weekly-week-list" class="weekly-week-list"></div>
+      </article>
      </section>
      <section class="hidden max-w-[1400px] mx-auto space-y-6 actas-module" id="section-actas">
        <header class="actas-hero">

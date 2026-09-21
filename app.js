@@ -309,6 +309,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         horariosProfesor = Array.isArray(datos.horarios) ? datos.horarios : [];
         actualizarUIPlanificacion();
         actualizarUIHorario();
+        try { window.dispatchEvent(new CustomEvent('edugestion:data-loaded', { detail: { planes: planesProfesor, horarios: horariosProfesor } })); } catch (_) {}
         await renderAgendaAsistencia();
 
         const inputInst = document.getElementById('input-institucion');
@@ -8341,6 +8342,7 @@ Archivo enviado directamente desde EduGestión.`);
   const duracion = document.getElementById('plan-ia-duracion');
   const objetivo = document.getElementById('plan-ia-objetivo');
   const tipo = document.getElementById('plan-ia-tipo');
+  const estrategias = document.getElementById('plan-ia-estrategias');
 
   if (fecha && !fecha.value) {
     const hoy = new Date();
@@ -8372,7 +8374,7 @@ Archivo enviado directamente desde EduGestión.`);
 
     const bloqueCurricular = baseCurricular ? `\n\nBASE CURRICULAR OBLIGATORIA - Cuadernillo Curricular MPPE · Educación Física:\n- Grado/Año curricular: ${baseCurricular.grado || 'No indicado'}\n- Tema generador: ${baseCurricular.tema || temaValor}${baseCurricular.temaIndispensable ? `\n- Tema indispensable: ${baseCurricular.temaIndispensable}` : ''}${baseCurricular.intencionalidad ? `\n- Intencionalidad pedagógica: ${baseCurricular.intencionalidad}` : ''}${baseCurricular.tejido ? `\n- Tejido temático: ${baseCurricular.tejido}` : ''}${baseCurricular.referentes ? `\n- Referentes teórico-prácticos: ${baseCurricular.referentes}` : ''}\n- Fuente: Cuadernillo Curricular MPPE · Educación Física${baseCurricular.pagina ? `, página ${baseCurricular.pagina}` : ''}\n\nREGLA IMPORTANTE: Usa esta base curricular como referencia principal. No sustituyas los contenidos por otro currículo ni inventes referentes que no aparezcan aquí. Puedes proponer estrategias, actividades, recursos y formas de evaluación coherentes con esta base.` : '';
 
-    const prompt = `Prepara una planificación docente completa y práctica en español, sin realizar búsqueda web.\n\nDatos de la clase:\n- Grado/Año: ${grado?.value || 'No indicado'}\n- Área: ${area?.value || 'No indicada'}\n- Tema: ${temaValor}\n- Fecha: ${fechaBonita}\n- Duración: ${duracion?.value || '60 minutos'}\n- Tipo de actividad: ${tipo?.value || 'Clase completa'}\n- Objetivo indicado por el docente: ${objetivoValor || 'Propón un objetivo claro y alcanzable relacionado con el tema.'}${bloqueCurricular}\n\nOrganiza la respuesta con estos apartados: Título, Propósito u objetivo, Aprendizajes esperados, Materiales, Inicio, Desarrollo paso a paso, Cierre, Evaluación formativa, Adaptaciones o variantes, y Observaciones para el docente. Usa lenguaje claro, aplicable en aula y actividades realistas para el tiempo indicado.`;
+    const prompt = `Prepara una planificación docente completa y práctica en español, sin realizar búsqueda web.\n\nDatos de la clase:\n- Grado/Año: ${grado?.value || 'No indicado'}\n- Área: ${area?.value || 'No indicada'}\n- Tema: ${temaValor}\n- Fecha: ${fechaBonita}\n- Duración: ${duracion?.value || '60 minutos'}\n- Tipo de actividad: ${tipo?.value || 'Clase completa'}\n- Estrategias sugeridas por el docente: ${estrategias?.value || 'Propón estrategias metodológicas adecuadas.'}\n- Objetivo indicado por el docente: ${objetivoValor || 'Propón un objetivo claro y alcanzable relacionado con el tema.'}${bloqueCurricular}\n\nOrganiza la respuesta con estos apartados: Título, Propósito u objetivo, Aprendizajes esperados, Estrategias metodológicas, Materiales, Inicio, Desarrollo paso a paso, Cierre, Evaluación formativa, Adaptaciones o variantes, y Observaciones para el docente. Usa lenguaje claro, aplicable en aula y actividades realistas para el tiempo indicado.`;
 
     const tabIA = document.getElementById('tab-gemini');
     const inputIA = document.getElementById('gemini-input');
@@ -14558,3 +14560,426 @@ Archivo enviado directamente desde EduGestión.`);
 /* EDUGESTION_FASE_21T_B_REPORTE_ENCUESTAS_PERSONAL_END */
 /* EDUGESTION_FASE_21U_A_FICHA_PERSONAL_DESDE_SHEETS_END */
 
+
+
+/* =========================================================
+   EduGestión · Planificación semanal inteligente V2
+   Horario + calendario escolar + plan de evaluación + lapsos + continuidad Gemini
+   ========================================================= */
+(() => {
+  const tab = document.getElementById('tab-plan-semanal');
+  const section = document.getElementById('section-plan-semanal');
+  if (!tab || !section) return;
+
+  const $ = id => document.getElementById(id);
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const dayIndex = { domingo:0, lunes:1, martes:2, miercoles:3, miércoles:3, jueves:4, viernes:5, sabado:6, sábado:6 };
+  const monthFmt = new Intl.DateTimeFormat('es-VE', { month:'long', year:'numeric' });
+  const dateFmt = new Intl.DateTimeFormat('es-VE', { weekday:'long', day:'numeric', month:'long' });
+  let selectedSection = '';
+  let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  let weekAnchor = startOfWeek(new Date());
+  let aiBusy = false;
+
+  function isoLocal(date) {
+    const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  function fromISO(value) {
+    const parts=String(value||'').split('-').map(Number);
+    if (parts.length!==3 || parts.some(Number.isNaN)) return null;
+    return new Date(parts[0],parts[1]-1,parts[2],12,0,0,0);
+  }
+  function addDays(date, n) { const d=new Date(date); d.setDate(d.getDate()+n); return d; }
+  function startOfWeek(date) { const d=new Date(date); d.setHours(12,0,0,0); const delta=(d.getDay()+6)%7; d.setDate(d.getDate()-delta); return d; }
+  function normalizeDay(value) { return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
+  function sectionKey(ano,seccion) { return `${ano}|||${seccion}`; }
+  function parseSectionKey(key) { const [ano,seccion]=String(key||'').split('|||'); return {ano:ano||'',seccion:seccion||''}; }
+  function blockKey(h) { return [h.dia,h.horaInicio,h.horaFin,h.ano,h.seccion,h.turno].map(x=>String(x||'')).join('|'); }
+  function manualId() { return `manual-${Date.now()}-${Math.random().toString(36).slice(2,7)}`; }
+  function storageKey() { return `edugestion_weekly_planning_v1_${String(profesorActual?.id || profesorActual?.usuario || 'docente')}`; }
+  function defaultState() {
+    return {
+      start:'2026-09-16', end:'2027-07-31', autoAI:true, locations:{}, overrides:{}, manual:[],
+      lapsos:{
+        '1':{start:'',end:''},
+        '2':{start:'',end:''},
+        '3':{start:'',end:''}
+      }
+    };
+  }
+  function loadState() {
+    try {
+      const base=defaultState(), raw=(JSON.parse(localStorage.getItem(storageKey())||'{}')||{}), rawLapsos=raw.lapsos||{};
+      return {
+        ...base, ...raw,
+        locations:{...base.locations,...(raw.locations||{})},
+        overrides:{...base.overrides,...(raw.overrides||{})},
+        manual:Array.isArray(raw.manual)?raw.manual:[],
+        lapsos:{
+          '1':{...base.lapsos['1'],...(rawLapsos['1']||{})},
+          '2':{...base.lapsos['2'],...(rawLapsos['2']||{})},
+          '3':{...base.lapsos['3'],...(rawLapsos['3']||{})}
+        }
+      };
+    } catch (_) { return defaultState(); }
+  }
+  function saveState(state) { try { localStorage.setItem(storageKey(), JSON.stringify(state)); } catch (_) {} }
+  function schoolEvent(dateISO) {
+    try { return (typeof recordatoriosEscolares !== 'undefined' && recordatoriosEscolares[dateISO]) ? String(recordatoriosEscolares[dateISO]) : ''; }
+    catch (_) { return ''; }
+  }
+  function isSchoolNoClass(dateISO) { return /asueto|no laborable/i.test(schoolEvent(dateISO)); }
+  function schedulesFor(key=selectedSection) {
+    const {ano,seccion}=parseSectionKey(key);
+    return (Array.isArray(horariosProfesor)?horariosProfesor:[]).filter(h=>String(h.ano)===ano && String(h.seccion)===seccion).sort((a,b)=>{
+      const da=dayIndex[normalizeDay(a.dia)] ?? 9, db=dayIndex[normalizeDay(b.dia)] ?? 9;
+      return da-db || String(a.horaInicio||'').localeCompare(String(b.horaInicio||''));
+    });
+  }
+  function ensureLocationDefaults(state,key=selectedSection) {
+    schedulesFor(key).forEach((h,i)=>{ const k=blockKey(h); if(!state.locations[k]) state.locations[k]=i%2===0?'Aula':'Cancha'; });
+  }
+  function normalizeAcademicKey(value) {
+    const raw=String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+    const compact=raw.replace(/[º°ª.]/g,'').replace(/\s+/g,'');
+    const num=compact.match(/\d+/)?.[0];
+    if(num) return `n:${Number(num)}`;
+    return `t:${compact.replace(/[^a-z0-9]/g,'')}`;
+  }
+  function normalizeSectionKey(value) {
+    return String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim().replace(/[“”"'´`]/g,'').replace(/\s+/g,'');
+  }
+  function normalizeDateKey(value) {
+    const raw=String(value??'').trim();
+    if(!raw) return '';
+    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    const latam=raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if(latam) return `${latam[3]}-${String(latam[2]).padStart(2,'0')}-${String(latam[1]).padStart(2,'0')}`;
+    const parsed=new Date(raw);
+    return Number.isNaN(parsed.getTime())?'':isoLocal(parsed);
+  }
+  function evaluationFor(occ) {
+    const anoKey=normalizeAcademicKey(occ.ano), secKey=normalizeSectionKey(occ.seccion), dateKey=normalizeDateKey(occ.date);
+    return (Array.isArray(planesProfesor)?planesProfesor:[]).filter(p=>
+      normalizeAcademicKey(p.ano)===anoKey &&
+      normalizeSectionKey(p.seccion)===secKey &&
+      normalizeDateKey(p.fecha)===dateKey
+    );
+  }
+
+  const LAPSO_NAMES={'1':'1er Lapso','2':'2do Lapso','3':'3er Lapso'};
+  const LAPSO_ASSIGN_KEY='edugestion_cuadernillo_ef_lapsos_v1';
+  const LAPSO_TRACK_KEY='edugestion_cuadernillo_ef_seguimiento_v1';
+  function safeJSON(key,fallback={}) { try { return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))||fallback; } catch (_) { return fallback; } }
+  function shortDate(value) {
+    const d=fromISO(value); if(!d)return '';
+    return new Intl.DateTimeFormat('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'}).format(d);
+  }
+  function lapsoInfo(number,state=loadState()) {
+    const key=String(number), cfg=state.lapsos?.[key]||{start:'',end:''};
+    const valid=Boolean(cfg.start&&cfg.end&&cfg.start<=cfg.end);
+    return {key,name:LAPSO_NAMES[key]||`${key}º Lapso`,start:cfg.start||'',end:cfg.end||'',valid};
+  }
+  function lapsoForDate(dateISO,state=loadState()) {
+    for(const key of ['1','2','3']) { const l=lapsoInfo(key,state); if(l.valid&&dateISO>=l.start&&dateISO<=l.end)return l; }
+    return null;
+  }
+  function configuredLapsos(state=loadState()) { return ['1','2','3'].map(k=>lapsoInfo(k,state)).filter(x=>x.valid); }
+  function curriculumGradeKey(ano) {
+    const data=window.EDUGESTION_CEF_DATA||{}, candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));
+    if(candidates.length<=1)return candidates[0]||'';
+    const profileGrades=Array.isArray(window.EDUGESTION_DOCENTE_PERFIL?.grados)?window.EDUGESTION_DOCENTE_PERFIL.grados:[];
+    const profileMatch=candidates.find(g=>profileGrades.some(pg=>String(pg).trim().toLowerCase()===String(g).trim().toLowerCase()));
+    if(profileMatch)return profileMatch;
+    const raw=String(ano||'').toLowerCase();
+    if(/año|ano|media|1ero|2do|3ro|4to|5to/.test(raw)){const year=candidates.find(g=>/año/i.test(g));if(year)return year;}
+    const grade=candidates.find(g=>/grado/i.test(g));
+    return grade||candidates[0]||'';
+  }
+  function curriculumTopicsFor(lapsoName,ano) {
+    if(!lapsoName)return [];
+    const data=window.EDUGESTION_CEF_DATA||{}, grade=curriculumGradeKey(ano); if(!grade||!Array.isArray(data[grade]))return [];
+    const assignments=safeJSON(LAPSO_ASSIGN_KEY,{}), track=safeJSON(LAPSO_TRACK_KEY,{}), norm=v=>String(v||'').trim().replace(/\s+/g,' ');
+    return data[grade].map(topic=>{
+      const key=`${norm(grade)}|||${norm(topic.tema)}`;
+      return {...topic,lapso:assignments[key]||'',estado:track[key]?.estado||'Pendiente'};
+    }).filter(x=>x.lapso===lapsoName);
+  }
+  function compactPlan(occ) {
+    return {fecha:occ.date,espacio:occ.location,tema:occ.tema||'',objetivo:occ.objetivo||'',estrategias:occ.estrategias||'',evaluacion:occ.evaluacion||'',evaluacionesPlan:evaluationFor(occ).map(e=>({actividad:e.actividad||e.nombre||'Evaluación',puntos:e.puntos||''}))};
+  }
+  function sequenceContext(allOccurrences,currentItems) {
+    const weekStart=isoLocal(weekAnchor), weekEnd=isoLocal(addDays(weekAnchor,6));
+    const eff=allOccurrences.filter(effective);
+    const previous=eff.filter(x=>x.date<weekStart).slice(-3).map(compactPlan);
+    const next=eff.filter(x=>x.date>weekEnd).slice(0,4).map(x=>({fecha:x.date,espacio:x.location,eventoEscolar:x.schoolEvent||'',evaluaciones:evaluationFor(x).map(e=>({actividad:e.actividad||e.nombre||'Evaluación',puntos:e.puntos||''}))}));
+    const lapsoNames=[...new Set(currentItems.map(x=>lapsoForDate(x.date)?.name).filter(Boolean))];
+    const {ano}=parseSectionKey(selectedSection);
+    const curriculum=lapsoNames.flatMap(name=>curriculumTopicsFor(name,ano).map(t=>({lapso:name,tema:t.tema||'',estado:t.estado||'Pendiente',intencionalidad:t.intencionalidad||'',tejido:t.tejido||'',referentes:t.referentes||''}))).slice(0,18);
+    const upcomingEvaluations=eff.filter(x=>x.date>=weekStart&&evaluationFor(x).length).slice(0,8).map(x=>({fecha:x.date,espacio:x.location,evaluaciones:evaluationFor(x).map(e=>({actividad:e.actividad||e.nombre||'Evaluación',puntos:e.puntos||''}))}));
+    return {semana:{inicio:weekStart,fin:weekEnd},lapsos:lapsoNames,clasesPrevias:previous,clasesSiguientes:next,temasCurricularesDelLapso:curriculum,proximasEvaluaciones:upcomingEvaluations};
+  }
+  function buildOccurrences(key=selectedSection) {
+    const state=loadState(); ensureLocationDefaults(state,key); saveState(state);
+    const {ano,seccion}=parseSectionKey(key);
+    if(!ano||!seccion) return [];
+    const start=fromISO(state.start), end=fromISO(state.end);
+    if(!start||!end||start>end) return [];
+    const schedules=schedulesFor(key), out=[];
+    for(let d=new Date(start); d<=end; d=addDays(d,1)) {
+      const date=isoLocal(d), dow=d.getDay();
+      schedules.filter(h=>(dayIndex[normalizeDay(h.dia)] ?? -1)===dow).forEach(h=>{
+        const id=`auto|${ano}|${seccion}|${date}|${h.horaInicio||''}|${h.horaFin||''}`;
+        const over=state.overrides[id]||{};
+        const suggestedNoClass=isSchoolNoClass(date);
+        out.push({
+          id, manual:false, date, ano, seccion, turno:h.turno||'', horaInicio:h.horaInicio||'', horaFin:h.horaFin||'',
+          location:over.location||state.locations[blockKey(h)]||'Aula',
+          status:over.status || (suggestedNoClass?'Sin clase':'Clase'),
+          schoolEvent:schoolEvent(date), ...over
+        });
+      });
+    }
+    (Array.isArray(state.manual)?state.manual:[]).filter(x=>String(x.ano)===ano&&String(x.seccion)===seccion).forEach(x=>{
+      const over=state.overrides[x.id]||{};
+      out.push({status:'Clase',location:'Aula',...x,...over,manual:true,schoolEvent:schoolEvent(x.date)});
+    });
+    return out.sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.horaInicio).localeCompare(String(b.horaInicio)));
+  }
+  function updateOverride(id, patch) {
+    const state=loadState(); state.overrides[id]={...(state.overrides[id]||{}),...patch}; saveState(state);
+  }
+  function sections() {
+    const map=new Map(); (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{
+      const key=sectionKey(h.ano,h.seccion); if(!map.has(key)) map.set(key,{key,ano:h.ano,seccion:h.seccion,turno:h.turno||''});
+    }); return [...map.values()].sort((a,b)=>`${a.ano}${a.seccion}`.localeCompare(`${b.ano}${b.seccion}`,'es',{numeric:true}));
+  }
+  function labelSection(item) { return `${item.ano} · Sección ${item.seccion}${item.turno?` · ${item.turno==='Manana'?'Mañana':item.turno}`:''}`; }
+
+  function syncControls() {
+    const state=loadState();
+    $('weekly-school-start').value=state.start||''; $('weekly-school-end').value=state.end||''; $('weekly-auto-ai').checked=state.autoAI!==false;
+    ['1','2','3'].forEach(k=>{ const cfg=state.lapsos?.[k]||{}; if($(`weekly-lapso${k}-start`))$(`weekly-lapso${k}-start`).value=cfg.start||''; if($(`weekly-lapso${k}-end`))$(`weekly-lapso${k}-end`).value=cfg.end||''; });
+    const items=sections();
+    if(!items.some(x=>x.key===selectedSection)) selectedSection=items[0]?.key||'';
+    [$('weekly-section-select'),$('weekly-manual-section')].forEach(sel=>{
+      if(!sel)return; const wanted=sel=== $('weekly-section-select')?selectedSection:(sel.value||selectedSection);
+      sel.innerHTML=items.length?items.map(x=>`<option value="${esc(x.key)}">${esc(labelSection(x))}</option>`).join(''):'<option value="">No hay secciones en el horario</option>';
+      if(items.some(x=>x.key===wanted)) sel.value=wanted;
+    });
+    if($('weekly-section-select')) $('weekly-section-select').value=selectedSection;
+    renderScheduleMap(); renderAll(false);
+  }
+
+  function renderScheduleMap() {
+    const box=$('weekly-schedule-map'); if(!box)return;
+    const state=loadState(); ensureLocationDefaults(state); saveState(state);
+    const blocks=schedulesFor();
+    if(!blocks.length){ box.innerHTML='<div class="weekly-empty-inline"><i class="fa-solid fa-clock"></i> Esta sección todavía no tiene bloques en Mi Horario.</div>'; return; }
+    const warning=blocks.length===2?'':`<p class="weekly-schedule-warning"><i class="fa-solid fa-triangle-exclamation"></i> Hay ${blocks.length} bloques semanales para esta sección. Puedes asignar Aula/Cancha individualmente.</p>`;
+    box.innerHTML=`<div class="weekly-schedule-title"><strong>Distribución semanal del espacio</strong><small>La plataforma detectó ${blocks.length} ${blocks.length===1?'clase':'clases'} por semana en tu horario.</small></div>${warning}<div class="weekly-schedule-items">${blocks.map((h,i)=>{
+      const k=blockKey(h), loc=state.locations[k]||'Aula';
+      return `<label class="weekly-schedule-item"><span><b>${esc(h.dia)}</b><small>${esc(h.horaInicio)}–${esc(h.horaFin)}</small></span><select data-weekly-block="${esc(k)}"><option value="Aula" ${loc==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${loc==='Cancha'?'selected':''}>Cancha</option></select></label>`;
+    }).join('')}</div>`;
+    box.querySelectorAll('[data-weekly-block]').forEach(sel=>sel.addEventListener('change',()=>{ const s=loadState(); s.locations[sel.dataset.weeklyBlock]=sel.value; saveState(s); renderAll(false); }));
+  }
+
+  function effective(occ){ return occ.status!=='Sin clase'; }
+  function renderStats(occurrences) {
+    const eff=occurrences.filter(effective);
+    $('weekly-stat-total').textContent=String(eff.length);
+    $('weekly-stat-aula').textContent=String(eff.filter(x=>x.location==='Aula').length);
+    $('weekly-stat-cancha').textContent=String(eff.filter(x=>x.location==='Cancha').length);
+    $('weekly-stat-eval').textContent=String(eff.filter(x=>evaluationFor(x).length).length);
+  }
+
+  function renderLapsoOverview(occurrences) {
+    const state=loadState(), warnings=[];
+    const schoolStart=state.start||'', schoolEnd=state.end||'';
+    const currentWeekStart=isoLocal(weekAnchor), currentWeekEnd=isoLocal(addDays(weekAnchor,6));
+    const ranges=[];
+    ['1','2','3'].forEach(k=>{
+      const info=lapsoInfo(k,state), card=section.querySelector(`[data-lapso-card="${k}"]`), rangeEl=$(`weekly-lapso${k}-range`), statsEl=$(`weekly-lapso${k}-stats`);
+      card?.classList.toggle('is-active',info.valid&&info.start<=currentWeekEnd&&info.end>=currentWeekStart);
+      card?.classList.toggle('is-invalid',Boolean(info.start&&info.end&&info.start>info.end));
+      if(info.start&&info.end&&info.start>info.end) warnings.push(`${info.name}: la fecha final es anterior al inicio.`);
+      if(!info.valid){ if(rangeEl)rangeEl.textContent='Configura las fechas'; if(statsEl)statsEl.innerHTML='<div class="weekly-lapso-empty">Coloca inicio y fin para calcular este lapso.</div>'; return; }
+      ranges.push(info);
+      if(rangeEl)rangeEl.textContent=`${shortDate(info.start)} – ${shortDate(info.end)}`;
+      if(schoolStart&&info.start<schoolStart)warnings.push(`${info.name} comienza antes del inicio del año escolar.`);
+      if(schoolEnd&&info.end>schoolEnd)warnings.push(`${info.name} termina después del fin del año escolar.`);
+      const all=occurrences.filter(x=>x.date>=info.start&&x.date<=info.end), eff=all.filter(effective), evalCount=eff.filter(x=>evaluationFor(x).length).length;
+      const aula=eff.filter(x=>x.location==='Aula').length, cancha=eff.filter(x=>x.location==='Cancha').length, ped=Math.max(0,eff.length-evalCount), off=all.filter(x=>!effective(x)).length;
+      if(statsEl)statsEl.innerHTML=`<div class="weekly-lapso-metric"><b>${eff.length}</b><span>Clases efectivas</span></div><div class="weekly-lapso-metric is-aula"><b>${aula}</b><span>Aula</span></div><div class="weekly-lapso-metric is-cancha"><b>${cancha}</b><span>Cancha</span></div><div class="weekly-lapso-metric is-eval"><b>${evalCount}</b><span>Evaluaciones</span></div><div class="weekly-lapso-metric is-ped"><b>${ped}</b><span>Clases pedagógicas</span></div><div class="weekly-lapso-metric is-off"><b>${off}</b><span>Sin clase</span></div>`;
+    });
+    const ordered=[...ranges].sort((a,b)=>a.start.localeCompare(b.start));
+    for(let i=1;i<ordered.length;i++) if(ordered[i].start<=ordered[i-1].end)warnings.push(`${ordered[i-1].name} y ${ordered[i].name} se superponen.`);
+    const warn=$('weekly-lapso-warning');
+    if(warn){ if(warnings.length){warn.classList.remove('hidden');warn.innerHTML=`<i class="fa-solid fa-triangle-exclamation"></i> ${warnings.map(esc).join(' · ')}`;}else{warn.classList.add('hidden');warn.innerHTML='';} }
+  }
+
+  function renderWeekContext(items,occurrences) {
+    const box=$('weekly-week-context'); if(!box)return;
+    const state=loadState(), lapsos=[...new Set(items.map(x=>lapsoForDate(x.date,state)?.name).filter(Boolean))], {ano}=parseSectionKey(selectedSection);
+    const topicSets=lapsos.flatMap(l=>curriculumTopicsFor(l,ano).map(t=>({lapso:l,...t}))), plannedBefore=occurrences.filter(x=>effective(x)&&x.date<isoLocal(weekAnchor)&&hasPlanning(x)).slice(-3);
+    const topicNames=topicSets.slice(0,4).map(t=>t.tema).filter(Boolean), extra=Math.max(0,topicSets.length-topicNames.length);
+    const lapsoText=lapsos.length?lapsos.join(' / '):'Lapso sin fechas configuradas';
+    const curriculumText=topicSets.length?`${topicSets.length} tema${topicSets.length===1?'':'s'} curricular${topicSets.length===1?'':'es'} asignado${topicSets.length===1?'':'s'}${topicNames.length?`: ${topicNames.join(', ')}${extra?` +${extra}`:''}`:''}`:'Sin temas del Panel por lapso vinculados a esta semana';
+    const prevText=plannedBefore.length?`La IA continuará desde ${plannedBefore.map(x=>x.tema||x.objetivo||x.date).filter(Boolean).join(' → ')}.`:'Aún no hay una planificación anterior guardada para usar como continuidad.';
+    box.innerHTML=`<span class="weekly-week-context__badge"><i class="fa-solid fa-layer-group"></i>${esc(lapsoText)}</span><span class="weekly-week-context__badge is-curriculum"><i class="fa-solid fa-book-open"></i>${esc(topicSets.length?`${topicSets.length} tema${topicSets.length===1?'':'s'} del lapso`:'Base curricular pendiente')}</span><span class="weekly-week-context__badge is-sequence"><i class="fa-solid fa-arrow-right-long"></i>Continuidad IA</span><div class="weekly-week-context__text"><b>${esc(curriculumText)}.</b> ${esc(prevText)}</div>`;
+  }
+
+  function setMonthSafe(date) {
+    const state=loadState(), start=fromISO(state.start), end=fromISO(state.end); let d=new Date(date);
+    if(start && d<new Date(start.getFullYear(),start.getMonth(),1)) d=new Date(start.getFullYear(),start.getMonth(),1);
+    if(end && d>new Date(end.getFullYear(),end.getMonth(),1)) d=new Date(end.getFullYear(),end.getMonth(),1);
+    calendarMonth=new Date(d.getFullYear(),d.getMonth(),1);
+  }
+  function renderCalendar(occurrences) {
+    const grid=$('weekly-calendar-grid'); if(!grid)return;
+    $('weekly-calendar-title').textContent=monthFmt.format(calendarMonth).replace(/^./,c=>c.toUpperCase());
+    const y=calendarMonth.getFullYear(),m=calendarMonth.getMonth(),first=new Date(y,m,1),days=new Date(y,m+1,0).getDate();
+    const offset=(first.getDay()+6)%7, cells=[]; for(let i=0;i<offset;i++)cells.push('<span class="weekly-calendar-blank"></span>');
+    for(let day=1;day<=days;day++) {
+      const date=isoLocal(new Date(y,m,day,12)), items=occurrences.filter(x=>x.date===date), event=schoolEvent(date), isToday=date===isoLocal(new Date());
+      const chips=items.map(x=>`<span class="weekly-cal-chip ${x.status==='Sin clase'?'is-noclass':x.location==='Cancha'?'is-cancha':'is-aula'}" title="${esc(`${x.horaInicio} ${x.location}`)}">${x.status==='Sin clase'?'Sin clase':x.location}</span>`).join('');
+      const evalCount=items.reduce((n,x)=>n+evaluationFor(x).length,0);
+      cells.push(`<button type="button" class="weekly-calendar-day ${isToday?'is-today':''} ${items.length?'has-class':''}" data-weekly-date="${date}"><b>${day}</b>${event?'<i class="fa-solid fa-star" title="Fecha del calendario escolar"></i>':''}<span class="weekly-cal-chips">${chips}</span>${evalCount?`<em><i class="fa-solid fa-clipboard-check"></i>${evalCount}</em>`:''}</button>`);
+    }
+    grid.innerHTML=cells.join('');
+    grid.querySelectorAll('[data-weekly-date]').forEach(btn=>btn.addEventListener('click',()=>{ const d=fromISO(btn.dataset.weeklyDate); if(d){weekAnchor=startOfWeek(d); renderLapsoOverview(occurrences); renderWeek(occurrences,true);} }));
+  }
+
+  function renderWeek(occurrences, maybeAuto=true) {
+    const list=$('weekly-week-list'); if(!list)return;
+    const weekEnd=addDays(weekAnchor,6), startText=new Intl.DateTimeFormat('es-VE',{day:'numeric',month:'short'}).format(weekAnchor), endText=new Intl.DateTimeFormat('es-VE',{day:'numeric',month:'short',year:'numeric'}).format(weekEnd);
+    $('weekly-week-title').textContent=`${startText} – ${endText}`;
+    const startISO=isoLocal(weekAnchor), endISO=isoLocal(weekEnd), items=occurrences.filter(x=>x.date>=startISO&&x.date<=endISO);
+    renderWeekContext(items,occurrences);
+    if(!items.length){ list.innerHTML='<div class="weekly-empty"><i class="fa-regular fa-calendar-xmark"></i><strong>No hay clases de esta sección en esta semana.</strong><span>Usa las flechas para cambiar de semana o revisa el horario cargado.</span></div>'; return; }
+    list.innerHTML=items.map(renderClassCard).join('');
+    bindClassCards();
+    if(maybeAuto) maybeAutoGenerate(items);
+  }
+
+  function renderClassCard(occ) {
+    const date=fromISO(occ.date), evals=evaluationFor(occ), event=occ.schoolEvent||'', planned=Boolean(occ.inicio||occ.desarrollo||occ.cierre||occ.estrategias||occ.tema);
+    const evalHtml=evals.length?`<div class="weekly-linked-eval"><i class="fa-solid fa-clipboard-check"></i><div><strong>Plan de evaluación vinculado</strong>${evals.map(e=>`<span>${esc(e.actividad||e.nombre||'Evaluación')} ${e.puntos?`· ${esc(e.puntos)} pts`:''}</span>`).join('')}</div></div>`:'';
+    return `<article class="weekly-class-card ${occ.status==='Sin clase'?'is-noclass':''}" data-occ-id="${esc(occ.id)}">
+      <header><div class="weekly-class-date"><span>${esc(date?dateFmt.format(date):occ.date)}</span><strong>${esc(occ.horaInicio)}–${esc(occ.horaFin)}</strong></div><div class="weekly-class-badges"><span class="${occ.location==='Cancha'?'is-cancha':'is-aula'}">${occ.location==='Cancha'?'<i class="fa-solid fa-person-running"></i>':'<i class="fa-solid fa-chalkboard-user"></i>'}${esc(occ.location)}</span>${lapsoForDate(occ.date)?`<span class="is-lapso"><i class="fa-solid fa-layer-group"></i>${esc(lapsoForDate(occ.date).name)}</span>`:''}${planned?'<span class="is-planned"><i class="fa-solid fa-wand-magic-sparkles"></i>Planificada</span>':''}${occ.manual?'<span class="is-manual">Manual</span>':''}</div></header>
+      ${event?`<div class="weekly-school-event"><i class="fa-solid fa-calendar-day"></i><span><b>Calendario escolar:</b> ${esc(event)}</span></div>`:''}
+      ${evalHtml}
+      <div class="weekly-class-controls"><label><span>Espacio</span><select data-field="location"><option value="Aula" ${occ.location==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${occ.location==='Cancha'?'selected':''}>Cancha</option></select></label><label><span>Estado</span><select data-field="status"><option value="Clase" ${occ.status==='Clase'?'selected':''}>Clase efectiva</option><option value="Sin clase" ${occ.status==='Sin clase'?'selected':''}>Sin clase / suspendida</option></select></label>${occ.manual?'<button type="button" class="weekly-delete-manual" data-delete-manual><i class="fa-solid fa-trash"></i></button>':''}</div>
+      <div class="weekly-pedagogy ${occ.status==='Sin clase'?'is-disabled':''}">
+       <div class="weekly-pedagogy-top"><label><span>Tema</span><input data-field="tema" value="${esc(occ.tema||'')}" placeholder="Tema de esta clase"></label><label><span>Objetivo / propósito</span><input data-field="objetivo" value="${esc(occ.objetivo||'')}" placeholder="Propósito de aprendizaje"></label></div>
+       <label><span>Estrategias metodológicas</span><textarea data-field="estrategias" rows="2" placeholder="Demostración, estaciones, trabajo cooperativo…">${esc(occ.estrategias||'')}</textarea></label>
+       <div class="weekly-three-cols"><label><span><i class="fa-solid fa-play"></i> Inicio</span><textarea data-field="inicio" rows="4" placeholder="Motivación, saberes previos, activación…">${esc(occ.inicio||'')}</textarea></label><label><span><i class="fa-solid fa-person-running"></i> Desarrollo</span><textarea data-field="desarrollo" rows="4" placeholder="Actividades paso a paso…">${esc(occ.desarrollo||'')}</textarea></label><label><span><i class="fa-solid fa-flag-checkered"></i> Cierre</span><textarea data-field="cierre" rows="4" placeholder="Vuelta a la calma, reflexión, síntesis…">${esc(occ.cierre||'')}</textarea></label></div>
+       <label><span>Evaluación / evidencias de aprendizaje</span><textarea data-field="evaluacion" rows="2" placeholder="Criterios, evidencias, observación formativa…">${esc(occ.evaluacion||'')}</textarea></label>
+      </div>
+     </article>`;
+  }
+
+  function bindClassCards() {
+    section.querySelectorAll('[data-occ-id]').forEach(card=>{
+      const id=card.dataset.occId;
+      card.querySelectorAll('[data-field]').forEach(field=>field.addEventListener('change',()=>{ updateOverride(id,{[field.dataset.field]:field.value}); renderAll(false); }));
+      card.querySelector('[data-delete-manual]')?.addEventListener('click',()=>{
+        if(!confirm('¿Eliminar esta clase manual del calendario?'))return; const state=loadState(); state.manual=(state.manual||[]).filter(x=>x.id!==id); delete state.overrides[id]; saveState(state); renderAll(false);
+      });
+    });
+  }
+
+  function renderAll(maybeAuto=true) {
+    const occ=buildOccurrences(); renderStats(occ); renderLapsoOverview(occ); renderCalendar(occ); renderWeek(occ,maybeAuto);
+  }
+
+  function weekItems() { const occ=buildOccurrences(), end=addDays(weekAnchor,6), a=isoLocal(weekAnchor),b=isoLocal(end); return occ.filter(x=>x.date>=a&&x.date<=b&&effective(x)); }
+  function hasPlanning(x){ return Boolean(x.inicio||x.desarrollo||x.cierre||x.estrategias||x.tema); }
+  function maybeAutoGenerate(items) { const state=loadState(); const effectiveItems=items.filter(effective); if(state.autoAI!==false && effectiveItems.length && effectiveItems.some(x=>!hasPlanning(x)) && !aiBusy) setTimeout(()=>generateAI(true),120); }
+
+  function extractJson(text) {
+    const cleaned=String(text||'').replace(/```json/gi,'').replace(/```/g,'').trim();
+    try{return JSON.parse(cleaned)}catch(_){}
+    const a=cleaned.indexOf('{'),b=cleaned.lastIndexOf('}'); if(a>=0&&b>a){try{return JSON.parse(cleaned.slice(a,b+1))}catch(_){}}
+    throw new Error('Gemini devolvió un formato que no se pudo aplicar automáticamente.');
+  }
+  async function generateAI(silent=false) {
+    if(aiBusy)return; const items=weekItems(); if(!items.length){ if(!silent) mostrarToast('No hay clases efectivas en esta semana.','warning','Planificación semanal'); return; }
+    aiBusy=true; $('weekly-ai-progress')?.classList.remove('hidden'); const btn=$('weekly-generate-ai'); if(btn)btn.disabled=true;
+    try {
+      const {ano,seccion}=parseSectionKey(selectedSection), materia=profesorActual?.materia||'Educación Física', allOccurrences=buildOccurrences();
+      const classData=items.map(x=>({fecha:x.date,hora:`${x.horaInicio}-${x.horaFin}`,espacio:x.location,lapso:lapsoForDate(x.date)?.name||'',eventoEscolar:x.schoolEvent||'',evaluaciones:evaluationFor(x).map(e=>({actividad:e.actividad||e.nombre||'Evaluación',puntos:e.puntos||''})),temaActual:x.tema||'',objetivoActual:x.objetivo||'',estrategiasActuales:x.estrategias||'',inicioActual:x.inicio||'',desarrolloActual:x.desarrollo||'',cierreActual:x.cierre||'',evaluacionActual:x.evaluacion||''}));
+      const continuity=sequenceContext(allOccurrences,items);
+      const prompt=`Actúa como especialista en planificación docente venezolana y en secuenciación pedagógica. Genera la planificación SEMANAL de ${materia} para ${ano}, sección ${seccion}.
+
+REGLAS OBLIGATORIAS:
+1. Respeta exactamente cada fecha, hora, espacio (Aula o Cancha), lapso, evaluación vinculada y evento del calendario escolar.
+2. Mantén continuidad real con las clases previas guardadas: no reinicies el contenido cada semana ni repitas un tema sin necesidad pedagógica.
+3. Mira también las clases y evaluaciones próximas para dejar una progresión lógica hacia lo que sigue.
+4. Si el Panel por lapso tiene temas curriculares asignados, úsalos como BASE CURRICULAR prioritaria y avanza de manera progresiva entre ellos. No inventes otros temas oficiales.
+5. Si una clase tiene una evaluación vinculada, organiza la sesión alrededor de esa evaluación y consérvala claramente en el campo evaluacion.
+6. En AULA prioriza explicación, análisis, saberes previos, trabajo conceptual/reflexivo y producciones pertinentes. En CANCHA prioriza activación, demostración, práctica, estaciones/circuitos, aplicación motriz, seguridad y vuelta a la calma.
+7. Si algún campo ya tiene contenido escrito por el docente, tómalo como restricción y complétalo coherentemente, no lo contradigas.
+8. Usa lenguaje profesional, concreto y realizable para el tiempo de clase disponible.
+
+CLASES DE ESTA SEMANA:
+${JSON.stringify(classData,null,2)}
+
+CONTEXTO DE CONTINUIDAD (semana anterior, lapso, temas curriculares y clases/evaluaciones siguientes):
+${JSON.stringify(continuity,null,2)}
+
+Devuelve ÚNICAMENTE JSON válido, sin markdown, con esta estructura exacta:
+{"planes":[{"fecha":"YYYY-MM-DD","tema":"","objetivo":"","estrategias":"","inicio":"","desarrollo":"","cierre":"","evaluacion":""}]}
+
+La secuencia debe sentirse como una sola planificación continua del lapso, no como clases aisladas.`;
+      const response=await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:prompt})});
+      const data=await response.json().catch(()=>({})); if(!response.ok||!data.ok)throw new Error(data.message||'No se pudo consultar Gemini.');
+      const parsed=extractJson(data.answer), plans=Array.isArray(parsed?.planes)?parsed.planes:[];
+      plans.forEach(plan=>{ items.filter(x=>x.date===plan.fecha).forEach(x=>{
+        const keep=(current,generated)=>String(current||'').trim()?current:(generated||'');
+        updateOverride(x.id,{tema:keep(x.tema,plan.tema),objetivo:keep(x.objetivo,plan.objetivo),estrategias:keep(x.estrategias,plan.estrategias),inicio:keep(x.inicio,plan.inicio),desarrollo:keep(x.desarrollo,plan.desarrollo),cierre:keep(x.cierre,plan.cierre),evaluacion:keep(x.evaluacion,plan.evaluacion)});
+      }); });
+      renderAll(false); if(!silent)mostrarToast(`Gemini preparó ${plans.length} ${plans.length===1?'clase':'clases'} manteniendo la secuencia del lapso.`,'success','Planificación lista');
+    } catch(error){ console.error('Planificación semanal IA:',error); if(!silent)mostrarToast(error.message||'No se pudo generar la semana.','error','Gemini'); }
+    finally { aiBusy=false; $('weekly-ai-progress')?.classList.add('hidden'); if(btn)btn.disabled=false; }
+  }
+
+  function initDatesAroundSchoolYear() {
+    const state=loadState(), today=new Date(), start=fromISO(state.start),end=fromISO(state.end); let focus=today;
+    if(start&&today<start)focus=start; else if(end&&today>end)focus=end;
+    setMonthSafe(focus); weekAnchor=startOfWeek(focus);
+  }
+
+  tab.addEventListener('click',()=>{
+    if(typeof cambiarPestana==='function')cambiarPestana(tab,section); else {document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));section.classList.remove('hidden');}
+    initDatesAroundSchoolYear(); syncControls();
+  });
+  $('weekly-section-select')?.addEventListener('change',e=>{selectedSection=e.target.value; $('weekly-manual-section').value=selectedSection; renderScheduleMap(); renderAll(true);});
+  $('weekly-school-start')?.addEventListener('change',e=>{const s=loadState();s.start=e.target.value;saveState(s);setMonthSafe(fromISO(s.start)||new Date());weekAnchor=startOfWeek(fromISO(s.start)||new Date());renderAll(true);});
+  $('weekly-school-end')?.addEventListener('change',e=>{const s=loadState();s.end=e.target.value;saveState(s);renderAll(false);});
+  $('weekly-auto-ai')?.addEventListener('change',e=>{const s=loadState();s.autoAI=e.target.checked;saveState(s);if(e.target.checked)renderAll(true);});
+  ['1','2','3'].forEach(k=>{
+    $(`weekly-lapso${k}-start`)?.addEventListener('change',e=>{const s=loadState();s.lapsos=s.lapsos||{};s.lapsos[k]={...(s.lapsos[k]||{}),start:e.target.value};saveState(s);renderAll(false);});
+    $(`weekly-lapso${k}-end`)?.addEventListener('change',e=>{const s=loadState();s.lapsos=s.lapsos||{};s.lapsos[k]={...(s.lapsos[k]||{}),end:e.target.value};saveState(s);renderAll(false);});
+  });
+  $('weekly-regenerate')?.addEventListener('click',()=>{syncControls();mostrarToast('El calendario, los lapsos y las evaluaciones se actualizaron usando la información cargada del docente.','success','Planificación semanal');});
+  $('weekly-month-prev')?.addEventListener('click',()=>{setMonthSafe(new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()-1,1));renderCalendar(buildOccurrences());});
+  $('weekly-month-next')?.addEventListener('click',()=>{setMonthSafe(new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+1,1));renderCalendar(buildOccurrences());});
+  $('weekly-month-today')?.addEventListener('click',()=>{setMonthSafe(new Date());renderCalendar(buildOccurrences());});
+  $('weekly-week-prev')?.addEventListener('click',()=>{weekAnchor=addDays(weekAnchor,-7);const occ=buildOccurrences();renderLapsoOverview(occ);renderWeek(occ,true);});
+  $('weekly-week-next')?.addEventListener('click',()=>{weekAnchor=addDays(weekAnchor,7);const occ=buildOccurrences();renderLapsoOverview(occ);renderWeek(occ,true);});
+  $('weekly-week-today')?.addEventListener('click',()=>{weekAnchor=startOfWeek(new Date());const occ=buildOccurrences();renderLapsoOverview(occ);renderWeek(occ,true);});
+  $('weekly-generate-ai')?.addEventListener('click',()=>generateAI(false));
+  $('weekly-manual-form')?.addEventListener('submit',e=>{
+    e.preventDefault(); const key=$('weekly-manual-section').value; const {ano,seccion}=parseSectionKey(key); if(!ano||!seccion)return;
+    const state=loadState(), item={id:manualId(),manual:true,date:$('weekly-manual-date').value,ano,seccion,horaInicio:$('weekly-manual-start').value,horaFin:$('weekly-manual-end').value,location:$('weekly-manual-location').value,status:'Clase',note:$('weekly-manual-note').value||''};
+    if(!item.date)return; state.manual=[...(state.manual||[]),item];saveState(state);selectedSection=key;$('weekly-section-select').value=key;weekAnchor=startOfWeek(fromISO(item.date));setMonthSafe(fromISO(item.date));$('weekly-manual-note').value='';renderAll(true);mostrarToast('La clase manual fue agregada al calendario.','success','Calendario actualizado');
+  });
+
+  // Cuando horario/evaluaciones terminan de cargar, la pestaña siempre toma la información más reciente.
+  window.addEventListener('edugestion:session',()=>setTimeout(syncControls,250));
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(syncControls,50));
+})();
+/* EDUGESTION_WEEKLY_PLANNING_V2_END */
