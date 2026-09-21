@@ -10637,7 +10637,14 @@ Archivo enviado directamente desde EduGestión.`);
   const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
-  const topicKey=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
+  const legacyTopicKey=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
+  const topicKey=(grado,item)=>`${norm(grado)}|||${norm(item?.tema)}|||p:${norm(item?.pagina)}|||d:${norm(item?.descripcion||item?.tejido||item?.referentes||'')}`;
+  function assignmentFor(map,grado,item,rows){
+    const k=topicKey(grado,item); if(Object.prototype.hasOwnProperty.call(map,k))return map[k]||'';
+    const same=(rows||[]).filter(x=>norm(x.tema)===norm(item?.tema));
+    if(same.length===1){const legacy=legacyTopicKey(grado,item?.tema); if(Object.prototype.hasOwnProperty.call(map,legacy))return map[legacy]||'';}
+    return '';
+  }
   const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(_){return f}};
   const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
   let gradoActual='';
@@ -10659,10 +10666,13 @@ Archivo enviado directamente desde EduGestión.`);
   function assignmentMap(){return readJSON(ASSIGN_KEY,{})}
   function trackMap(){return readJSON(TRACK_KEY,{})}
   function historyMap(){return readJSON(HISTORY_KEY,{})}
-  function setAssignment(grado,tema,lapso){
-    const m=assignmentMap(),k=topicKey(grado,tema),prev=m[k]||'';
-    if(lapso)m[k]=lapso;else delete m[k];writeJSON(ASSIGN_KEY,m);
-    if(prev!==lapso)addHistory(grado,tema,trackMap()[k]?.estado||'Pendiente','Cambio de lapso',lapso?`Tema asignado a ${lapso}.`:'Tema dejado sin lapso asignado.');
+  function setAssignment(grado,item,lapso){
+    const rows=(window.EDUGESTION_CEF_DATA?.[grado]||[]),m=assignmentMap(),k=topicKey(grado,item),prev=assignmentFor(m,grado,item,rows);
+    if(lapso)m[k]=lapso;else delete m[k];
+    const same=rows.filter(x=>norm(x.tema)===norm(item?.tema));
+    if(same.length===1)delete m[legacyTopicKey(grado,item?.tema)];
+    writeJSON(ASSIGN_KEY,m);
+    if(prev!==lapso)addHistory(grado,item?.tema,trackMap()[legacyTopicKey(grado,item?.tema)]?.estado||'Pendiente','Cambio de lapso',lapso?`Tema asignado a ${lapso}.`:'Tema dejado sin lapso asignado.');
   }
   function addHistory(grado,tema,estado,accion,detalle){const all=historyMap(),k=topicKey(grado,tema);if(!Array.isArray(all[k]))all[k]=[];all[k].push({fecha:new Date().toISOString(),grado,tema,estado,accion,detalle});if(all[k].length>80)all[k]=all[k].slice(-80);writeJSON(HISTORY_KEY,all)}
 
@@ -10688,7 +10698,7 @@ Archivo enviado directamente desde EduGestión.`);
   function openSection(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;window.scrollTo({top:0,behavior:'smooth'});render()}
   function renderLapsos(){const box=document.getElementById('pl-lapsos');if(!box)return;box.innerHTML=LAPSOS.map(l=>`<button type="button" class="pl-pill ${l===lapsoActual?'active':''}" data-lapso="${l}">${l}</button>`).join('');box.querySelectorAll('[data-lapso]').forEach(b=>b.addEventListener('click',()=>{lapsoActual=b.dataset.lapso;renderLapsos();render()}))}
   function renderStatusFilters(){const box=document.getElementById('pl-statusfilters');if(!box)return;const opts=['Todos','Pendiente','Planificado','Trabajado','Evaluado'];box.innerHTML=opts.map(s=>`<button type="button" class="pl-pill ${s===filtroEstado?'active':''}" data-status="${s}">${s}</button>`).join('');box.querySelectorAll('[data-status]').forEach(b=>b.addEventListener('click',()=>{filtroEstado=b.dataset.status;renderStatusFilters();render()}))}
-  function rowsForGrade(){const data=window.EDUGESTION_CEF_DATA||{},assign=assignmentMap(),track=trackMap();return (data[gradoActual]||[]).map(x=>{const k=topicKey(gradoActual,x.tema);return {...x,grado:gradoActual,lapso:assign[k]||'',estado:track[k]?.estado||'Pendiente'}})}
+  function rowsForGrade(){const data=window.EDUGESTION_CEF_DATA||{},assign=assignmentMap(),track=trackMap(),rows=data[gradoActual]||[];return rows.map(x=>{const legacy=legacyTopicKey(gradoActual,x.tema);return {...x,grado:gradoActual,lapso:assignmentFor(assign,gradoActual,x,rows),estado:track[legacy]?.estado||'Pendiente'}})}
   function render(){
     const list=document.getElementById('pl-list'),sum=document.getElementById('pl-summary');if(!list||!sum)return;
     const all=rowsForGrade(),inLapso=all.filter(x=>x.lapso===lapsoActual),shown=inLapso.filter(x=>filtroEstado==='Todos'||x.estado===filtroEstado),unassigned=all.filter(x=>!x.lapso).length;
@@ -10699,9 +10709,9 @@ Archivo enviado directamente desde EduGestión.`);
     list.innerHTML=shown.map((x,i)=>itemHtml(x,i)).join('');bindItems(list,shown);
   }
   function itemHtml(x,i){const desc=x.descripcion||x.tejido||x.referentes||'';return `<article class="pl-item"><div><h4>${esc(x.tema)}</h4><div class="pl-meta"><span class="pl-chip ${esc(x.estado)}">${esc(x.estado)}</span>${x.pagina?`<span class="pl-chip">p. ${esc(x.pagina)}</span>`:''}</div>${desc?`<p class="pl-desc">${esc(desc.slice(0,180))}${desc.length>180?'…':''}</p>`:''}</div><div><select class="pl-select" data-assign="${i}"><option value="">Sin asignar</option>${LAPSOS.map(l=>`<option value="${l}" ${x.lapso===l?'selected':''}>${l}</option>`).join('')}</select></div><div class="pl-item-actions"><button type="button" class="pl-small" data-open="${i}"><i class="fa-solid fa-book-open"></i> Ver tema</button><button type="button" class="pl-small" data-plan="${i}"><i class="fa-solid fa-wand-magic-sparkles"></i> Planificar</button>${x.lapso?`<button type="button" class="pl-small danger" data-unassign="${i}"><i class="fa-solid fa-xmark"></i> Quitar del lapso</button>`:''}</div></article>`}
-  function bindItems(root,arr){root.querySelectorAll('[data-assign]').forEach(s=>s.addEventListener('change',()=>{const x=arr[Number(s.dataset.assign)];setAssignment(x.grado,x.tema,s.value);render()}));root.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openTopic(arr[Number(b.dataset.open)])));root.querySelectorAll('[data-plan]').forEach(b=>b.addEventListener('click',()=>sendSingle(arr[Number(b.dataset.plan)])));root.querySelectorAll('[data-unassign]').forEach(b=>b.addEventListener('click',()=>{const x=arr[Number(b.dataset.unassign)];if(!x)return;const ok=window.confirm(`¿Quitar "${x.tema}" de ${x.lapso}?
+  function bindItems(root,arr){root.querySelectorAll('[data-assign]').forEach(s=>s.addEventListener('change',()=>{const x=arr[Number(s.dataset.assign)];setAssignment(x.grado,x,s.value);render()}));root.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openTopic(arr[Number(b.dataset.open)])));root.querySelectorAll('[data-plan]').forEach(b=>b.addEventListener('click',()=>sendSingle(arr[Number(b.dataset.plan)])));root.querySelectorAll('[data-unassign]').forEach(b=>b.addEventListener('click',()=>{const x=arr[Number(b.dataset.unassign)];if(!x)return;const ok=window.confirm(`¿Quitar "${x.tema}"${x.pagina?` (p. ${x.pagina})`:''} de ${x.lapso}?
 
-El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);if(!ok)return;setAssignment(x.grado,x.tema,'');render();if(typeof mostrarToast==='function')mostrarToast('Tema quitado del lapso. Ahora aparece como Sin asignar.','success','Panel por lapso')}))}
+El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);if(!ok)return;setAssignment(x.grado,x,'');render();if(typeof mostrarToast==='function')mostrarToast('Tema quitado del lapso. Ahora aparece como Sin asignar.','success','Panel por lapso')}))}
   function showUnassigned(){const list=document.getElementById('pl-list');if(!list)return;const arr=rowsForGrade().filter(x=>!x.lapso);if(!arr.length){list.innerHTML='<div class="pl-empty"><h4>Todos los temas ya tienen lapso asignado</h4></div>';return}list.innerHTML=`<div style="font-weight:900;color:var(--text-color,#24384c);margin-bottom:2px">Temas sin asignar · ${esc(gradoActual)}</div>`+arr.map((x,i)=>itemHtml(x,i)).join('');bindItems(list,arr)}
   function openGrade(){document.getElementById('tab-cuadernillo-ef')?.click();setTimeout(()=>{const b=[...document.querySelectorAll('#cef-levels .cef-level')].find(x=>norm(x.dataset.nivel)===norm(gradoActual));b?.click()},120)}
   function openTopic(x){openGrade();setTimeout(()=>{const cards=[...document.querySelectorAll('#cef-grid .cef-card')];const c=cards.find(el=>norm(el.querySelector('h4')?.textContent)===norm(x.tema));c?.querySelector('[data-ver]')?.click()},250)}
@@ -10739,6 +10749,8 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
   const norm=s=>String(s||'').trim().replace(/\s+/g,' ');
   const key=(g,t)=>`${norm(g)}|||${norm(t)}`;
+  const assignKey=(g,item)=>`${norm(g)}|||${norm(item?.tema)}|||p:${norm(item?.pagina)}|||d:${norm(item?.descripcion||item?.tejido||item?.referentes||'')}`;
+  function assignedLapso(map,g,item,rows){const k=assignKey(g,item);if(Object.prototype.hasOwnProperty.call(map,k))return map[k]||'';const same=(rows||[]).filter(x=>norm(x.tema)===norm(item?.tema));if(same.length===1)return map[key(g,item?.tema)]||'';return ''}
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(_){return f}};
   const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
@@ -10765,8 +10777,8 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function addHistory(grado,tema,estado,accion,detalle){const all=history(),k=key(grado,tema);if(!Array.isArray(all[k]))all[k]=[];all[k].push({fecha:new Date().toISOString(),grado,tema,estado,accion,detalle});if(all[k].length>80)all[k]=all[k].slice(-80);writeJSON(HISTORY_KEY,all)}
 
   function rows(){
-    const data=window.EDUGESTION_CEF_DATA||{},a=assignments(),tr=track();
-    return (data[gradoActual]||[]).map(x=>{const k=key(gradoActual,x.tema);return {...x,grado:gradoActual,lapso:a[k]||'',estado:tr[k]?.estado||'Pendiente'}})
+    const data=window.EDUGESTION_CEF_DATA||{},a=assignments(),tr=track(),rows=data[gradoActual]||[];
+    return rows.map(x=>{const k=key(gradoActual,x.tema);return {...x,grado:gradoActual,lapso:assignedLapso(a,gradoActual,x,rows),estado:tr[k]?.estado||'Pendiente'}})
   }
 
   function create(){
@@ -14703,10 +14715,13 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function curriculumTopicsFor(lapsoName,ano) {
     if(!lapsoName)return [];
     const data=window.EDUGESTION_CEF_DATA||{}, grade=curriculumGradeKey(ano); if(!grade||!Array.isArray(data[grade]))return [];
-    const assignments=safeJSON(LAPSO_ASSIGN_KEY,{}), track=safeJSON(LAPSO_TRACK_KEY,{}), norm=v=>String(v||'').trim().replace(/\s+/g,' ');
-    return data[grade].map(topic=>{
-      const key=`${norm(grade)}|||${norm(topic.tema)}`;
-      return {...topic,lapso:assignments[key]||'',estado:track[key]?.estado||'Pendiente'};
+    const assignments=safeJSON(LAPSO_ASSIGN_KEY,{}), track=safeJSON(LAPSO_TRACK_KEY,{}), norm=v=>String(v||'').trim().replace(/\s+/g,' '), rows=data[grade];
+    return rows.map(topic=>{
+      const legacy=`${norm(grade)}|||${norm(topic.tema)}`;
+      const unique=`${norm(grade)}|||${norm(topic.tema)}|||p:${norm(topic.pagina)}|||d:${norm(topic.descripcion||topic.tejido||topic.referentes||'')}`;
+      const same=rows.filter(x=>norm(x.tema)===norm(topic.tema));
+      const lapso=Object.prototype.hasOwnProperty.call(assignments,unique)?(assignments[unique]||''):(same.length===1?(assignments[legacy]||''):'');
+      return {...topic,lapso,estado:track[legacy]?.estado||'Pendiente'};
     }).filter(x=>x.lapso===lapsoName);
   }
   function compactPlan(occ) {
@@ -15003,7 +15018,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const norm=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9áéíóúñü\s]/g,' ').replace(/\s+/g,' ').trim();
   const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))||f}catch(_){return f}};
   const writeJSON=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
-  const topicKey=(grado,tema)=>`${String(grado||'').trim().replace(/\s+/g,' ')}|||${String(tema||'').trim().replace(/\s+/g,' ')}`;
+  const topicKey=(grado,item)=>`${String(grado||'').trim().replace(/\s+/g,' ')}|||${String(item?.tema||'').trim().replace(/\s+/g,' ')}|||p:${String(item?.pagina||'').trim()}|||d:${String(item?.descripcion||item?.tejido||item?.referentes||'').trim().replace(/\s+/g,' ')}`;
+  const legacyTopicKey=(grado,tema)=>`${String(grado||'').trim().replace(/\s+/g,' ')}|||${String(tema||'').trim().replace(/\s+/g,' ')}`;
   let currentSection='';
   let currentLapso='1';
 
@@ -15043,7 +15059,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
   function labelSection(x){return `${x.ano} · Sección ${x.seccion}${x.turno?` · ${x.turno==='Manana'?'Mañana':x.turno}`:''}`}
   function curriculumGradeKey(ano){const data=window.EDUGESTION_CEF_DATA||{},candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));if(candidates.length<=1)return candidates[0]||'';const raw=String(ano||'').toLowerCase();const yr=candidates.find(g=>/año/i.test(g));if(/año|ano|media|1ero|2do|3ro|4to|5to/.test(raw)&&yr)return yr;return candidates[0]||''}
-  function topicsFor(ano,lapso){const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];const a=readJSON(ASSIGN_KEY,{}),name=LAPSOS[String(lapso)];return data[grade].map(x=>({...x,grado:grade,lapso:a[topicKey(grade,x.tema)]||''})).filter(x=>x.lapso===name)}
+  function topicsFor(ano,lapso){const data=window.EDUGESTION_CEF_DATA||{},grade=curriculumGradeKey(ano);if(!grade||!Array.isArray(data[grade]))return[];const a=readJSON(ASSIGN_KEY,{}),name=LAPSOS[String(lapso)],rows=data[grade];return rows.map(x=>{const unique=topicKey(grade,x),legacy=legacyTopicKey(grade,x.tema),same=rows.filter(y=>String(y.tema||'').trim().replace(/\s+/g,' ')===String(x.tema||'').trim().replace(/\s+/g,' '));const assigned=Object.prototype.hasOwnProperty.call(a,unique)?(a[unique]||''):(same.length===1?(a[legacy]||''):'');return {...x,grado:grade,lapso:assigned}}).filter(x=>x.lapso===name)}
   function schoolYearText(){const s=weeklyState(),a=fromISO(s.start),b=fromISO(s.end);return a&&b?`${a.getFullYear()} - ${b.getFullYear()}`:'2026 - 2027'}
   function lapsoRange(lapso){const s=weeklyState(),cfg=s.lapsos?.[String(lapso)]||{};return {start:cfg.start||'',end:cfg.end||''}}
   function sectionSchedules(secKey){const {ano,seccion}=parseSectionKey(secKey);return (Array.isArray(horariosProfesor)?horariosProfesor:[]).filter(h=>String(h.ano)===ano&&String(h.seccion)===seccion)}
@@ -15114,7 +15130,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_FORMATO_CONTROL_ESTUDIO_V3_END */
 
 /* ================================================================
-   EduGestión · PLAN DE EVALUACIÓN PARA ALUMNOS · V2.5
+   EduGestión · PLAN DE EVALUACIÓN PARA ALUMNOS · V2.6
    Documento separado del Formato Control de Estudio.
    Gemini propone: nombre de evaluación + cómo se evaluará + % + fechas.
    ================================================================ */
@@ -15131,7 +15147,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const norm=v=>String(v||'').trim().replace(/\s+/g,' ');
-  const topicKey=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
+  const topicKey=(grado,item)=>`${norm(grado)}|||${norm(item?.tema)}|||p:${norm(item?.pagina)}|||d:${norm(item?.descripcion||item?.tejido||item?.referentes||'')}`;
+  const legacyTopicKey=(grado,tema)=>`${norm(grado)}|||${norm(tema)}`;
   const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch(_){return f}};
   const writeJSON=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
   const toast=(m,t='success')=>{ if(typeof mostrarToast==='function')mostrarToast(m,t,'Plan para alumnos'); else alert(m); };
@@ -15164,7 +15181,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function selectedTopics(){return readJSON(TOPICS_KEY,[])}
   function assignedTopics(grado,lapso){
     const data=window.EDUGESTION_CEF_DATA||{},assign=readJSON(ASSIGN_KEY,{}),rows=Array.isArray(data[grado])?data[grado]:[];
-    return rows.filter(x=>assign[topicKey(grado,x.tema)]===lapso).map(x=>({...x,grado,fuente:'Cuadernillo Curricular MPPE · Educación Física',agregadoEn:new Date().toISOString()}));
+    return rows.filter(x=>{const unique=topicKey(grado,x),legacy=legacyTopicKey(grado,x.tema),same=rows.filter(y=>norm(y.tema)===norm(x.tema));const value=Object.prototype.hasOwnProperty.call(assign,unique)?(assign[unique]||''):(same.length===1?(assign[legacy]||''):'');return value===lapso}).map(x=>({...x,grado,fuente:'Cuadernillo Curricular MPPE · Educación Física',agregadoEn:new Date().toISOString()}));
   }
   function loadTopicsFromLapso(){
     const grado=$('pea-grade')?.value||'',lapso=$('pev-lapso')?.value||$('pea-lapso')?.value||'1er Lapso';
