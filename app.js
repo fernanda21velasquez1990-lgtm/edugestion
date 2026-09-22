@@ -14696,6 +14696,61 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function blockKey(h) { return [h.dia,h.horaInicio,h.horaFin,h.ano,h.seccion,h.turno].map(x=>String(x||'')).join('|'); }
   function manualId() { return `manual-${Date.now()}-${Math.random().toString(36).slice(2,7)}`; }
   function storageKey() { return `edugestion_weekly_planning_v1_${String(profesorActual?.id || profesorActual?.usuario || 'docente')}`; }
+  function weeklyMateriaNorm() { return String(window.profesorActual?.materia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
+  function isScienceWeekly() { const m=weeklyMateriaNorm(); return m.includes('ciencias naturales') || m.includes('biologia'); }
+  function isPhysicalWeekly() { return weeklyMateriaNorm().includes('educacion fisica'); }
+  function weeklyCurriculumData(ano='') {
+    if (isScienceWeekly()) {
+      const target=String(ano||parseSectionKey(selectedSection).ano||'');
+      const n=Number(target.match(/\d+/)?.[0]||0);
+      if(n>=4 && window.EDUGESTION_BIOLOGIA_DATA) return window.EDUGESTION_BIOLOGIA_DATA;
+      return window.EDUGESTION_CIENCIAS_DATA || window.EDUGESTION_CEF_DATA || {};
+    }
+    return window.EDUGESTION_CEF_DATA || {};
+  }
+  function weeklyAreaLabel(ano='') {
+    if(!isScienceWeekly()) return 'Educación Física';
+    const target=String(ano||parseSectionKey(selectedSection).ano||'');
+    const n=Number(target.match(/\d+/)?.[0]||0);
+    return n>=4?'Biología':'Ciencias Naturales';
+  }
+  function applyWeeklyAreaMode() {
+    const science=isScienceWeekly();
+    section.classList.toggle('weekly-mode-science',science);
+    const hero=section.querySelector('.weekly-planning-hero p');
+    if(hero) hero.textContent=science
+      ? 'Genera las fechas reales de clase desde tu horario, vincula el cuadernillo de Ciencias Naturales, las evaluaciones y prepara cada semana automáticamente con Gemini.'
+      : 'Genera las fechas reales de clase desde tu horario, diferencia aula y cancha, vincula evaluaciones y prepara cada semana automáticamente con Gemini.';
+    const lapsoHelp=section.querySelector('.weekly-lapso-heading small');
+    if(lapsoHelp) lapsoHelp.textContent=science
+      ? 'Define las fechas reales de cada lapso. EduGestión calculará automáticamente las clases disponibles, evaluaciones, clases pedagógicas restantes y la secuencia de contenidos de Ciencias Naturales.'
+      : 'Define las fechas reales de cada lapso. EduGestión calculará automáticamente las clases disponibles, aula, cancha, gimnasio, evaluaciones y clases pedagógicas restantes.';
+    const canchaStat=section.querySelector('.weekly-stats > article.is-cancha');
+    const gymStat=section.querySelector('.weekly-stats > article.is-gimnasio');
+    if(canchaStat) canchaStat.style.display=science?'none':'';
+    if(gymStat) gymStat.style.display=science?'none':'';
+    const aulaLabel=section.querySelector('.weekly-stats > article.is-aula span');
+    if(aulaLabel) aulaLabel.textContent=science?'Clases programadas':'Clases en aula';
+    const legend=section.querySelector('.weekly-calendar-legend');
+    if(legend){
+      const spans=[...legend.querySelectorAll('span')];
+      spans.forEach(sp=>{
+        const txt=sp.textContent.trim().toLowerCase();
+        if(txt.includes('cancha')||txt.includes('gimnasio')) sp.style.display=science?'none':'';
+        if(txt==='aula') sp.lastChild.textContent=science?'Clase':'Aula';
+      });
+    }
+    const manualLocation=$('weekly-manual-location');
+    if(manualLocation){
+      manualLocation.value='Aula';
+      const label=manualLocation.closest('label');
+      if(label) label.style.display=science?'none':'';
+    }
+    const progress=$('weekly-ai-progress')?.querySelector('span');
+    if(progress) progress.textContent=science
+      ? 'Gemini está preparando una secuencia continua de Ciencias Naturales: revisa el cuadernillo, el lapso, las evaluaciones y las clases siguientes…'
+      : 'Gemini está preparando una secuencia continua: revisa la semana anterior, el lapso, las evaluaciones y las clases siguientes…';
+  }
   function defaultState() {
     return {
       start:'2026-09-16', end:'2027-07-31', autoAI:true, locations:{}, overrides:{}, manual:[],
@@ -14736,7 +14791,19 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     });
   }
   function ensureLocationDefaults(state,key=selectedSection) {
-    schedulesFor(key).forEach((h,i)=>{ const k=blockKey(h); if(!state.locations[k]) state.locations[k]=i%2===0?'Aula':'Cancha'; });
+    const science=isScienceWeekly();
+    schedulesFor(key).forEach((h,i)=>{
+      const k=blockKey(h);
+      if(science) state.locations[k]='Aula';
+      else if(!state.locations[k]) state.locations[k]=i%2===0?'Aula':'Cancha';
+    });
+    if(science){
+      Object.keys(state.overrides||{}).forEach(id=>{
+        const ov=state.overrides[id];
+        if(ov && Object.prototype.hasOwnProperty.call(ov,'location')) ov.location='Aula';
+      });
+      (state.manual||[]).forEach(x=>{x.location='Aula'});
+    }
   }
 
   const GYM_SUPERCLASSES=[
@@ -14882,7 +14949,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   }
   function configuredLapsos(state=loadState()) { return ['1','2','3'].map(k=>lapsoInfo(k,state)).filter(x=>x.valid); }
   function curriculumGradeKey(ano) {
-    const data=window.EDUGESTION_CEF_DATA||{}, candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));
+    const data=weeklyCurriculumData(ano), candidates=Object.keys(data).filter(g=>normalizeAcademicKey(g)===normalizeAcademicKey(ano));
     if(candidates.length<=1)return candidates[0]||'';
     const profileGrades=Array.isArray(window.EDUGESTION_DOCENTE_PERFIL?.grados)?window.EDUGESTION_DOCENTE_PERFIL.grados:[];
     const profileMatch=candidates.find(g=>profileGrades.some(pg=>String(pg).trim().toLowerCase()===String(g).trim().toLowerCase()));
@@ -14894,7 +14961,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   }
   function curriculumTopicsFor(lapsoName,ano) {
     if(!lapsoName)return [];
-    const data=window.EDUGESTION_CEF_DATA||{}, grade=curriculumGradeKey(ano); if(!grade||!Array.isArray(data[grade]))return [];
+    const data=weeklyCurriculumData(ano), grade=curriculumGradeKey(ano); if(!grade||!Array.isArray(data[grade]))return [];
     const assignments=safeJSON(LAPSO_ASSIGN_KEY,{}), track=safeJSON(LAPSO_TRACK_KEY,{}), norm=v=>String(v||'').trim().replace(/\s+/g,' '), rows=data[grade];
     let found=rows.map(topic=>{
       const legacy=`${norm(grade)}|||${norm(topic.tema)}`;
@@ -14903,6 +14970,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
       const lapso=Object.prototype.hasOwnProperty.call(assignments,unique)?(assignments[unique]||''):(same.length===1?(assignments[legacy]||''):'');
       return {...topic,lapso,estado:track[legacy]?.estado||'Pendiente'};
     }).filter(x=>x.lapso===lapsoName);
+    if(isScienceWeekly()) return found;
     if(lapsoName==='1er Lapso'&&!found.length){
       const num=Number(String(grade).match(/\d+/)?.[0]||0),specsByYear={
         1:[
@@ -14963,7 +15031,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
         const suggestedNoClass=isSchoolNoClass(date);
         out.push({
           id, manual:false, date, ano, seccion, turno:h.turno||'', horaInicio:h.horaInicio||'', horaFin:h.horaFin||'',
-          location:over.location||state.locations[blockKey(h)]||'Aula',
+          location:isScienceWeekly()?'Aula':(over.location||state.locations[blockKey(h)]||'Aula'),
           status:over.status || (suggestedNoClass?'Sin clase':'Clase'),
           schoolEvent:schoolEvent(date), ...over
         });
@@ -14988,6 +15056,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function labelSection(item) { return `${item.ano} · Sección ${item.seccion}${item.turno?` · ${item.turno==='Manana'?'Mañana':item.turno}`:''}`; }
 
   function syncControls() {
+    applyWeeklyAreaMode();
     const state=loadState();
     $('weekly-school-start').value=state.start||''; $('weekly-school-end').value=state.end||''; $('weekly-auto-ai').checked=state.autoAI!==false;
     ['1','2','3'].forEach(k=>{ const cfg=state.lapsos?.[k]||{}; if($(`weekly-lapso${k}-start`))$(`weekly-lapso${k}-start`).value=cfg.start||''; if($(`weekly-lapso${k}-end`))$(`weekly-lapso${k}-end`).value=cfg.end||''; });
@@ -15000,7 +15069,8 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     });
     if($('weekly-section-select')) $('weekly-section-select').value=selectedSection;
     ensureLocationDefaults(state,selectedSection);
-    if(ensureGymSuperclasses(state)) saveState(state);
+    if(isPhysicalWeekly() && ensureGymSuperclasses(state)) saveState(state);
+    else if(isScienceWeekly()) saveState(state);
     renderScheduleMap(); renderAll(false);
   }
 
@@ -15009,6 +15079,10 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     const state=loadState(); ensureLocationDefaults(state); saveState(state);
     const blocks=schedulesFor();
     if(!blocks.length){ box.innerHTML='<div class="weekly-empty-inline"><i class="fa-solid fa-clock"></i> Esta sección todavía no tiene bloques en Mi Horario.</div>'; return; }
+    if(isScienceWeekly()){
+      box.innerHTML=`<div class="weekly-schedule-title"><strong>Horario semanal de la sección</strong><small>La plataforma detectó ${blocks.length} ${blocks.length===1?'clase':'clases'} de ${esc(weeklyAreaLabel())} por semana en tu horario.</small></div><div class="weekly-schedule-items">${blocks.map(h=>`<div class="weekly-schedule-item"><span><b>${esc(h.dia)}</b><small>${esc(h.horaInicio)}–${esc(h.horaFin)}</small></span><strong style="color:#176f78;font-size:.82rem"><i class="fa-solid fa-flask"></i> ${esc(weeklyAreaLabel())}</strong></div>`).join('')}</div>`;
+      return;
+    }
     const warning=blocks.length===2?'':`<p class="weekly-schedule-warning"><i class="fa-solid fa-triangle-exclamation"></i> Hay ${blocks.length} bloques semanales para esta sección. Puedes asignar Aula, Cancha o Gimnasio individualmente.</p>`;
     box.innerHTML=`<div class="weekly-schedule-title"><strong>Distribución semanal del espacio</strong><small>La plataforma detectó ${blocks.length} ${blocks.length===1?'clase':'clases'} por semana en tu horario.</small></div>${warning}<div class="weekly-schedule-items">${blocks.map((h,i)=>{
       const k=blockKey(h), loc=state.locations[k]||'Aula';
@@ -15021,7 +15095,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function renderStats(occurrences) {
     const eff=occurrences.filter(effective);
     $('weekly-stat-total').textContent=String(eff.length);
-    $('weekly-stat-aula').textContent=String(eff.filter(x=>x.location==='Aula').length);
+    $('weekly-stat-aula').textContent=String(isScienceWeekly()?eff.length:eff.filter(x=>x.location==='Aula').length);
     $('weekly-stat-cancha').textContent=String(eff.filter(x=>x.location==='Cancha').length);
     if($('weekly-stat-gimnasio')) $('weekly-stat-gimnasio').textContent=String(eff.filter(x=>x.location==='Gimnasio').length);
     $('weekly-stat-eval').textContent=String(eff.filter(x=>evaluationFor(x).length).length);
@@ -15044,7 +15118,11 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
       if(schoolEnd&&info.end>schoolEnd)warnings.push(`${info.name} termina después del fin del año escolar.`);
       const all=occurrences.filter(x=>x.date>=info.start&&x.date<=info.end), eff=all.filter(effective), evalCount=eff.filter(x=>evaluationFor(x).length).length;
       const aula=eff.filter(x=>x.location==='Aula').length, cancha=eff.filter(x=>x.location==='Cancha').length, gimnasio=eff.filter(x=>x.location==='Gimnasio').length, ped=Math.max(0,eff.length-evalCount), off=all.filter(x=>!effective(x)).length;
-      if(statsEl)statsEl.innerHTML=`<div class="weekly-lapso-metric"><b>${eff.length}</b><span>Clases efectivas</span></div><div class="weekly-lapso-metric is-aula"><b>${aula}</b><span>Aula</span></div><div class="weekly-lapso-metric is-cancha"><b>${cancha}</b><span>Cancha</span></div><div class="weekly-lapso-metric is-gimnasio"><b>${gimnasio}</b><span>Gimnasio</span></div><div class="weekly-lapso-metric is-eval"><b>${evalCount}</b><span>Evaluaciones</span></div><div class="weekly-lapso-metric is-ped"><b>${ped}</b><span>Clases pedagógicas</span></div><div class="weekly-lapso-metric is-off"><b>${off}</b><span>Sin clase</span></div>`;
+      if(statsEl){
+        statsEl.innerHTML=isScienceWeekly()
+          ? `<div class="weekly-lapso-metric"><b>${eff.length}</b><span>Clases efectivas</span></div><div class="weekly-lapso-metric is-eval"><b>${evalCount}</b><span>Evaluaciones</span></div><div class="weekly-lapso-metric is-ped"><b>${ped}</b><span>Clases pedagógicas</span></div><div class="weekly-lapso-metric is-off"><b>${off}</b><span>Sin clase</span></div>`
+          : `<div class="weekly-lapso-metric"><b>${eff.length}</b><span>Clases efectivas</span></div><div class="weekly-lapso-metric is-aula"><b>${aula}</b><span>Aula</span></div><div class="weekly-lapso-metric is-cancha"><b>${cancha}</b><span>Cancha</span></div><div class="weekly-lapso-metric is-gimnasio"><b>${gimnasio}</b><span>Gimnasio</span></div><div class="weekly-lapso-metric is-eval"><b>${evalCount}</b><span>Evaluaciones</span></div><div class="weekly-lapso-metric is-ped"><b>${ped}</b><span>Clases pedagógicas</span></div><div class="weekly-lapso-metric is-off"><b>${off}</b><span>Sin clase</span></div>`;
+      }
     });
     const ordered=[...ranges].sort((a,b)=>a.start.localeCompare(b.start));
     for(let i=1;i<ordered.length;i++) if(ordered[i].start<=ordered[i-1].end)warnings.push(`${ordered[i-1].name} y ${ordered[i].name} se superponen.`);
@@ -15076,7 +15154,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     const offset=(first.getDay()+6)%7, cells=[]; for(let i=0;i<offset;i++)cells.push('<span class="weekly-calendar-blank"></span>');
     for(let day=1;day<=days;day++) {
       const date=isoLocal(new Date(y,m,day,12)), items=occurrences.filter(x=>x.date===date), event=schoolEvent(date), isToday=date===isoLocal(new Date());
-      const chips=items.map(x=>`<span class="weekly-cal-chip ${x.status==='Sin clase'?'is-noclass':x.location==='Gimnasio'?'is-gimnasio':x.location==='Cancha'?'is-cancha':'is-aula'}" title="${esc(`${x.horaInicio} ${x.location}`)}">${x.status==='Sin clase'?'Sin clase':x.location}</span>`).join('');
+      const chips=items.map(x=>`<span class="weekly-cal-chip ${x.status==='Sin clase'?'is-noclass':x.location==='Gimnasio'?'is-gimnasio':x.location==='Cancha'?'is-cancha':'is-aula'}" title="${esc(`${x.horaInicio} ${isScienceWeekly()?'Ciencias Naturales':x.location}`)}">${x.status==='Sin clase'?'Sin clase':isScienceWeekly()?'Clase':x.location}</span>`).join('');
       const evalCount=items.reduce((n,x)=>n+evaluationFor(x).length,0);
       cells.push(`<button type="button" class="weekly-calendar-day ${isToday?'is-today':''} ${items.length?'has-class':''}" data-weekly-date="${date}"><b>${day}</b>${event?'<i class="fa-solid fa-star" title="Fecha del calendario escolar"></i>':''}<span class="weekly-cal-chips">${chips}</span>${evalCount?`<em><i class="fa-solid fa-clipboard-check"></i>${evalCount}</em>`:''}</button>`);
     }
@@ -15097,17 +15175,27 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   }
 
   function renderClassCard(occ) {
-    const date=fromISO(occ.date), evals=evaluationFor(occ), event=occ.schoolEvent||'', planned=Boolean(occ.inicio||occ.desarrollo||occ.cierre||occ.estrategias||occ.tema);
+    const date=fromISO(occ.date), evals=evaluationFor(occ), event=occ.schoolEvent||'', planned=Boolean(occ.inicio||occ.desarrollo||occ.cierre||occ.estrategias||occ.tema), science=isScienceWeekly();
     const evalHtml=evals.length?`<div class="weekly-linked-eval"><i class="fa-solid fa-clipboard-check"></i><div><strong>Plan de evaluación vinculado</strong>${evals.map(e=>`<span>${esc(e.actividad||e.nombre||'Evaluación')} ${e.puntos?`· ${esc(e.puntos)} pts`:''}</span>`).join('')}</div></div>`:'';
+    const locationBadge=science
+      ? `<span class="is-aula"><i class="fa-solid fa-flask"></i>${esc(weeklyAreaLabel(occ.ano))}</span>`
+      : `<span class="${occ.location==='Gimnasio'?'is-gimnasio':occ.location==='Cancha'?'is-cancha':'is-aula'}">${occ.location==='Gimnasio'?'<i class="fa-solid fa-dumbbell"></i>':occ.location==='Cancha'?'<i class="fa-solid fa-person-running"></i>':'<i class="fa-solid fa-chalkboard-user"></i>'}${esc(occ.location)}</span>`;
+    const controls=science
+      ? `<div class="weekly-class-controls"><label><span>Estado</span><select data-field="status"><option value="Clase" ${occ.status==='Clase'?'selected':''}>Clase efectiva</option><option value="Sin clase" ${occ.status==='Sin clase'?'selected':''}>Sin clase / suspendida</option></select></label>${occ.manual?'<button type="button" class="weekly-delete-manual" data-delete-manual><i class="fa-solid fa-trash"></i></button>':''}</div>`
+      : `<div class="weekly-class-controls"><label><span>Espacio</span><select data-field="location"><option value="Aula" ${occ.location==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${occ.location==='Cancha'?'selected':''}>Cancha</option><option value="Gimnasio" ${occ.location==='Gimnasio'?'selected':''}>Gimnasio</option></select></label><label><span>Estado</span><select data-field="status"><option value="Clase" ${occ.status==='Clase'?'selected':''}>Clase efectiva</option><option value="Sin clase" ${occ.status==='Sin clase'?'selected':''}>Sin clase / suspendida</option></select></label>${occ.manual?'<button type="button" class="weekly-delete-manual" data-delete-manual><i class="fa-solid fa-trash"></i></button>':''}</div>`;
+    const strategyPlaceholder=science?'Indagación, observación, experimentación, estudio de casos…':'Demostración, estaciones, trabajo cooperativo…';
+    const developmentIcon=science?'fa-flask':'fa-person-running';
+    const developmentPlaceholder=science?'Indagación, explicación, experimento o actividad científica paso a paso…':'Actividades paso a paso…';
+    const closePlaceholder=science?'Síntesis, conclusiones, metacognición, aplicación…':'Vuelta a la calma, reflexión, síntesis…';
     return `<article class="weekly-class-card ${occ.status==='Sin clase'?'is-noclass':''}" data-occ-id="${esc(occ.id)}">
-      <header><div class="weekly-class-date"><span>${esc(date?dateFmt.format(date):occ.date)}</span><strong>${esc(occ.horaInicio)}–${esc(occ.horaFin)}</strong></div><div class="weekly-class-badges"><span class="${occ.location==='Gimnasio'?'is-gimnasio':occ.location==='Cancha'?'is-cancha':'is-aula'}">${occ.location==='Gimnasio'?'<i class="fa-solid fa-dumbbell"></i>':occ.location==='Cancha'?'<i class="fa-solid fa-person-running"></i>':'<i class="fa-solid fa-chalkboard-user"></i>'}${esc(occ.location)}</span>${lapsoForDate(occ.date)?`<span class="is-lapso"><i class="fa-solid fa-layer-group"></i>${esc(lapsoForDate(occ.date).name)}</span>`:''}${planned?'<span class="is-planned"><i class="fa-solid fa-wand-magic-sparkles"></i>Planificada</span>':''}${occ.specialClass?'<span class="is-special"><i class="fa-solid fa-star"></i>Superclase</span>':''}${occ.manual?'<span class="is-manual">Manual</span>':''}</div></header>
+      <header><div class="weekly-class-date"><span>${esc(date?dateFmt.format(date):occ.date)}</span><strong>${esc(occ.horaInicio)}–${esc(occ.horaFin)}</strong></div><div class="weekly-class-badges">${locationBadge}${lapsoForDate(occ.date)?`<span class="is-lapso"><i class="fa-solid fa-layer-group"></i>${esc(lapsoForDate(occ.date).name)}</span>`:''}${planned?'<span class="is-planned"><i class="fa-solid fa-wand-magic-sparkles"></i>Planificada</span>':''}${!science&&occ.specialClass?'<span class="is-special"><i class="fa-solid fa-star"></i>Superclase</span>':''}${occ.manual?'<span class="is-manual">Manual</span>':''}</div></header>
       ${event?`<div class="weekly-school-event"><i class="fa-solid fa-calendar-day"></i><span><b>Calendario escolar:</b> ${esc(event)}</span></div>`:''}
       ${evalHtml}
-      <div class="weekly-class-controls"><label><span>Espacio</span><select data-field="location"><option value="Aula" ${occ.location==='Aula'?'selected':''}>Aula</option><option value="Cancha" ${occ.location==='Cancha'?'selected':''}>Cancha</option><option value="Gimnasio" ${occ.location==='Gimnasio'?'selected':''}>Gimnasio</option></select></label><label><span>Estado</span><select data-field="status"><option value="Clase" ${occ.status==='Clase'?'selected':''}>Clase efectiva</option><option value="Sin clase" ${occ.status==='Sin clase'?'selected':''}>Sin clase / suspendida</option></select></label>${occ.manual?'<button type="button" class="weekly-delete-manual" data-delete-manual><i class="fa-solid fa-trash"></i></button>':''}</div>
+      ${controls}
       <div class="weekly-pedagogy ${occ.status==='Sin clase'?'is-disabled':''}">
        <div class="weekly-pedagogy-top"><label><span>Tema</span><input data-field="tema" value="${esc(occ.tema||'')}" placeholder="Tema de esta clase"></label><label><span>Objetivo / propósito</span><input data-field="objetivo" value="${esc(occ.objetivo||'')}" placeholder="Propósito de aprendizaje"></label></div>
-       <label><span>Estrategias metodológicas</span><textarea data-field="estrategias" rows="2" placeholder="Demostración, estaciones, trabajo cooperativo…">${esc(occ.estrategias||'')}</textarea></label>
-       <div class="weekly-three-cols"><label><span><i class="fa-solid fa-play"></i> Inicio</span><textarea data-field="inicio" rows="4" placeholder="Motivación, saberes previos, activación…">${esc(occ.inicio||'')}</textarea></label><label><span><i class="fa-solid fa-person-running"></i> Desarrollo</span><textarea data-field="desarrollo" rows="4" placeholder="Actividades paso a paso…">${esc(occ.desarrollo||'')}</textarea></label><label><span><i class="fa-solid fa-flag-checkered"></i> Cierre</span><textarea data-field="cierre" rows="4" placeholder="Vuelta a la calma, reflexión, síntesis…">${esc(occ.cierre||'')}</textarea></label></div>
+       <label><span>Estrategias metodológicas</span><textarea data-field="estrategias" rows="2" placeholder="${strategyPlaceholder}">${esc(occ.estrategias||'')}</textarea></label>
+       <div class="weekly-three-cols"><label><span><i class="fa-solid fa-play"></i> Inicio</span><textarea data-field="inicio" rows="4" placeholder="Motivación, saberes previos, activación cognitiva…">${esc(occ.inicio||'')}</textarea></label><label><span><i class="fa-solid ${developmentIcon}"></i> Desarrollo</span><textarea data-field="desarrollo" rows="4" placeholder="${developmentPlaceholder}">${esc(occ.desarrollo||'')}</textarea></label><label><span><i class="fa-solid fa-flag-checkered"></i> Cierre</span><textarea data-field="cierre" rows="4" placeholder="${closePlaceholder}">${esc(occ.cierre||'')}</textarea></label></div>
        <label><span>Evaluación / evidencias de aprendizaje</span><textarea data-field="evaluacion" rows="2" placeholder="Criterios, evidencias, observación formativa…">${esc(occ.evaluacion||'')}</textarea></label>
       </div>
      </article>`;
@@ -15141,20 +15229,32 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     if(aiBusy)return; const items=weekItems(); if(!items.length){ if(!silent) mostrarToast('No hay clases efectivas en esta semana.','warning','Planificación semanal'); return; }
     aiBusy=true; $('weekly-ai-progress')?.classList.remove('hidden'); const btn=$('weekly-generate-ai'); if(btn)btn.disabled=true;
     try {
-      const {ano,seccion}=parseSectionKey(selectedSection), materia=profesorActual?.materia||'Educación Física', allOccurrences=buildOccurrences();
-      const classData=items.map(x=>({fecha:x.date,hora:`${x.horaInicio}-${x.horaFin}`,espacio:x.location,lapso:lapsoForDate(x.date)?.name||'',eventoEscolar:x.schoolEvent||'',evaluaciones:evaluationFor(x).map(e=>({actividad:e.actividad||e.nombre||'Evaluación',puntos:e.puntos||''})),temaActual:x.tema||'',objetivoActual:x.objetivo||'',estrategiasActuales:x.estrategias||'',inicioActual:x.inicio||'',desarrolloActual:x.desarrollo||'',cierreActual:x.cierre||'',evaluacionActual:x.evaluacion||''}));
+      const {ano,seccion}=parseSectionKey(selectedSection), materia=profesorActual?.materia||'Educación Física', materiaPlan=isScienceWeekly()?weeklyAreaLabel(ano):materia, allOccurrences=buildOccurrences();
+      const science=isScienceWeekly();
+      const classData=items.map(x=>({fecha:x.date,hora:`${x.horaInicio}-${x.horaFin}`,espacio:science?'Aula':x.location,lapso:lapsoForDate(x.date)?.name||'',eventoEscolar:x.schoolEvent||'',evaluaciones:evaluationFor(x).map(e=>({actividad:e.actividad||e.nombre||'Evaluación',puntos:e.puntos||''})),temaActual:x.tema||'',objetivoActual:x.objetivo||'',estrategiasActuales:x.estrategias||'',inicioActual:x.inicio||'',desarrolloActual:x.desarrollo||'',cierreActual:x.cierre||'',evaluacionActual:x.evaluacion||''}));
       const continuity=sequenceContext(allOccurrences,items);
-      const prompt=`Actúa como especialista en planificación docente venezolana y en secuenciación pedagógica. Genera la planificación SEMANAL de ${materia} para ${ano}, sección ${seccion}.
-
-REGLAS OBLIGATORIAS:
-1. Respeta exactamente cada fecha, hora, espacio (Aula, Cancha o Gimnasio), lapso, evaluación vinculada y evento del calendario escolar.
+      const areaRules=science
+        ? `1. Respeta exactamente cada fecha, hora, lapso, evaluación vinculada y evento del calendario escolar. Todas las clases de este docente se desarrollan como clases académicas de Ciencias Naturales; NO menciones cancha, gimnasio, superclases, acondicionamiento físico, circuitos motrices ni vuelta a la calma.
+2. Mantén continuidad real con las clases previas guardadas: no reinicies el contenido cada semana ni repitas un tema sin necesidad pedagógica.
+3. Mira también las clases y evaluaciones próximas para dejar una progresión lógica hacia lo que sigue.
+4. Usa exclusivamente como BASE CURRICULAR los contenidos del cuadernillo de Ciencias Naturales asignados al lapso. No inventes temas oficiales ni mezcles contenidos de Educación Física.
+5. Si una clase tiene una evaluación vinculada, organiza la sesión alrededor de esa evaluación y consérvala claramente en el campo evaluacion.
+6. En el DESARROLLO prioriza indagación científica, observación, formulación de preguntas e hipótesis, explicación conceptual, análisis de datos, experiencias o experimentos sencillos cuando sean pertinentes, estudio de casos, modelos, cuadros, gráficos, prácticas seguras y relación ciencia-tecnología-sociedad-ambiente.
+7. En el INICIO activa saberes previos y plantea una situación científica significativa. En el CIERRE realiza síntesis, conclusiones, metacognición y aplicación a la vida cotidiana.
+8. Si algún campo ya tiene contenido escrito por el docente, tómalo como restricción y complétalo coherentemente, no lo contradigas.
+9. Usa lenguaje profesional, concreto, científicamente correcto y realizable para el tiempo de clase disponible.`
+        : `1. Respeta exactamente cada fecha, hora, espacio (Aula, Cancha o Gimnasio), lapso, evaluación vinculada y evento del calendario escolar.
 2. Mantén continuidad real con las clases previas guardadas: no reinicies el contenido cada semana ni repitas un tema sin necesidad pedagógica.
 3. Mira también las clases y evaluaciones próximas para dejar una progresión lógica hacia lo que sigue.
 4. Si el Panel por lapso tiene temas curriculares asignados, úsalos como BASE CURRICULAR prioritaria y avanza de manera progresiva entre ellos. No inventes otros temas oficiales.
 5. Si una clase tiene una evaluación vinculada, organiza la sesión alrededor de esa evaluación y consérvala claramente en el campo evaluacion.
 6. En AULA prioriza explicación, análisis, saberes previos, trabajo conceptual/reflexivo y producciones pertinentes. En CANCHA prioriza activación, demostración, práctica, estaciones/circuitos, aplicación motriz, seguridad y vuelta a la calma. En GIMNASIO prioriza acondicionamiento físico, técnica segura, progresión de cargas o resistencia, control postural, hidratación, pausas y uso adecuado de implementos.
 7. Si algún campo ya tiene contenido escrito por el docente, tómalo como restricción y complétalo coherentemente, no lo contradigas.
-8. Usa lenguaje profesional, concreto y realizable para el tiempo de clase disponible.
+8. Usa lenguaje profesional, concreto y realizable para el tiempo de clase disponible.`;
+      const prompt=`Actúa como especialista en planificación docente venezolana, secuenciación pedagógica y ${science?'didáctica de las Ciencias Naturales':'Educación Física'}. Genera la planificación SEMANAL de ${materiaPlan} para ${ano}, sección ${seccion}.
+
+REGLAS OBLIGATORIAS:
+${areaRules}
 
 CLASES DE ESTA SEMANA:
 ${JSON.stringify(classData,null,2)}
@@ -15206,7 +15306,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   $('weekly-generate-ai')?.addEventListener('click',()=>generateAI(false));
   $('weekly-manual-form')?.addEventListener('submit',e=>{
     e.preventDefault(); const key=$('weekly-manual-section').value; const {ano,seccion}=parseSectionKey(key); if(!ano||!seccion)return;
-    const state=loadState(), item={id:manualId(),manual:true,date:$('weekly-manual-date').value,ano,seccion,horaInicio:$('weekly-manual-start').value,horaFin:$('weekly-manual-end').value,location:$('weekly-manual-location').value,status:'Clase',note:$('weekly-manual-note').value||''};
+    const state=loadState(), item={id:manualId(),manual:true,date:$('weekly-manual-date').value,ano,seccion,horaInicio:$('weekly-manual-start').value,horaFin:$('weekly-manual-end').value,location:isScienceWeekly()?'Aula':$('weekly-manual-location').value,status:'Clase',note:$('weekly-manual-note').value||''};
     if(!item.date)return; state.manual=[...(state.manual||[]),item];saveState(state);selectedSection=key;$('weekly-section-select').value=key;weekAnchor=startOfWeek(fromISO(item.date));setMonthSafe(fromISO(item.date));$('weekly-manual-note').value='';renderAll(true);mostrarToast('La clase manual fue agregada al calendario.','success','Calendario actualizado');
   });
 
@@ -16902,3 +17002,5 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(syncVisibility,100));
 })();
 /* EDUGESTION_SEGUIMIENTO_ACADEMICO_V45_END */
+
+/* EDUGESTION_PLANIFICACION_SEMANAL_POR_AREA_V47_END */
