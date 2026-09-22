@@ -15930,6 +15930,16 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const $=id=>document.getElementById(id);
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,' ');
+  const isScienceTeacher=()=>{
+    const materia=norm(window.profesorActual?.materia||window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva||'');
+    return materia.includes('ciencias naturales');
+  };
+  function removeScienceCronograma(){
+    if(!isScienceTeacher())return false;
+    $(TAB_ID)?.remove();
+    $(SECTION_ID)?.remove();
+    return true;
+  }
   const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))||f}catch(_){return f}};
   const teacherKey=()=>String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'docente').replace(/[^a-z0-9_-]/gi,'_');
   const weeklyKey=()=>WEEKLY_PREFIX+String(window.profesorActual?.id||window.profesorActual?.usuario||'docente');
@@ -16078,9 +16088,11 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   async function downloadPdf(){const clone=cloneSheet();if(!clone)return;if(typeof html2pdf!=='function')return alert('No se pudo cargar el generador PDF. Usa Imprimir y selecciona Guardar como PDF.');const {ano,seccion}=parseSectionKey(currentSection),lap=LAPSO_NAMES[currentLapso].replace(/\s+/g,'_');const host=document.createElement('div');host.style.cssText='position:fixed;left:-20000px;top:0;background:white;';const st=document.createElement('style');st.textContent=printCss();host.appendChild(st);host.appendChild(clone);document.body.appendChild(host);try{await html2pdf().set({margin:[0.05,0.05,0.05,0.05],filename:`Cronograma_${String(ano).replace(/\s+/g,'_')}_Seccion_${String(seccion).replace(/\s+/g,'_')}_${lap}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#fff'},jsPDF:{unit:'in',format:'letter',orientation:'landscape'},pagebreak:{mode:['avoid-all']}}).from(clone).save()}finally{host.remove()}}
 
   function syncSelectors(){
+    if(removeScienceCronograma())return;
     const items=sections(),sel=$('cps-section');if(!sel)return;if(!items.some(x=>x.key===currentSection))currentSection=items[0]?.key||'';sel.innerHTML=items.length?items.map(x=>`<option value="${esc(x.key)}">${esc(labelSection(x))}</option>`).join(''):'<option value="">Sin secciones en Mi Horario</option>';if(currentSection)sel.value=currentSection;const lap=$('cps-lapso');if(lap)lap.value=currentLapso;render();
   }
   function create(){
+    if(isScienceTeacher()){removeScienceCronograma();return true;}
     const nav=$('app-nav'),main=$('app-main');if(!nav||!main)return false;if($(TAB_ID))return true;style();
     const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Cronograma por sección';tab.dataset.description='Imprime en una sola hoja el orden de clases, espacios, superclases, evaluaciones, puntos y horarios de cada sección.';tab.innerHTML='<i class="fa-solid fa-table-list"></i><span>Cronograma sección</span>';
     const before=$('tab-actas');if(before)nav.insertBefore(tab,before);else nav.appendChild(tab);
@@ -16091,9 +16103,9 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
   function init(){if(create())return;let n=0;const tm=setInterval(()=>{n++;if(create()||n>40)clearInterval(tm)},250)}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
-  window.addEventListener('edugestion:data-loaded',()=>setTimeout(syncSelectors,80));
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{if(!removeScienceCronograma())syncSelectors()},80));
 })();
-/* EDUGESTION_CRONOGRAMA_SECCION_V33_END */
+/* EDUGESTION_CRONOGRAMA_SECCION_V46_END */
 
 
 /* ================================================================
