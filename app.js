@@ -16639,3 +16639,254 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   document.addEventListener('click',e=>{if(e.target?.closest?.('#tab-horario,#tab-planificacion,#tab-asistencia,#tab-actas,#tab-registro'))setTimeout(boot,60)});
 })();
 /* EDUGESTION_CIENCIAS_SECCIONES_TARDE_V43_END */
+
+/* EDUGESTION_SEGUIMIENTO_ACADEMICO_V45_START */
+(() => {
+  const MARK='EDUGESTION_SEGUIMIENTO_ACADEMICO_V45';
+  if(window[MARK]) return;
+  window[MARK]=true;
+
+  const TAB_ID='tab-seguimiento-academico';
+  const SECTION_ID='section-seguimiento-academico';
+  let secciones=[];
+  let alumnos=[];
+  let stats=null;
+  let actividades=[];
+  let contexto={ano:'',seccion:'',turno:'',lapso:'1er Lapso',desde:'',hasta:''};
+
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+  const num=v=>{const x=Number(v);return Number.isFinite(x)?x:0};
+  const docenteId=()=>String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'sin_usuario').replace(/[^a-z0-9_-]/gi,'_');
+  const controlKey=()=>`edugestion_control_estudio_v1_${docenteId()}`;
+  const criteriaKey=()=>`edugestion_seguimiento_criterios_v1_${docenteId()}`;
+  const weeklyKey=()=>`edugestion_weekly_planning_v1_${String(window.profesorActual?.id||window.profesorActual?.usuario||'docente')}`;
+  const periodoKey=()=>[contexto.ano,contexto.seccion,contexto.turno,contexto.lapso].join('|');
+
+  function permitido(){
+    const rol=norm(window.profesorActual?.rol||'docente');
+    if(rol==='director') return false;
+    const mat=norm(window.profesorActual?.materia||'');
+    return mat.includes('educacion fisica')||mat.includes('ciencias naturales')||mat.includes('biologia');
+  }
+  function readJSON(k,def={}){try{return JSON.parse(localStorage.getItem(k)||'')||def}catch(_){return def}}
+  function saveJSON(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}
+  function studentId(al){return String(al?.id||al?.cedula||al?.documento||al?.nombre||al?.nombreCompleto||'').trim()}
+  function studentName(al){return String(al?.nombre||al?.nombreCompleto||al?.apellidosNombres||'Estudiante').trim()}
+  function pendingSubject(al){return String(al?.materiaPendiente||al?.materia_pendiente||al?.pendiente||'').trim()}
+  function repeats(al){return ['si','sí','true','1'].includes(norm(al?.repite||al?.repitiente||al?.repiteAno||''))}
+
+  function criterios(){
+    const saved=readJSON(criteriaKey(),{});
+    return {
+      faltas:Math.max(1,num(saved.faltas)||3),
+      trabajos:Math.max(1,num(saved.trabajos)||2),
+      notaMin:Math.min(20,Math.max(0,num(saved.notaMin)||10))
+    };
+  }
+  function guardarCriterios(){
+    const c={
+      faltas:Math.max(1,num(document.getElementById('seg-crit-faltas')?.value)||3),
+      trabajos:Math.max(1,num(document.getElementById('seg-crit-trabajos')?.value)||2),
+      notaMin:Math.min(20,Math.max(0,num(document.getElementById('seg-crit-nota')?.value)||10))
+    };
+    saveJSON(criteriaKey(),c);
+    render();
+    toast('Criterios de seguimiento guardados.','success');
+  }
+
+  function lapsoRange(lapso){
+    const idx=String(lapso).startsWith('2')?'2':String(lapso).startsWith('3')?'3':'1';
+    const st=readJSON(weeklyKey(),{lapsos:{}}),cfg=st.lapsos?.[idx]||{};
+    if(idx==='1') return {desde:cfg.start||'2026-09-21',hasta:cfg.end||'2026-12-15'};
+    return {desde:cfg.start||'',hasta:cfg.end||''};
+  }
+  function aplicarRangoLapso(){
+    const lapso=document.getElementById('seg-lapso')?.value||'1er Lapso';
+    const r=lapsoRange(lapso);
+    const d=document.getElementById('seg-desde'),h=document.getElementById('seg-hasta');
+    if(d) d.value=r.desde;
+    if(h) h.value=r.hasta;
+  }
+
+  function styles(){
+    if(document.getElementById('edu-seguimiento-v45-styles'))return;
+    const st=document.createElement('style');st.id='edu-seguimiento-v45-styles';st.textContent=`
+      .seg-hero{padding:22px;border-radius:24px;background:linear-gradient(135deg,#203b73,#176f78);color:#fff;margin-bottom:18px;box-shadow:0 14px 34px rgba(28,63,112,.16)}
+      .seg-hero small{font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.9}.seg-hero h2{margin:7px 0 8px;font-size:1.65rem}.seg-hero p{margin:0;max-width:1030px;line-height:1.48;opacity:.95}
+      .seg-card{background:#fff;border:1px solid #dce6f1;border-radius:20px;padding:16px;margin-bottom:14px;box-shadow:0 8px 22px rgba(31,61,105,.055)}
+      .seg-card h3{margin:0 0 12px;color:#21385d}.seg-tools{display:grid;grid-template-columns:1.15fr .8fr .9fr .9fr auto;gap:10px;align-items:end}.seg-field span{display:block;font-size:.73rem;font-weight:900;color:#61738b;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}.seg-field input,.seg-field select{width:100%;border:1px solid #cfdae8;border-radius:11px;padding:10px 11px;background:#fff;color:#1f2f49;font:inherit}
+      .seg-btn{border:0;border-radius:11px;padding:11px 14px;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px}.seg-btn.primary{background:#285ca8;color:#fff}.seg-btn.soft{background:#edf4fb;color:#245188}.seg-btn.green{background:#11835f;color:#fff}.seg-btn.print{background:#203b73;color:#fff}
+      .seg-criteria{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.seg-criteria .seg-field{min-width:150px}.seg-help{font-size:.78rem;color:#6a7c92;margin-top:9px}.seg-status{font-size:.82rem;color:#60738c;margin-top:9px}
+      .seg-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:12px 0 16px}.seg-metric{border-radius:16px;padding:13px;border:1px solid #dce7f3;background:#f7fafe}.seg-metric strong{display:block;font-size:1.45rem;color:#1e3f72}.seg-metric span{display:block;font-size:.72rem;font-weight:850;color:#6c7b91;margin-top:2px}.seg-metric.warn{background:#fff7e7;border-color:#f4ddb1}.seg-metric.warn strong{color:#a3640d}.seg-metric.danger{background:#fff0f0;border-color:#f0caca}.seg-metric.danger strong{color:#b23a3a}.seg-metric.violet{background:#f6f0ff;border-color:#e1d2f8}.seg-metric.violet strong{color:#7142a8}
+      .seg-filterbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.seg-chip{border:1px solid #cfdae8;background:#fff;color:#405873;border-radius:999px;padding:8px 12px;font-size:.78rem;font-weight:900;cursor:pointer}.seg-chip.is-active{background:#285ca8;color:#fff;border-color:#285ca8}.seg-search{margin-left:auto;min-width:240px;border:1px solid #cfdae8;border-radius:12px;padding:9px 11px}
+      .seg-table-wrap{overflow:auto;border:1px solid #dce6f1;border-radius:15px}.seg-table{width:100%;border-collapse:collapse;min-width:1120px}.seg-table th,.seg-table td{padding:9px 8px;border-bottom:1px solid #e4ebf3;text-align:left;vertical-align:top;font-size:.8rem}.seg-table th{background:#f2f6fb;color:#50637c;text-transform:uppercase;letter-spacing:.035em;font-size:.68rem;position:sticky;top:0;z-index:1}.seg-table td strong{color:#203b62}.seg-table td small{display:block;color:#7a899b;margin-top:2px}.seg-badge{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:5px 8px;font-size:.7rem;font-weight:900}.seg-badge.ok{background:#e7f7ef;color:#16724f}.seg-badge.warn{background:#fff2d8;color:#96610c}.seg-badge.danger{background:#ffe6e6;color:#aa3030}.seg-badge.info{background:#eaf2ff;color:#245ca0}.seg-badge.violet{background:#f2eafd;color:#6d42a0}.seg-work-tags{display:flex;gap:5px;flex-wrap:wrap;max-width:380px}.seg-work-tag{display:inline-block;background:#fff0f0;color:#9d3e3e;border:1px solid #f3d0d0;border-radius:8px;padding:4px 6px;font-size:.68rem;font-weight:800}.seg-empty{padding:28px;text-align:center;color:#718198;border:1px dashed #c9d6e4;border-radius:14px;background:#fbfdff}.seg-subgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.seg-list{display:grid;gap:8px}.seg-list article{border:1px solid #dce6f1;border-radius:13px;padding:11px 12px;background:#fbfdff}.seg-list article strong{display:block;color:#203b62}.seg-list article small{display:block;color:#718198;margin-top:3px}.seg-list .seg-work-tags{margin-top:7px}.seg-section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.seg-section-title h3{margin:0}.seg-count{background:#edf4fb;color:#285a90;border-radius:999px;padding:5px 9px;font-size:.72rem;font-weight:900}
+      @media(max-width:1100px){.seg-tools{grid-template-columns:1fr 1fr}.seg-tools .seg-btn{width:100%}.seg-metrics{grid-template-columns:repeat(3,1fr)}}
+      @media(max-width:760px){.seg-subgrid{grid-template-columns:1fr}.seg-metrics{grid-template-columns:repeat(2,1fr)}.seg-search{margin-left:0;width:100%;min-width:0}.seg-criteria .seg-field{min-width:calc(50% - 8px)}}
+    `;document.head.appendChild(st);
+  }
+
+  function ensureUI(){
+    styles();
+    const nav=document.getElementById('app-nav'),main=document.getElementById('app-main');if(!nav||!main)return;
+    let tab=document.getElementById(TAB_ID);
+    if(!tab){
+      tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Seguimiento académico';tab.dataset.description='Identifica alumnos en seguimiento por lapso: faltas, trabajos no entregados, rendimiento, materias pendientes y repitientes.';tab.innerHTML='<i class="fa-solid fa-user-check"></i><span>Seguimiento académico</span>';
+      const ref=document.getElementById('tab-control-estudio')||document.getElementById('tab-registro');nav.insertBefore(tab,ref||null);
+      tab.addEventListener('click',()=>open(tab));
+    }
+    let sec=document.getElementById(SECTION_ID);
+    if(!sec){
+      const c=criterios();
+      sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden max-w-[1480px] mx-auto';sec.innerHTML=`
+        <header class="seg-hero"><small><i class="fa-solid fa-chart-user"></i> Seguimiento del lapso</small><h2>Seguimiento académico por sección</h2><p>Consulta en un solo lugar quién requiere acompañamiento, cuántas inasistencias acumula, qué trabajos no entregó, su rendimiento actual y los estudiantes registrados con materia pendiente o como repitientes.</p></header>
+        <div class="seg-card"><h3>1. Selecciona sección y lapso</h3><div class="seg-tools">
+          <label class="seg-field"><span>Año / sección</span><select id="seg-seccion"><option value="">Cargando secciones…</option></select></label>
+          <label class="seg-field"><span>Lapso</span><select id="seg-lapso"><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select></label>
+          <label class="seg-field"><span>Desde</span><input id="seg-desde" type="date"></label>
+          <label class="seg-field"><span>Hasta</span><input id="seg-hasta" type="date"></label>
+          <button class="seg-btn primary" id="seg-cargar" type="button"><i class="fa-solid fa-arrows-rotate"></i> Cargar seguimiento</button>
+        </div><div id="seg-status" class="seg-status">Selecciona una sección para comenzar.</div></div>
+        <div class="seg-card"><div class="seg-section-title"><h3>2. Criterios de alerta</h3><span class="seg-count">Ajustables por docente</span></div><div class="seg-criteria">
+          <label class="seg-field"><span>Alertar desde faltas</span><input id="seg-crit-faltas" type="number" min="1" max="99" value="${c.faltas}"></label>
+          <label class="seg-field"><span>Trabajos no entregados</span><input id="seg-crit-trabajos" type="number" min="1" max="99" value="${c.trabajos}"></label>
+          <label class="seg-field"><span>Nota menor a /20</span><input id="seg-crit-nota" type="number" min="0" max="20" step="0.5" value="${c.notaMin}"></label>
+          <button class="seg-btn soft" id="seg-save-criteria" type="button"><i class="fa-solid fa-floppy-disk"></i> Guardar criterios</button>
+          <button class="seg-btn print" id="seg-print" type="button"><i class="fa-solid fa-print"></i> Imprimir reporte</button>
+          <button class="seg-btn green" id="seg-csv" type="button"><i class="fa-solid fa-file-csv"></i> Descargar CSV</button>
+        </div><p class="seg-help">“En seguimiento” es una alerta de apoyo docente. No sustituye el cierre definitivo del lapso. “No aprobatoria” solo se muestra cuando todas las actividades registradas tienen calificación y el promedio queda por debajo del criterio indicado.</p></div>
+        <div id="seg-metrics" class="seg-metrics"></div>
+        <div class="seg-card"><div class="seg-section-title"><h3>3. Alumnos del lapso</h3><span id="seg-count" class="seg-count">0 estudiantes</span></div><div class="seg-filterbar">
+          <button class="seg-chip is-active" data-seg-filter="todos" type="button">Todos</button><button class="seg-chip" data-seg-filter="seguimiento" type="button">En seguimiento</button><button class="seg-chip" data-seg-filter="noaprobatoria" type="button">No aprobatoria</button><button class="seg-chip" data-seg-filter="pendiente" type="button">Materia pendiente</button><button class="seg-chip" data-seg-filter="repitiente" type="button">Repitientes</button>
+          <input class="seg-search" id="seg-search" type="search" placeholder="Buscar estudiante…">
+        </div><div id="seg-table-host"><div class="seg-empty">Carga una sección para ver el seguimiento.</div></div></div>
+        <div class="seg-subgrid">
+          <div class="seg-card"><div class="seg-section-title"><h3>Trabajos no entregados</h3><span id="seg-missing-count" class="seg-count">0</span></div><div id="seg-missing-list" class="seg-list"><div class="seg-empty">Sin datos.</div></div></div>
+          <div class="seg-card"><div class="seg-section-title"><h3>Materia pendiente y repitientes</h3><span id="seg-special-count" class="seg-count">0</span></div><div id="seg-special-list" class="seg-list"><div class="seg-empty">Sin datos.</div></div></div>
+        </div>`;
+      main.appendChild(sec);
+      sec.querySelector('#seg-cargar')?.addEventListener('click',load);
+      sec.querySelector('#seg-lapso')?.addEventListener('change',()=>{aplicarRangoLapso();if(contexto.ano)load()});
+      sec.querySelector('#seg-save-criteria')?.addEventListener('click',guardarCriterios);
+      sec.querySelector('#seg-search')?.addEventListener('input',render);
+      sec.querySelectorAll('[data-seg-filter]').forEach(b=>b.addEventListener('click',()=>{sec.querySelectorAll('[data-seg-filter]').forEach(x=>x.classList.remove('is-active'));b.classList.add('is-active');render()}));
+      sec.querySelector('#seg-print')?.addEventListener('click',printReport);
+      sec.querySelector('#seg-csv')?.addEventListener('click',downloadCsv);
+      aplicarRangoLapso();
+    }
+    syncVisibility();
+  }
+
+  function syncVisibility(){
+    const show=permitido();
+    const tab=document.getElementById(TAB_ID),sec=document.getElementById(SECTION_ID);
+    if(tab)tab.classList.toggle('role-hidden',!show);
+    if(!show&&sec&&!sec.classList.contains('hidden'))document.getElementById('tab-asistencia')?.click();
+  }
+
+  async function open(tab){
+    if(!permitido())return;
+    const sec=document.getElementById(SECTION_ID);if(!sec)return;
+    if(typeof window.cambiarPestana==='function')window.cambiarPestana(tab,sec);else{
+      document.querySelectorAll('#app-nav .nav-item').forEach(x=>{x.classList.toggle('is-active',x===tab);x.setAttribute('aria-selected',x===tab?'true':'false')});
+      document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==sec));
+      const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;
+    }
+    if(!secciones.length)await loadSections();
+  }
+
+  async function loadSections(){
+    const sel=document.getElementById('seg-seccion');if(!sel)return;sel.innerHTML='<option value="">Cargando…</option>';
+    try{
+      const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');
+      const r=await api('obtenerDatosIniciales'),horarios=Array.isArray(r.horarios)?r.horarios:[],map=new Map();
+      horarios.forEach(x=>{const ano=String(x.ano||'').trim(),seccion=String(x.seccion||'').trim(),turno=String(x.turno||'').trim();if(ano&&seccion)map.set([ano,seccion,turno].join('|'),{ano,seccion,turno})});
+      if(typeof window.edugestionSeccionesAdicionalesCiencias==='function')window.edugestionSeccionesAdicionalesCiencias().forEach(x=>map.set([x.ano,x.seccion,x.turno].join('|'),x));
+      secciones=[...map.values()].sort((a,b)=>(a.ano+a.seccion+a.turno).localeCompare(b.ano+b.seccion+b.turno,'es'));
+      sel.innerHTML='<option value="">Selecciona una sección</option>'+secciones.map(s=>`<option value="${esc([s.ano,s.seccion,s.turno].join('|'))}">${esc(s.ano||'Curso')} · Sección ${esc(s.seccion)}${s.turno?' · '+esc(s.turno):''}</option>`).join('');
+    }catch(err){sel.innerHTML='<option value="">No se pudieron cargar las secciones</option>';setStatus(err.message||'Error al cargar secciones.')}
+  }
+
+  function loadActivities(){
+    const all=readJSON(controlKey(),{}),p=all[periodoKey()]||{};
+    actividades=Array.isArray(p.actividades)?p.actividades:[];
+  }
+
+  async function load(){
+    const v=document.getElementById('seg-seccion')?.value||'';if(!v){toast('Selecciona una sección.','warning');return}
+    const [ano,seccion,turno]=v.split('|');
+    contexto={ano,seccion,turno,lapso:document.getElementById('seg-lapso')?.value||'1er Lapso',desde:document.getElementById('seg-desde')?.value||'',hasta:document.getElementById('seg-hasta')?.value||''};
+    setStatus('Cargando estudiantes, faltas, actividades y notas…',true);
+    try{
+      const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function')throw new Error('La conexión con EduGestión no está disponible.');
+      const [a,s]=await Promise.all([api('obtenerAlumnos',{ano,seccion,turno}),api('obtenerEstadisticasAsistencia',{fechaDesde:contexto.desde,fechaHasta:contexto.hasta,ano,seccion,turno})]);
+      alumnos=Array.isArray(a.alumnos)?a.alumnos:[];stats=s||null;loadActivities();render();
+      setStatus(`${alumnos.length} estudiantes · ${actividades.length} actividades registradas · asistencia del ${contexto.desde||'inicio'} al ${contexto.hasta||'cierre'}.`);
+    }catch(err){alumnos=[];stats=null;actividades=[];render();setStatus(err.message||'No se pudo cargar el seguimiento.');toast(err.message||'No se pudo cargar el seguimiento.','error')}
+  }
+
+  function attendance(al){
+    const arr=Array.isArray(stats?.porAlumno)?stats.porAlumno:[],it=arr.find(x=>norm(x.alumno)===norm(studentName(al)));
+    return {presentes:num(it?.presentes),ausentes:num(it?.ausentes),tardanzas:num(it?.tardanzas),justificadas:num(it?.justificadas),total:num(it?.total)};
+  }
+  function grades(al){
+    const id=studentId(al),detalle=[];let entregadas=0,suma=0,peso=0,conNota=0;
+    actividades.forEach(a=>{const r=a.registros?.[String(al.id)]||a.registros?.[id]||{};const entrego=r.entrego==='Si';const tieneNota=r.nota!==''&&r.nota!=null&&Number.isFinite(Number(r.nota));const nota=tieneNota?Number(r.nota):null;const pond=num(a.ponderacion);if(entrego)entregadas++;if(tieneNota){conNota++;if(pond>0){suma+=nota*pond;peso+=pond}}detalle.push({nombre:a.nombre||'Actividad',fecha:a.fecha||'',entrego,nota,ponderacion:pond})});
+    return {entregadas,total:actividades.length,noEntregadas:detalle.filter(x=>!x.entrego),nota:peso?Math.round((suma/peso)*100)/100:null,conNota,completo:actividades.length>0&&conNota===actividades.length};
+  }
+  function row(al){
+    const as=attendance(al),gr=grades(al),c=criterios(),pend=pendingSubject(al),rep=repeats(al);
+    const noAprobatoria=gr.completo&&gr.nota!==null&&gr.nota<c.notaMin;
+    const seguimiento=noAprobatoria||as.ausentes>=c.faltas||gr.noEntregadas.length>=c.trabajos||(gr.nota!==null&&gr.nota<c.notaMin);
+    const razones=[];if(as.ausentes>=c.faltas)razones.push(`${as.ausentes} faltas`);if(gr.noEntregadas.length>=c.trabajos)razones.push(`${gr.noEntregadas.length} trabajos sin entregar`);if(gr.nota!==null&&gr.nota<c.notaMin)razones.push(`promedio ${gr.nota.toFixed(2)}/20`);if(pend)razones.push('materia pendiente');if(rep)razones.push('repitiente');
+    return {al,as,gr,pend,rep,noAprobatoria,seguimiento,razones};
+  }
+  function rows(){return alumnos.map(row)}
+
+  function currentFilter(){return document.querySelector('[data-seg-filter].is-active')?.dataset.segFilter||'todos'}
+  function filteredRows(){
+    const q=norm(document.getElementById('seg-search')?.value||''),f=currentFilter();
+    return rows().filter(x=>{
+      if(q&&!norm([studentName(x.al),x.al.cedula,x.pend].join(' ')).includes(q))return false;
+      if(f==='seguimiento'&&!x.seguimiento)return false;if(f==='noaprobatoria'&&!x.noAprobatoria)return false;if(f==='pendiente'&&!x.pend)return false;if(f==='repitiente'&&!x.rep)return false;return true;
+    });
+  }
+
+  function statusBadge(x){
+    if(x.noAprobatoria)return '<span class="seg-badge danger"><i class="fa-solid fa-triangle-exclamation"></i>No aprobatoria</span>';
+    if(x.seguimiento)return '<span class="seg-badge warn"><i class="fa-solid fa-eye"></i>En seguimiento</span>';
+    return '<span class="seg-badge ok"><i class="fa-solid fa-circle-check"></i>Al día</span>';
+  }
+  function workTags(list){return list.length?`<div class="seg-work-tags">${list.map(x=>`<span class="seg-work-tag">${esc(x.nombre)}${x.fecha?' · '+esc(x.fecha):''}</span>`).join('')}</div>`:'<span class="seg-badge ok">Completo</span>'}
+
+  function render(){
+    const all=rows(),shown=filteredRows(),c=criterios();
+    const atRisk=all.filter(x=>x.seguimiento).length,noA=all.filter(x=>x.noAprobatoria).length,missing=all.filter(x=>x.gr.noEntregadas.length).length,pending=all.filter(x=>x.pend).length,repeat=all.filter(x=>x.rep).length,totalAbs=all.reduce((s,x)=>s+x.as.ausentes,0);
+    const met=document.getElementById('seg-metrics');if(met)met.innerHTML=`<article class="seg-metric"><strong>${all.length}</strong><span>Estudiantes</span></article><article class="seg-metric warn"><strong>${atRisk}</strong><span>En seguimiento</span></article><article class="seg-metric danger"><strong>${noA}</strong><span>No aprobatoria</span></article><article class="seg-metric"><strong>${totalAbs}</strong><span>Faltas acumuladas</span></article><article class="seg-metric violet"><strong>${pending}</strong><span>Materia pendiente</span></article><article class="seg-metric violet"><strong>${repeat}</strong><span>Repitientes</span></article>`;
+    const count=document.getElementById('seg-count');if(count)count.textContent=`${shown.length} de ${all.length} estudiantes`;
+    const host=document.getElementById('seg-table-host');if(host){host.innerHTML=!all.length?'<div class="seg-empty">Carga una sección para ver el seguimiento.</div>':!shown.length?'<div class="seg-empty">No hay estudiantes que coincidan con este filtro.</div>':`<div class="seg-table-wrap"><table class="seg-table"><thead><tr><th>N°</th><th>Estudiante</th><th>Estado</th><th>Faltas</th><th>Tardanzas</th><th>Trabajos no entregados</th><th>Promedio actual</th><th>Materia pendiente</th><th>Repitiente</th><th>Motivos</th></tr></thead><tbody>${shown.map((x,i)=>`<tr><td>${i+1}</td><td><strong>${esc(studentName(x.al))}</strong><small>${esc(x.al.cedula||x.al.id||'Sin identificación')}</small></td><td>${statusBadge(x)}</td><td><span class="seg-badge ${x.as.ausentes>=c.faltas?'danger':'info'}">${x.as.ausentes}</span></td><td>${x.as.tardanzas}</td><td>${x.gr.noEntregadas.length?`<strong>${x.gr.noEntregadas.length}</strong>${workTags(x.gr.noEntregadas)}`:'<span class="seg-badge ok">0</span>'}</td><td>${x.gr.nota===null?'<span class="seg-badge info">Sin nota</span>':`<strong>${x.gr.nota.toFixed(2)} /20</strong><small>${x.gr.conNota}/${x.gr.total} actividades calificadas</small>`}</td><td>${x.pend?`<span class="seg-badge violet">${esc(x.pend)}</span>`:'—'}</td><td>${x.rep?'<span class="seg-badge violet">Sí</span>':'No'}</td><td>${x.razones.length?esc(x.razones.join(' · ')):'Sin alertas'}</td></tr>`).join('')}</tbody></table></div>`}
+    const misses=all.filter(x=>x.gr.noEntregadas.length).sort((a,b)=>b.gr.noEntregadas.length-a.gr.noEntregadas.length),ml=document.getElementById('seg-missing-list'),mc=document.getElementById('seg-missing-count');if(mc)mc.textContent=String(misses.length);if(ml)ml.innerHTML=misses.length?misses.map(x=>`<article><strong>${esc(studentName(x.al))} · ${x.gr.noEntregadas.length} pendiente${x.gr.noEntregadas.length===1?'':'s'}</strong><small>${esc(contexto.ano)} · Sección ${esc(contexto.seccion)}</small>${workTags(x.gr.noEntregadas)}</article>`).join(''):'<div class="seg-empty">No hay trabajos pendientes registrados en este lapso.</div>';
+    const specials=all.filter(x=>x.pend||x.rep),sl=document.getElementById('seg-special-list'),sc=document.getElementById('seg-special-count');if(sc)sc.textContent=String(specials.length);if(sl)sl.innerHTML=specials.length?specials.map(x=>`<article><strong>${esc(studentName(x.al))}</strong><small>${x.rep?'Repitiente':'No repitiente'}${x.pend?' · Materia pendiente: '+esc(x.pend):''}</small></article>`).join(''):'<div class="seg-empty">No hay estudiantes registrados como repitientes o con materia pendiente en esta sección.</div>';
+  }
+
+  function csv(){
+    const headers=['N°','Estudiante','ID','Año','Sección','Turno','Estado actual','Faltas','Tardanzas','Justificadas','Trabajos no entregados','Detalle trabajos no entregados','Promedio /20','Actividades calificadas','Materia pendiente','Repitiente','Motivos de seguimiento'];
+    const lines=[headers];rows().forEach((x,i)=>lines.push([i+1,studentName(x.al),x.al.cedula||x.al.id||'',contexto.ano,contexto.seccion,contexto.turno,x.noAprobatoria?'No aprobatoria':x.seguimiento?'En seguimiento':'Al día',x.as.ausentes,x.as.tardanzas,x.as.justificadas,x.gr.noEntregadas.length,x.gr.noEntregadas.map(a=>a.nombre).join(' | '),x.gr.nota===null?'':x.gr.nota.toFixed(2),`${x.gr.conNota}/${x.gr.total}`,x.pend,x.rep?'Sí':'No',x.razones.join(' | ')]));
+    return '\uFEFF'+lines.map(r=>r.map(v=>{const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(',')).join('\r\n');
+  }
+  function downloadCsv(){if(!alumnos.length){toast('Carga primero una sección.','warning');return}const blob=new Blob([csv()],{type:'text/csv;charset=utf-8'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=`Seguimiento_${contexto.ano.replace(/\s+/g,'_')}_Seccion_${contexto.seccion}_${contexto.lapso.replace(/\s+/g,'_')}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000)}
+  function printReport(){
+    if(!alumnos.length){toast('Carga primero una sección.','warning');return}
+    const c=criterios(),rr=rows(),body=rr.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(studentName(x.al))}</td><td>${x.noAprobatoria?'No aprobatoria':x.seguimiento?'En seguimiento':'Al día'}</td><td>${x.as.ausentes}</td><td>${x.gr.noEntregadas.map(a=>esc(a.nombre)).join('<br>')||'—'}</td><td>${x.gr.nota===null?'—':x.gr.nota.toFixed(2)}</td><td>${esc(x.pend||'—')}</td><td>${x.rep?'Sí':'No'}</td></tr>`).join('');
+    const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Seguimiento académico</title><style>@page{size:letter landscape;margin:8mm}body{font-family:Arial,sans-serif;color:#15243b;margin:0}h1{font-size:18px;margin:0 0 4px}p{font-size:10px;margin:2px 0 8px}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:8px 0}.meta div{border:1px solid #bdc9d8;padding:5px;font-size:9px}table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{border:1px solid #9faec0;padding:4px;font-size:8px;vertical-align:top;word-wrap:break-word}th{background:#eaf0f7;font-size:7.4px}.foot{margin-top:7px;font-size:8px;color:#53657b}</style></head><body><h1>SEGUIMIENTO ACADÉMICO POR SECCIÓN</h1><p><b>Docente:</b> ${esc(window.profesorActual?.nombre||'')} · <b>Área:</b> ${esc(window.profesorActual?.materia||'')}</p><div class="meta"><div><b>Curso:</b><br>${esc(contexto.ano)} · Sección ${esc(contexto.seccion)}</div><div><b>Turno:</b><br>${esc(contexto.turno||'—')}</div><div><b>Lapso:</b><br>${esc(contexto.lapso)}</div><div><b>Período:</b><br>${esc(contexto.desde||'—')} al ${esc(contexto.hasta||'—')}</div></div><p><b>Criterios:</b> seguimiento desde ${c.faltas} faltas, ${c.trabajos} trabajos no entregados o promedio menor a ${c.notaMin}/20.</p><table><thead><tr><th style="width:3%">N°</th><th style="width:16%">Estudiante</th><th style="width:10%">Estado</th><th style="width:5%">Faltas</th><th style="width:25%">Trabajos no entregados</th><th style="width:8%">Promedio</th><th style="width:18%">Materia pendiente</th><th style="width:7%">Repitiente</th></tr></thead><tbody>${body}</tbody></table><div class="foot">Reporte generado por EduGestión el ${new Date().toLocaleString('es-ES')}. El estado “En seguimiento” es una alerta docente y debe revisarse con los registros del lapso.</div><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
+    const w=window.open('','_blank');if(!w){toast('El navegador bloqueó la vista de impresión.','warning');return}w.document.open();w.document.write(html);w.document.close();
+  }
+
+  function setStatus(msg,loading=false){const e=document.getElementById('seg-status');if(e)e.innerHTML=loading?`<i class="fa-solid fa-spinner fa-spin"></i> ${esc(msg)}`:esc(msg)}
+  function toast(msg,type='info'){if(typeof window.mostrarToast==='function')window.mostrarToast(msg,type,'Seguimiento académico');else alert(msg)}
+  function boot(){ensureUI();syncVisibility()}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,350),{once:true});else setTimeout(boot,220);
+  window.addEventListener('edugestion:session',()=>setTimeout(()=>{secciones=[];alumnos=[];stats=null;actividades=[];ensureUI();syncVisibility()},130));
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(syncVisibility,100));
+})();
+/* EDUGESTION_SEGUIMIENTO_ACADEMICO_V45_END */
