@@ -16340,3 +16340,213 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const tm=setInterval(()=>{if(window.profesorActual || (typeof profesorActual!=='undefined'&&profesorActual)){syncVisibility();clearInterval(tm)}},400);setTimeout(()=>clearInterval(tm),12000);
 })();
 /* EDUGESTION_REGLAMENTO_DOCENTE_V40_END */
+
+/* EDUGESTION_CRONOGRAMA_LICEO_V41 */
+(() => {
+  const TAB_ID = 'tab-cronograma-liceo';
+  const SECTION_ID = 'section-cronograma-liceo';
+  const TICKER_ID = 'school-agenda-ticker';
+  const STYLE_ID = 'style-cronograma-liceo-v41';
+  const SOURCE_IMG = 'assets/documentos/cronograma_actividades_2026-2027.jpg';
+
+  const EVENTOS = [
+    { id:'admin-formacion', actividad:'Inicio de actividades administrativas y formación docente', fechaTexto:'Del 09-09-2026 / del 16 al 18-09-2026', periodos:[['2026-09-09','2026-09-09'],['2026-09-16','2026-09-18']], tipo:'institucional' },
+    { id:'consejo-general', actividad:'Consejo general', fechaTexto:'11-09-2026', periodos:[['2026-09-11','2026-09-11']], tipo:'consejo' },
+    { id:'actualizacion-inscripcion', actividad:'Proceso de actualización de datos e inscripción de nuevos ingresos', fechaTexto:'Desde el 07-09-2026 al 25-09-2026', periodos:[['2026-09-07','2026-09-25']], tipo:'administrativo' },
+    { id:'inicio-pedagogico', actividad:'Inicio de actividades pedagógicas', fechaTexto:'21-09-2026', periodos:[['2026-09-21','2026-09-21']], tipo:'pedagogico' },
+    { id:'entrega-planificaciones', actividad:'Entrega de planificaciones y plan de evaluación Primaria/Media General', fechaTexto:'Desde 18-09-2026 al 02-10-2026', periodos:[['2026-09-18','2026-10-02']], tipo:'entrega' },
+    { id:'consejo-tecnico', actividad:'Consejo técnico', fechaTexto:'Todos los viernes', recurrencia:'viernes', desde:'2026-09-11', hasta:'2026-12-15', tipo:'consejo' },
+    { id:'aniversario', actividad:'Aniversario de la institución', fechaTexto:'Todo el mes de octubre', periodos:[['2026-10-01','2026-10-31']], tipo:'institucional' },
+    { id:'materia-pendiente-1', actividad:'Materia pendiente (1ra opción)', fechaTexto:'Del 05-10-2026 al 17-10-2026', periodos:[['2026-10-05','2026-10-17']], tipo:'evaluacion' },
+    { id:'materia-pendiente-2', actividad:'Materia pendiente (2da opción)', fechaTexto:'Del 09-11-2026 al 20-11-2026', periodos:[['2026-11-09','2026-11-20']], tipo:'evaluacion' },
+    { id:'superacion', actividad:'Superación pedagógica (Media General)', fechaTexto:'Del 23-11-2026 al 04-12-2026', periodos:[['2026-11-23','2026-12-04']], tipo:'pedagogico' },
+    { id:'entrega-notas', actividad:'Entrega de notas al Departamento de Control y Evaluación', fechaTexto:'Del 01-12-2026 al 04-12-2026', periodos:[['2026-12-01','2026-12-04']], tipo:'entrega' },
+    { id:'consejo-1-3', actividad:'Consejo de sección de 1° a 3° año', fechaTexto:'09-12-2026', periodos:[['2026-12-09','2026-12-09']], tipo:'consejo' },
+    { id:'consejo-4-5', actividad:'Consejo de sección 4° y 5° año', fechaTexto:'10-12-2026', periodos:[['2026-12-10','2026-12-10']], tipo:'consejo' },
+    { id:'boletas-direccion', actividad:'Entrega de boletas a Dirección de Inicial y Primaria para impresión, firma y sello', fechaTexto:'07-12-2026', periodos:[['2026-12-07','2026-12-07']], tipo:'entrega' },
+    { id:'boletines-primaria', actividad:'Entrega de boletines e informes descriptivos de Inicial y Primaria', fechaTexto:'Inicial, 1° a 6° grado · 11-12-2026', periodos:[['2026-12-11','2026-12-11']], tipo:'entrega' },
+    { id:'boletines-media', actividad:'Entrega de boletines de Educación Media', fechaTexto:'11-12-2025 (así figura en el documento; verificar)', periodos:[['2025-12-11','2025-12-11']], tipo:'entrega', alerta:true },
+    { id:'fiestas-inicial', actividad:'Fiestas escolares decembrinas de Inicial y Primaria', fechaTexto:'14-12-2026', periodos:[['2026-12-14','2026-12-14']], tipo:'institucional' },
+    { id:'fiestas-personal', actividad:'Fiestas decembrinas de todo el personal', fechaTexto:'15-12-2026', periodos:[['2026-12-15','2026-12-15']], tipo:'institucional' }
+  ];
+
+  const norm = (v='') => String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const materiaActual = () => norm(
+    window.profesorActual?.materia ||
+    window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva ||
+    (typeof profesorActual !== 'undefined' ? profesorActual?.materia : '') || ''
+  );
+  const permitido = () => {
+    const m=materiaActual();
+    return m.includes('educacion fisica') || m.includes('ciencias naturales') || m.includes('biologia');
+  };
+  const pad=n=>String(n).padStart(2,'0');
+  const isoLocal=(d=new Date())=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const parseISO=s=>{const [y,m,d]=String(s).split('-').map(Number);return new Date(y,m-1,d,12,0,0,0)};
+  const cmp=(a,b)=>String(a).localeCompare(String(b));
+  const hoyISO=()=>isoLocal(new Date());
+
+  function esViernesEnRango(iso,ev){
+    if(ev.recurrencia!=='viernes'||cmp(iso,ev.desde)<0||cmp(iso,ev.hasta)>0)return false;
+    return parseISO(iso).getDay()===5;
+  }
+  function activoEn(ev,iso){
+    if(esViernesEnRango(iso,ev)) return true;
+    return (ev.periodos||[]).some(([a,b])=>cmp(iso,a)>=0&&cmp(iso,b)<=0);
+  }
+  function finalEvento(ev){
+    if(ev.recurrencia==='viernes') return ev.hasta;
+    return (ev.periodos||[]).reduce((max,p)=>!max||cmp(p[1],max)>0?p[1]:max,'');
+  }
+  function inicioEvento(ev){
+    if(ev.recurrencia==='viernes') return ev.desde;
+    return (ev.periodos||[]).reduce((min,p)=>!min||cmp(p[0],min)<0?p[0]:min,'');
+  }
+  function proxOcurrencia(ev,desdeISO){
+    if(ev.recurrencia==='viernes'){
+      let d=parseISO(desdeISO);
+      for(let i=0;i<370;i++){
+        const iso=isoLocal(d);
+        if(cmp(iso,ev.desde)>=0&&cmp(iso,ev.hasta)<=0&&d.getDay()===5&&cmp(iso,desdeISO)>=0)return iso;
+        d.setDate(d.getDate()+1);
+      }
+      return null;
+    }
+    const periodos=(ev.periodos||[]).slice().sort((a,b)=>cmp(a[0],b[0]));
+    for(const [a,b] of periodos){
+      if(cmp(b,desdeISO)<0)continue;
+      return cmp(a,desdeISO)>=0?a:desdeISO;
+    }
+    return null;
+  }
+  function fmtFecha(iso,opts={day:'2-digit',month:'2-digit',year:'numeric'}){
+    if(!iso)return'';
+    return new Intl.DateTimeFormat('es-VE',opts).format(parseISO(iso));
+  }
+  function estadoEvento(ev,iso){
+    if(activoEn(ev,iso)) return 'hoy';
+    const fin=finalEvento(ev),ini=inicioEvento(ev);
+    if(fin&&cmp(fin,iso)<0) return 'finalizado';
+    if(ini&&cmp(ini,iso)>0) return 'proximo';
+    return 'vigente';
+  }
+  function proximos(desdeISO,lim=3){
+    return EVENTOS.map(ev=>({ev,fecha:proxOcurrencia(ev,desdeISO)}))
+      .filter(x=>x.fecha&&cmp(x.fecha,desdeISO)>=0)
+      .sort((a,b)=>cmp(a.fecha,b.fecha)||a.ev.actividad.localeCompare(b.ev.actividad))
+      .slice(0,lim);
+  }
+
+  function ensureStyles(){
+    if(document.getElementById(STYLE_ID))return;
+    const s=document.createElement('style');s.id=STYLE_ID;
+    s.textContent=`
+      .school-agenda-ticker{margin:0 24px 12px;border-radius:0 0 18px 18px;background:linear-gradient(90deg,#102f5d,#176a9b 54%,#0f8a72);color:#fff;display:flex;align-items:center;gap:12px;overflow:hidden;min-height:42px;box-shadow:0 8px 20px rgba(16,47,93,.12);cursor:pointer;border-top:1px solid rgba(255,255,255,.15)}
+      .school-agenda-ticker__tag{flex:0 0 auto;padding:0 0 0 16px;font-size:.72rem;font-weight:950;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:7px}.school-agenda-ticker__viewport{overflow:hidden;flex:1;min-width:0}.school-agenda-ticker__track{display:inline-block;white-space:nowrap;padding:10px 36px 10px 0;font-weight:800;font-size:.86rem;animation:schoolTickerMove 34s linear infinite}.school-agenda-ticker:hover .school-agenda-ticker__track{animation-play-state:paused}.school-agenda-ticker__open{flex:0 0 auto;border:0;background:rgba(255,255,255,.12);color:#fff;padding:9px 14px;font-weight:900;align-self:stretch;cursor:pointer}
+      @keyframes schoolTickerMove{from{transform:translateX(18%)}to{transform:translateX(-100%)}}@media(prefers-reduced-motion:reduce){.school-agenda-ticker__track{animation:none;white-space:normal}}
+      .cl-hero{background:linear-gradient(135deg,#173d69,#0c7f8e);color:#fff;border-radius:24px;padding:25px 28px;display:flex;justify-content:space-between;gap:18px;align-items:center;box-shadow:0 16px 34px rgba(20,61,105,.15)}.cl-hero small{display:block;text-transform:uppercase;letter-spacing:.08em;font-weight:900;opacity:.88;margin-bottom:7px}.cl-hero h2{margin:0 0 8px;font-size:1.72rem}.cl-hero p{margin:0;line-height:1.55;max-width:850px}.cl-hero__icon{width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.13);display:grid;place-items:center;font-size:2rem}
+      .cl-summary{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:12px}.cl-summary article{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dbe5ec);border-radius:16px;padding:15px 16px;box-shadow:0 6px 18px rgba(28,62,88,.05)}.cl-summary span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;font-weight:900;color:#758a9d}.cl-summary strong{display:block;margin-top:5px;color:#173d69;font-size:1rem;line-height:1.4}.cl-summary .cl-summary--today{border-color:#9fd9c7;background:#f2fbf7}.cl-summary .cl-summary--today strong{color:#08765c}
+      .cl-actions{display:flex;gap:10px;flex-wrap:wrap}.cl-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}.cl-btn.primary{background:#176a9b;color:#fff}.cl-btn.soft{background:#eef6fb;color:#155b84;border:1px solid #cfe0ea}.cl-btn.green{background:#15936f;color:#fff}
+      .cl-table-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dbe5ec);border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(28,62,88,.06)}.cl-table-head{padding:14px 16px;background:#f5f9fc;border-bottom:1px solid #dbe5ec;display:flex;justify-content:space-between;gap:12px;align-items:center}.cl-table-head h3{margin:0;color:#173d69}.cl-table-wrap{overflow-x:auto}.cl-table{width:100%;border-collapse:collapse;min-width:820px}.cl-table th,.cl-table td{padding:12px 13px;border-bottom:1px solid #e5edf2;text-align:left;vertical-align:top}.cl-table th{background:#f9fbfd;color:#5f7386;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}.cl-table td{font-size:.9rem;color:#2a4258;line-height:1.42}.cl-table tr.is-today td{background:#edfaf5}.cl-table tr.is-active td{background:#f5fbff}.cl-status{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:.72rem;font-weight:900;white-space:nowrap}.cl-status.today{background:#d9f7ea;color:#08765c}.cl-status.next{background:#e8f2ff;color:#245b9e}.cl-status.done{background:#eef1f4;color:#738293}.cl-status.active{background:#fff1d8;color:#9a6000}.cl-warning{display:inline-flex;gap:5px;align-items:flex-start;color:#9f4c00;font-weight:800;font-size:.78rem;margin-top:5px}.cl-source{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#fff8e8;border:1px solid #f2d79f;color:#7d5a12;font-size:.82rem;line-height:1.45}
+      @media(max-width:900px){.school-agenda-ticker{margin:0 12px 10px}.school-agenda-ticker__open{display:none}.cl-summary{grid-template-columns:1fr}.cl-hero__icon{display:none}}@media(max-width:620px){.cl-hero{padding:20px}.cl-actions{flex-direction:column}.cl-btn{justify-content:center}}
+      @media print{body *{visibility:hidden!important}#section-cronograma-liceo,#section-cronograma-liceo *{visibility:visible!important}#section-cronograma-liceo{position:absolute;left:0;top:0;width:100%;padding:0!important}.cl-actions,.cl-source,.cl-hero__icon{display:none!important}.cl-hero{box-shadow:none;border:1px solid #999;color:#000;background:#fff}.cl-table-card{box-shadow:none}.cl-table{min-width:0}.cl-table th,.cl-table td{font-size:9pt;padding:6px}}
+    `;document.head.appendChild(s);
+  }
+
+  function resumenHoy(){
+    const iso=hoyISO();
+    const activos=EVENTOS.filter(ev=>activoEn(ev,iso));
+    const prox=proximos(iso,5).filter(x=>!activoEn(x.ev,iso));
+    return {iso,activos,prox};
+  }
+
+  function tickerText(){
+    const {iso,activos,prox}=resumenHoy();
+    const partes=[];
+    if(activos.length) partes.push(`HOY / EN CURSO: ${activos.map(e=>e.actividad).join(' · ')}`);
+    else partes.push('HOY: sin actividad institucional específica registrada');
+    if(prox.length){
+      const p=prox[0];partes.push(`PRÓXIMO: ${p.ev.actividad} — ${fmtFecha(p.fecha)}`);
+    }
+    return `CRONOGRAMA DEL LICEO — ${fmtFecha(iso,{weekday:'long',day:'numeric',month:'long'})} • ${partes.join(' • ')}`;
+  }
+
+  function ensureTicker(){
+    let t=document.getElementById(TICKER_ID);
+    const reminder=document.getElementById('school-reminder');
+    if(!reminder)return null;
+    if(!t){
+      t=document.createElement('aside');t.id=TICKER_ID;t.className='school-agenda-ticker';t.setAttribute('role','button');t.setAttribute('tabindex','0');t.setAttribute('aria-label','Abrir cronograma del liceo');
+      t.innerHTML=`<div class="school-agenda-ticker__tag"><i class="fa-solid fa-bullhorn"></i><span>Cronograma</span></div><div class="school-agenda-ticker__viewport"><div class="school-agenda-ticker__track" id="school-agenda-ticker-text"></div></div><button class="school-agenda-ticker__open" type="button">Ver cronograma</button>`;
+      reminder.insertAdjacentElement('afterend',t);
+      const abrir=()=>document.getElementById(TAB_ID)?.click();
+      t.addEventListener('click',abrir);t.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();abrir();}});
+    }
+    const txt=t.querySelector('#school-agenda-ticker-text');if(txt)txt.textContent=tickerText();
+    return t;
+  }
+
+  function rowHTML(ev,iso){
+    const estado=estadoEvento(ev,iso);
+    const label=estado==='hoy'?'Hoy / en curso':estado==='proximo'?'Próximo':estado==='finalizado'?'Finalizado':'Vigente';
+    const cls=estado==='hoy'?'today':estado==='proximo'?'next':estado==='finalizado'?'done':'active';
+    const rowCls=estado==='hoy'?'is-today':estado==='vigente'?'is-active':'';
+    const note=ev.alerta?'<div class="cl-warning"><i class="fa-solid fa-triangle-exclamation"></i><span>La fecha se conserva exactamente como aparece en el documento adjunto.</span></div>':'';
+    return `<tr class="${rowCls}"><td><strong>${ev.actividad}</strong>${note}</td><td>${ev.fechaTexto}</td><td><span class="cl-status ${cls}">${label}</span></td></tr>`;
+  }
+
+  function ensureUI(){
+    ensureStyles();
+    const nav=document.getElementById('app-nav'),main=document.getElementById('app-main');if(!nav||!main)return false;
+    let tab=document.getElementById(TAB_ID);
+    if(!tab){
+      tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');
+      tab.dataset.title='Cronograma';tab.dataset.description='Consulta el cronograma de actividades del liceo y las fechas clave del primer momento pedagógico.';
+      tab.innerHTML='<i class="fa-solid fa-calendar-day"></i><span>Cronograma</span>';
+      const ref=document.getElementById('tab-reglamento-docente')||document.getElementById('tab-configuracion');nav.insertBefore(tab,ref||null);
+    }
+    let sec=document.getElementById(SECTION_ID);
+    if(!sec){
+      sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden max-w-[1400px] mx-auto space-y-5';
+      main.appendChild(sec);
+    }
+    if(!tab.dataset.clBound){tab.dataset.clBound='1';tab.addEventListener('click',()=>{openSection(tab,sec);render();});}
+    return true;
+  }
+
+  function render(){
+    const sec=document.getElementById(SECTION_ID);if(!sec)return;
+    const {iso,activos,prox}=resumenHoy();
+    const hoyTxt=activos.length?activos.map(e=>e.actividad).join(' · '):'No hay actividad institucional específica registrada para hoy.';
+    const p1=prox[0],p2=prox[1];
+    sec.innerHTML=`
+      <header class="cl-hero"><div><small><i class="fa-solid fa-school"></i> U.E.N. “Miguel Ángel López Cárdenas” · Año escolar 2026-2027</small><h2>Cronograma de actividades</h2><p>Primer momento pedagógico. Consulta las fechas institucionales y mantén visibles los compromisos del liceo junto con las efemérides diarias.</p></div><div class="cl-hero__icon"><i class="fa-solid fa-calendar-check"></i></div></header>
+      <div class="cl-summary"><article class="cl-summary--today"><span>Hoy · ${fmtFecha(iso,{weekday:'long',day:'numeric',month:'long'})}</span><strong>${hoyTxt}</strong></article><article><span>Próxima actividad</span><strong>${p1?`${p1.ev.actividad} · ${fmtFecha(p1.fecha)}`:'Sin próximas actividades registradas'}</strong></article><article><span>Después</span><strong>${p2?`${p2.ev.actividad} · ${fmtFecha(p2.fecha)}`:'—'}</strong></article></div>
+      <div class="cl-actions"><button class="cl-btn primary" type="button" id="cl-print"><i class="fa-solid fa-print"></i> Imprimir cronograma</button><a class="cl-btn soft" href="${SOURCE_IMG}" target="_blank" rel="noopener"><i class="fa-solid fa-image"></i> Ver documento original</a><button class="cl-btn green" type="button" id="cl-hoy"><i class="fa-solid fa-location-crosshairs"></i> Ir a actividades de hoy</button></div>
+      <div class="cl-table-card"><div class="cl-table-head"><div><h3>Primer momento pedagógico</h3><span>Actividades y fechas suministradas por la institución</span></div><strong>2026-2027</strong></div><div class="cl-table-wrap"><table class="cl-table"><thead><tr><th>Actividad</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>${EVENTOS.map(ev=>rowHTML(ev,iso)).join('')}</tbody></table></div></div>
+      <div class="cl-source"><i class="fa-solid fa-circle-info"></i><div><strong>Nota sobre la fuente:</strong> la fila “Entrega de boletines de Educación Media” aparece en la imagen con fecha <b>11-12-2025</b>. Se dejó exactamente como está en el documento para que puedas verificarla con Control de Estudio antes de corregirla en el sistema.</div></div>`;
+    sec.querySelector('#cl-print')?.addEventListener('click',()=>window.print());
+    sec.querySelector('#cl-hoy')?.addEventListener('click',()=>{const r=sec.querySelector('tr.is-today');if(r)r.scrollIntoView({behavior:'smooth',block:'center'});});
+    ensureTicker();
+  }
+
+  function openSection(tab,sec){
+    document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});
+    document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));
+    tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');
+    const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function syncVisibility(){
+    ensureUI();ensureTicker();
+    const tab=document.getElementById(TAB_ID),sec=document.getElementById(SECTION_ID),ticker=document.getElementById(TICKER_ID),show=permitido();
+    tab?.classList.toggle('rd-hidden',!show);ticker?.classList.toggle('rd-hidden',!show);
+    if(!show&&sec&&!sec.classList.contains('hidden'))document.getElementById('tab-asistencia')?.click();
+  }
+  function boot(){ensureUI();syncVisibility();render();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  document.addEventListener('click',e=>{if(e.target?.closest?.('#dp-save'))setTimeout(()=>{syncVisibility();render();},240)});
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{syncVisibility();render();},160));
+  setInterval(()=>{ensureTicker();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))render();},60000);
+})();
+/* EDUGESTION_CRONOGRAMA_LICEO_V41_END */
