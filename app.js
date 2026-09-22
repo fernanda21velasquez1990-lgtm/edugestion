@@ -16,6 +16,23 @@ const SESSION_KEY = 'edugestion_session_v2';
     let seccionPlanViendo = null;
     let acumuladoPonderacion = [];
     const porcentajesTablaPonderacion = [5, 10, 15, 20, 25, 30, 35, 40, 60, 70];
+
+    // V4.3 · Secciones adicionales para docentes de Ciencias Naturales.
+    // Las secciones C y D de 1ero y 2do Año se consideran del turno de la tarde.
+    function edugestionEsCienciasNaturales() {
+      const materia = String(profesorActual?.materia || window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      return materia.includes('ciencias naturales');
+    }
+    function edugestionSeccionesAdicionalesCiencias() {
+      if (!edugestionEsCienciasNaturales()) return [];
+      return [
+        { ano: '1ero', seccion: 'C', turno: 'Tarde' },
+        { ano: '1ero', seccion: 'D', turno: 'Tarde' },
+        { ano: '2do', seccion: 'C', turno: 'Tarde' },
+        { ano: '2do', seccion: 'D', turno: 'Tarde' }
+      ];
+    }
     let asistenciaClaseActiva = null;
     let agendaCargaId = 0;
     const agendaResumenCache = new Map();
@@ -14950,7 +14967,9 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function sections() {
     const map=new Map(); (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{
       const key=sectionKey(h.ano,h.seccion); if(!map.has(key)) map.set(key,{key,ano:h.ano,seccion:h.seccion,turno:h.turno||''});
-    }); return [...map.values()].sort((a,b)=>`${a.ano}${a.seccion}`.localeCompare(`${b.ano}${b.seccion}`,'es',{numeric:true}));
+    });
+    edugestionSeccionesAdicionalesCiencias().forEach(h=>{ const key=sectionKey(h.ano,h.seccion); if(!map.has(key)) map.set(key,{key,...h}); });
+    return [...map.values()].sort((a,b)=>`${a.ano}${a.seccion}`.localeCompare(`${b.ano}${b.seccion}`,'es',{numeric:true}));
   }
   function labelSection(item) { return `${item.ano} · Sección ${item.seccion}${item.turno?` · ${item.turno==='Manana'?'Mañana':item.turno}`:''}`; }
 
@@ -15237,6 +15256,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 
   function sections(){
     const map=new Map();(Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{const k=sectionKey(h.ano,h.seccion);if(!map.has(k))map.set(k,{key:k,ano:String(h.ano||''),seccion:String(h.seccion||''),turno:String(h.turno||'')})});
+    edugestionSeccionesAdicionalesCiencias().forEach(h=>{const k=sectionKey(h.ano,h.seccion);if(!map.has(k))map.set(k,{key:k,...h})});
     return [...map.values()].sort((a,b)=>`${a.ano}${a.seccion}`.localeCompare(`${b.ano}${b.seccion}`,'es',{numeric:true}));
   }
   function labelSection(x){return `${x.ano} · Sección ${x.seccion}${x.turno?` · ${x.turno==='Manana'?'Mañana':x.turno}`:''}`}
@@ -15494,7 +15514,12 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const sameGrade=(a,b)=>academicNum(a)&&academicNum(a)===academicNum(b);
   const dayIdx={domingo:0,lunes:1,martes:2,miercoles:3,miércoles:3,jueves:4,viernes:5,sabado:6,sábado:6};
   const isoLocalDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  function sectionsForGrade(grado){const arr=(Array.isArray(window.horariosProfesor)?window.horariosProfesor:(typeof horariosProfesor!=='undefined'&&Array.isArray(horariosProfesor)?horariosProfesor:[])).filter(h=>sameGrade(h.ano,grado));return [...new Set(arr.map(h=>String(h.seccion||'').trim()).filter(Boolean))]}
+  function sectionsForGrade(grado){
+    const arr=(Array.isArray(window.horariosProfesor)?window.horariosProfesor:(typeof horariosProfesor!=='undefined'&&Array.isArray(horariosProfesor)?horariosProfesor:[])).filter(h=>sameGrade(h.ano,grado));
+    const set=new Set(arr.map(h=>String(h.seccion||'').trim()).filter(Boolean));
+    if(edugestionEsCienciasNaturales()&&[1,2].includes(academicNum(grado))){set.add('C');set.add('D')}
+    return [...set];
+  }
   function sectionTextForGrade(grado){const secs=sectionsForGrade(grado);return secs.length?secs.join(' y '):'A y B'}
   function rangeForLapso(lapso){const idx=String(lapso).startsWith('2')?'2':String(lapso).startsWith('3')?'3':'1',cfg=weeklyState().lapsos?.[idx]||{};return {desde:cfg.start||(idx==='1'?'2026-09-21':''),hasta:cfg.end||(idx==='1'?'2026-12-15':'')}}
   function weeklyBlockKey(h){return [h.dia,h.horaInicio,h.horaFin,h.ano,h.seccion,h.turno].map(x=>String(x||'')).join('|')}
@@ -15922,6 +15947,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function sections(){
     const map=new Map();
     (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>{const ano=String(h.ano||'').trim(),seccion=String(h.seccion||'').trim();if(!ano||!seccion)return;const k=sectionKey(ano,seccion);if(!map.has(k))map.set(k,{key:k,ano,seccion,turno:String(h.turno||'').trim()})});
+    edugestionSeccionesAdicionalesCiencias().forEach(h=>{const k=sectionKey(h.ano,h.seccion);if(!map.has(k))map.set(k,{key:k,...h})});
     return [...map.values()].sort((a,b)=>`${academicNum(a.ano)}${a.seccion}`.localeCompare(`${academicNum(b.ano)}${b.seccion}`,'es',{numeric:true}));
   }
   function labelSection(x){return `${x.ano} · Sección ${x.seccion}${x.turno?` · ${x.turno==='Manana'?'Mañana':x.turno}`:''}`}
@@ -16552,3 +16578,50 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   setInterval(()=>{ensureTicker();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))render();},60000);
 })();
 /* EDUGESTION_CRONOGRAMA_LICEO_V42_END */
+
+
+/* EDUGESTION_CIENCIAS_SECCIONES_TARDE_V43_START */
+(() => {
+  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const esCiencias=()=>norm(window.profesorActual?.materia||'').includes('ciencias naturales');
+  const numAno=id=>Number(String(document.getElementById(id)?.value||'').match(/\d+/)?.[0]||0);
+  const pares=[
+    ['select-filtro-ano','select-filtro-seccion','select-filtro-turno'],
+    ['plan-ano','plan-seccion',''],
+    ['horario-ano','horario-seccion','horario-turno'],
+    ['reg-ano','reg-seccion','reg-turno'],
+    ['acta-filtro-ano','acta-filtro-seccion','acta-filtro-turno']
+  ];
+
+  function ensureOption(sel,value,label=value){
+    if(!sel)return;
+    if(![...sel.options].some(o=>String(o.value)===String(value))){
+      const o=document.createElement('option');o.value=value;o.textContent=label;sel.appendChild(o);
+    }
+  }
+  function syncPair(anoId,secId,turnoId){
+    if(!esCiencias())return;
+    const ano=document.getElementById(anoId),sec=document.getElementById(secId),turno=turnoId?document.getElementById(turnoId):null;
+    if(!sec)return;
+    const n=numAno(anoId);
+    if(n===1||n===2){ensureOption(sec,'C','C');ensureOption(sec,'D','D')}
+    if(turno&&['C','D'].includes(String(sec.value||'').toUpperCase())){
+      const tarde=[...turno.options].find(o=>norm(o.value)==='tarde'||norm(o.textContent)==='tarde');
+      if(tarde)turno.value=tarde.value;
+    }
+  }
+  function syncAll(){if(!esCiencias())return;pares.forEach(x=>syncPair(...x));}
+  function bind(){
+    pares.forEach(([anoId,secId,turnoId])=>{
+      const ano=document.getElementById(anoId),sec=document.getElementById(secId);
+      if(ano&&!ano.dataset.cn43){ano.dataset.cn43='1';ano.addEventListener('change',()=>syncPair(anoId,secId,turnoId))}
+      if(sec&&!sec.dataset.cn43){sec.dataset.cn43='1';sec.addEventListener('change',()=>syncPair(anoId,secId,turnoId))}
+    });
+  }
+  function boot(){bind();syncAll()}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  window.addEventListener('edugestion:session',()=>setTimeout(boot,80));
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(boot,120));
+  document.addEventListener('click',e=>{if(e.target?.closest?.('#tab-horario,#tab-planificacion,#tab-asistencia,#tab-actas,#tab-registro'))setTimeout(boot,60)});
+})();
+/* EDUGESTION_CIENCIAS_SECCIONES_TARDE_V43_END */
