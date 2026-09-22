@@ -16341,12 +16341,12 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 })();
 /* EDUGESTION_REGLAMENTO_DOCENTE_V40_END */
 
-/* EDUGESTION_CRONOGRAMA_LICEO_V41 */
+/* EDUGESTION_CRONOGRAMA_LICEO_V42 */
 (() => {
   const TAB_ID = 'tab-cronograma-liceo';
   const SECTION_ID = 'section-cronograma-liceo';
   const TICKER_ID = 'school-agenda-ticker';
-  const STYLE_ID = 'style-cronograma-liceo-v41';
+  const STYLE_ID = 'style-cronograma-liceo-v42';
   const SOURCE_IMG = 'assets/documentos/cronograma_actividades_2026-2027.jpg';
 
   const EVENTOS = [
@@ -16441,14 +16441,13 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if(document.getElementById(STYLE_ID))return;
     const s=document.createElement('style');s.id=STYLE_ID;
     s.textContent=`
-      .school-agenda-ticker{margin:0 24px 12px;border-radius:0 0 18px 18px;background:linear-gradient(90deg,#102f5d,#176a9b 54%,#0f8a72);color:#fff;display:flex;align-items:center;gap:12px;overflow:hidden;min-height:42px;box-shadow:0 8px 20px rgba(16,47,93,.12);cursor:pointer;border-top:1px solid rgba(255,255,255,.15)}
-      .school-agenda-ticker__tag{flex:0 0 auto;padding:0 0 0 16px;font-size:.72rem;font-weight:950;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:7px}.school-agenda-ticker__viewport{overflow:hidden;flex:1;min-width:0}.school-agenda-ticker__track{display:inline-block;white-space:nowrap;padding:10px 36px 10px 0;font-weight:800;font-size:.86rem;animation:schoolTickerMove 34s linear infinite}.school-agenda-ticker:hover .school-agenda-ticker__track{animation-play-state:paused}.school-agenda-ticker__open{flex:0 0 auto;border:0;background:rgba(255,255,255,.12);color:#fff;padding:9px 14px;font-weight:900;align-self:stretch;cursor:pointer}
-      @keyframes schoolTickerMove{from{transform:translateX(18%)}to{transform:translateX(-100%)}}@media(prefers-reduced-motion:reduce){.school-agenda-ticker__track{animation:none;white-space:normal}}
+      .school-agenda-ticker{margin:10px 22px 0;padding:8px 10px;border:1px solid #d8e9f5;border-radius:14px;background:linear-gradient(90deg,#f6fbff,#ffffff);color:#173c58;display:flex;align-items:center;gap:9px;min-height:38px;box-shadow:0 6px 18px rgba(28,77,113,.06);cursor:pointer}
+      .school-agenda-ticker__tag{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:10px;background:#e9f5fc;color:#155f94;font-size:.58rem;font-weight:900;letter-spacing:.07em;text-transform:uppercase}.school-agenda-ticker__viewport{overflow:hidden;flex:1;min-width:0}.school-agenda-ticker__track{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#173c58;font-weight:800;font-size:.68rem;line-height:1.35}.school-agenda-ticker__open{flex:0 0 auto;min-height:32px;border:1px solid #cfe0ec;border-radius:10px;background:#fff;color:#155f94;padding:0 10px;font-size:.61rem;font-weight:850;cursor:pointer;transition:.2s ease}.school-agenda-ticker__open:hover{color:#fff;border-color:#176aa5;background:#176aa5}
       .cl-hero{background:linear-gradient(135deg,#173d69,#0c7f8e);color:#fff;border-radius:24px;padding:25px 28px;display:flex;justify-content:space-between;gap:18px;align-items:center;box-shadow:0 16px 34px rgba(20,61,105,.15)}.cl-hero small{display:block;text-transform:uppercase;letter-spacing:.08em;font-weight:900;opacity:.88;margin-bottom:7px}.cl-hero h2{margin:0 0 8px;font-size:1.72rem}.cl-hero p{margin:0;line-height:1.55;max-width:850px}.cl-hero__icon{width:72px;height:72px;border-radius:20px;background:rgba(255,255,255,.13);display:grid;place-items:center;font-size:2rem}
       .cl-summary{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:12px}.cl-summary article{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dbe5ec);border-radius:16px;padding:15px 16px;box-shadow:0 6px 18px rgba(28,62,88,.05)}.cl-summary span{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;font-weight:900;color:#758a9d}.cl-summary strong{display:block;margin-top:5px;color:#173d69;font-size:1rem;line-height:1.4}.cl-summary .cl-summary--today{border-color:#9fd9c7;background:#f2fbf7}.cl-summary .cl-summary--today strong{color:#08765c}
       .cl-actions{display:flex;gap:10px;flex-wrap:wrap}.cl-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}.cl-btn.primary{background:#176a9b;color:#fff}.cl-btn.soft{background:#eef6fb;color:#155b84;border:1px solid #cfe0ea}.cl-btn.green{background:#15936f;color:#fff}
       .cl-table-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dbe5ec);border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(28,62,88,.06)}.cl-table-head{padding:14px 16px;background:#f5f9fc;border-bottom:1px solid #dbe5ec;display:flex;justify-content:space-between;gap:12px;align-items:center}.cl-table-head h3{margin:0;color:#173d69}.cl-table-wrap{overflow-x:auto}.cl-table{width:100%;border-collapse:collapse;min-width:820px}.cl-table th,.cl-table td{padding:12px 13px;border-bottom:1px solid #e5edf2;text-align:left;vertical-align:top}.cl-table th{background:#f9fbfd;color:#5f7386;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}.cl-table td{font-size:.9rem;color:#2a4258;line-height:1.42}.cl-table tr.is-today td{background:#edfaf5}.cl-table tr.is-active td{background:#f5fbff}.cl-status{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:.72rem;font-weight:900;white-space:nowrap}.cl-status.today{background:#d9f7ea;color:#08765c}.cl-status.next{background:#e8f2ff;color:#245b9e}.cl-status.done{background:#eef1f4;color:#738293}.cl-status.active{background:#fff1d8;color:#9a6000}.cl-warning{display:inline-flex;gap:5px;align-items:flex-start;color:#9f4c00;font-weight:800;font-size:.78rem;margin-top:5px}.cl-source{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#fff8e8;border:1px solid #f2d79f;color:#7d5a12;font-size:.82rem;line-height:1.45}
-      @media(max-width:900px){.school-agenda-ticker{margin:0 12px 10px}.school-agenda-ticker__open{display:none}.cl-summary{grid-template-columns:1fr}.cl-hero__icon{display:none}}@media(max-width:620px){.cl-hero{padding:20px}.cl-actions{flex-direction:column}.cl-btn{justify-content:center}}
+      @media(max-width:900px){.school-agenda-ticker{margin:8px 12px 0;padding:7px 8px}.school-agenda-ticker__open{display:none}.school-agenda-ticker__tag{padding:6px 8px}.school-agenda-ticker__track{font-size:.64rem}.cl-summary{grid-template-columns:1fr}.cl-hero__icon{display:none}}@media(max-width:620px){.school-agenda-ticker{margin:7px 8px 0;gap:7px}.school-agenda-ticker__tag span{display:none}.school-agenda-ticker__tag{width:30px;height:30px;padding:0;justify-content:center}.school-agenda-ticker__track{font-size:.61rem}.cl-hero{padding:20px}.cl-actions{flex-direction:column}.cl-btn{justify-content:center}}
       @media print{body *{visibility:hidden!important}#section-cronograma-liceo,#section-cronograma-liceo *{visibility:visible!important}#section-cronograma-liceo{position:absolute;left:0;top:0;width:100%;padding:0!important}.cl-actions,.cl-source,.cl-hero__icon{display:none!important}.cl-hero{box-shadow:none;border:1px solid #999;color:#000;background:#fff}.cl-table-card{box-shadow:none}.cl-table{min-width:0}.cl-table th,.cl-table td{font-size:9pt;padding:6px}}
     `;document.head.appendChild(s);
   }
@@ -16461,14 +16460,17 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
 
   function tickerText(){
-    const {iso,activos,prox}=resumenHoy();
+    const {activos,prox}=resumenHoy();
     const partes=[];
-    if(activos.length) partes.push(`HOY / EN CURSO: ${activos.map(e=>e.actividad).join(' · ')}`);
-    else partes.push('HOY: sin actividad institucional específica registrada');
+    if(activos.length){
+      const visibles=activos.slice(0,2).map(e=>e.actividad).join(' · ');
+      const extra=activos.length>2?` · +${activos.length-2} más`:'';
+      partes.push(`HOY / EN CURSO: ${visibles}${extra}`);
+    }else partes.push('HOY: sin actividad institucional específica registrada');
     if(prox.length){
-      const p=prox[0];partes.push(`PRÓXIMO: ${p.ev.actividad} — ${fmtFecha(p.fecha)}`);
+      const p=prox[0];partes.push(`PRÓXIMO: ${p.ev.actividad} · ${fmtFecha(p.fecha)}`);
     }
-    return `CRONOGRAMA DEL LICEO — ${fmtFecha(iso,{weekday:'long',day:'numeric',month:'long'})} • ${partes.join(' • ')}`;
+    return partes.join('   •   ');
   }
 
   function ensureTicker(){
@@ -16482,7 +16484,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       const abrir=()=>document.getElementById(TAB_ID)?.click();
       t.addEventListener('click',abrir);t.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();abrir();}});
     }
-    const txt=t.querySelector('#school-agenda-ticker-text');if(txt)txt.textContent=tickerText();
+    const txt=t.querySelector('#school-agenda-ticker-text');if(txt){txt.textContent=tickerText();txt.title=tickerText();}
     return t;
   }
 
@@ -16549,4 +16551,4 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{syncVisibility();render();},160));
   setInterval(()=>{ensureTicker();if(!document.getElementById(SECTION_ID)?.classList.contains('hidden'))render();},60000);
 })();
-/* EDUGESTION_CRONOGRAMA_LICEO_V41_END */
+/* EDUGESTION_CRONOGRAMA_LICEO_V42_END */
