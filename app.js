@@ -2070,6 +2070,20 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     function formatearHoraLimpia(str) { if (!str) return "--:--"; let h = str.toString().trim(); if (h.includes("T")) h = h.split("T")[1]; if (h.includes(" ")) { const segs = h.split(" "); const f = segs.find(s => s.includes(":")); if (f) h = f; } return h.substring(0,5); }
 
+    // V4.4 · En el usuario de Ciencias Naturales el módulo Horario se muestra
+    // en formato convencional de 12 horas (a. m. / p. m.), nunca en hora militar.
+    function formatearHoraHorario(str) {
+      const limpia = formatearHoraLimpia(str);
+      if (!edugestionEsCienciasNaturales() || limpia === '--:--') return limpia;
+      const partes = limpia.split(':');
+      const hh = Number(partes[0]);
+      const mm = String(partes[1] || '00').padStart(2, '0');
+      if (!Number.isFinite(hh)) return limpia;
+      const periodo = hh >= 12 ? 'p. m.' : 'a. m.';
+      const hora12 = hh % 12 || 12;
+      return `${hora12}:${mm} ${periodo}`;
+    }
+
     window.mostrarListaHorario = function(ano, seccion) {
       panelFormHorario.classList.add('hidden'); panelListaHorario.classList.remove('hidden');
       subtituloHorario.textContent = `${ano} - Sección "${seccion}"`; tablaBodyHorario.innerHTML = '';
@@ -2082,7 +2096,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       else {
         filtrados.forEach((h, index) => {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="px-4 py-3 font-bold text-gray-800">${escaparHTML(h.dia)}</td><td class="px-4 py-3 text-center text-gray-600 font-semibold">${escaparHTML(formatearHoraLimpia(h.horaInicio))} - ${escaparHTML(formatearHoraLimpia(h.horaFin))}</td><td class="px-4 py-3 text-center text-gray-500">${escaparHTML(h.turno)}</td><td class="px-4 py-3 text-center"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar bloque"><i class="fa-solid fa-trash-can"></i></button></td>`;
+          tr.innerHTML = `<td class="px-4 py-3 font-bold text-gray-800">${escaparHTML(h.dia)}</td><td class="px-4 py-3 text-center text-gray-600 font-semibold">${escaparHTML(formatearHoraHorario(h.horaInicio))} - ${escaparHTML(formatearHoraHorario(h.horaFin))}</td><td class="px-4 py-3 text-center text-gray-500">${escaparHTML(h.turno)}</td><td class="px-4 py-3 text-center"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar bloque"><i class="fa-solid fa-trash-can"></i></button></td>`;
           tr.querySelector('button').addEventListener('click', () => eliminarHorarioLocal(index, ano, seccion));
           tablaBodyHorario.appendChild(tr);
         });
@@ -2125,7 +2139,7 @@ const SESSION_KEY = 'edugestion_session_v2';
                   const color = getColorAno(b.ano);
                   listaBloques.innerHTML += `
                     <div class="flex items-center bg-white p-2 rounded-xl shadow-sm border-l-4 ${color.border} border-t border-r border-b border-gray-100">
-                       <div class="w-1/3 text-[10px] font-black text-gray-500">${escaparHTML(formatearHoraLimpia(b.horaInicio))}<br>${escaparHTML(formatearHoraLimpia(b.horaFin))}</div>
+                       <div class="w-1/3 text-[10px] font-black text-gray-500">${escaparHTML(formatearHoraHorario(b.horaInicio))}<br>${escaparHTML(formatearHoraHorario(b.horaFin))}</div>
                        <div class="w-2/3 pl-2 border-l border-gray-100">
                           <p class="text-xs font-black ${color.text}">${escaparHTML(b.ano)} "${escaparHTML(b.seccion)}"</p>
                        </div>
