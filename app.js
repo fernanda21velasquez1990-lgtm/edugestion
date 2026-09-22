@@ -16212,3 +16212,131 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   setTimeout(sync,450);setTimeout(sync,1400);setTimeout(sync,2800);
 })();
 /* EDUGESTION_CIENCIAS_BIOLOGIA_SWITCH_V39_END */
+
+/* EDUGESTION_REGLAMENTO_DOCENTE_V40 */
+(() => {
+  const TAB_ID = 'tab-reglamento-docente';
+  const SECTION_ID = 'section-reglamento-docente';
+  const STYLE_ID = 'style-reglamento-docente-v40';
+  const PDF_URL = 'assets/documentos/reglamento_profesion_docente.pdf';
+
+  const norm = (v='') => String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const materiaActual = () => norm(
+    window.profesorActual?.materia ||
+    window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva ||
+    (typeof profesorActual !== 'undefined' ? profesorActual?.materia : '') || ''
+  );
+  const permitido = () => {
+    const m = materiaActual();
+    return m.includes('educacion fisica') || m.includes('ciencias naturales') || m.includes('biologia');
+  };
+
+  function ensureStyles(){
+    if(document.getElementById(STYLE_ID)) return;
+    const s=document.createElement('style');
+    s.id=STYLE_ID;
+    s.textContent=`
+      .rd-hero{background:linear-gradient(135deg,#173d69,#0c7f8e);color:#fff;border-radius:24px;padding:24px 28px;margin-bottom:18px;box-shadow:0 16px 34px rgba(20,61,105,.16)}
+      .rd-hero small{display:block;font-size:.76rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;opacity:.88;margin-bottom:7px}.rd-hero h2{margin:0 0 8px;font-size:1.7rem}.rd-hero p{margin:0;max-width:900px;line-height:1.6;opacity:.96}
+      .rd-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 18px}.rd-btn{border:0;border-radius:12px;padding:11px 15px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}.rd-btn.primary{background:#176a9b;color:#fff}.rd-btn.green{background:#15936f;color:#fff}.rd-btn.soft{background:#edf5fa;color:#195c7e;border:1px solid #cfe0ea}
+      .rd-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}.rd-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dbe5ec);border-radius:16px;padding:15px;box-shadow:0 6px 18px rgba(28,62,88,.05)}.rd-card b{display:block;color:#183b5b;margin-bottom:4px}.rd-card span{display:block;color:#657b8e;font-size:.84rem;line-height:1.45;margin-bottom:10px}.rd-card button{border:0;background:#eef6fb;color:#155b84;border-radius:9px;padding:8px 10px;font-weight:800;cursor:pointer}
+      .rd-viewer{background:var(--card-bg,#fff);border:1px solid var(--border-color,#dbe5ec);border-radius:18px;overflow:hidden;box-shadow:0 8px 24px rgba(28,62,88,.06)}.rd-viewer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;background:#f5f9fc;border-bottom:1px solid #dbe5ec}.rd-viewer-head strong{color:#173d69}.rd-viewer iframe{display:block;width:100%;height:72vh;min-height:650px;border:0;background:#e9eef2}
+      .rd-note{font-size:.82rem;color:#657b8e;margin-top:10px;line-height:1.45}.rd-hidden{display:none!important}
+      @media(max-width:900px){.rd-grid{grid-template-columns:1fr 1fr}.rd-viewer iframe{height:68vh;min-height:520px}}
+      @media(max-width:620px){.rd-grid{grid-template-columns:1fr}.rd-hero{padding:20px}.rd-viewer iframe{height:65vh;min-height:460px}.rd-actions{flex-direction:column}.rd-btn{justify-content:center}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function ensureUI(){
+    ensureStyles();
+    const nav=document.getElementById('app-nav');
+    const main=document.getElementById('app-main');
+    if(!nav||!main) return false;
+
+    let tab=document.getElementById(TAB_ID);
+    if(!tab){
+      tab=document.createElement('button');
+      tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');
+      tab.dataset.title='Reglamento docente';
+      tab.dataset.description='Consulta el Reglamento del Ejercicio de la Profesión Docente y abre el documento oficial completo.';
+      tab.innerHTML='<i class="fa-solid fa-scale-balanced"></i><span>Reglamento docente</span>';
+      const ref=document.getElementById('tab-configuracion');
+      nav.insertBefore(tab,ref||null);
+    }
+
+    let sec=document.getElementById(SECTION_ID);
+    if(!sec){
+      sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';
+      sec.innerHTML=`
+        <header class="rd-hero">
+          <small><i class="fa-solid fa-scale-balanced"></i> Documento de consulta docente</small>
+          <h2>Reglamento del Ejercicio de la Profesión Docente</h2>
+          <p>Decreto N.° 1.011 del 4 de octubre de 2000 · Gaceta Oficial N.° 5.496 Extraordinario del 31 de octubre de 2000. Disponible para los docentes de Educación Física y Ciencias Naturales/Biología.</p>
+        </header>
+        <div class="rd-actions">
+          <a class="rd-btn primary" href="${PDF_URL}" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Abrir PDF completo</a>
+          <a class="rd-btn green" href="${PDF_URL}" download="Reglamento_del_Ejercicio_de_la_Profesion_Docente.pdf"><i class="fa-solid fa-download"></i> Descargar PDF</a>
+          <button class="rd-btn soft" type="button" id="rd-volver-inicio"><i class="fa-solid fa-file-circle-check"></i> Ver desde la portada</button>
+        </div>
+        <div class="rd-grid">
+          <article class="rd-card"><b>Disposiciones generales</b><span>Objeto, ámbito de aplicación y definición del personal docente.</span><button type="button" data-rd-page="1">Ver páginas iniciales</button></article>
+          <article class="rd-card"><b>Deberes del personal docente</b><span>Planificación, programas oficiales, evaluación, ética, asistencia y responsabilidades.</span><button type="button" data-rd-page="2">Ir a deberes</button></article>
+          <article class="rd-card"><b>Derechos del personal docente</b><span>Derechos profesionales, participación, formación, licencias, ascensos y otros beneficios.</span><button type="button" data-rd-page="3">Ir a derechos</button></article>
+          <article class="rd-card"><b>Carrera y escalafón docente</b><span>Jerarquías, categorías, clasificación, ingreso, promociones y ascensos.</span><button type="button" data-rd-page="6">Ver escalafón</button></article>
+          <article class="rd-card"><b>Dedicación y carga horaria</b><span>Tiempo completo, medio tiempo, tiempo integral, tiempo convencional y hora docente.</span><button type="button" data-rd-page="8">Ver dedicación</button></article>
+          <article class="rd-card"><b>Evaluación y clasificación</b><span>Juntas calificadoras, Comités de Sustanciación, Hoja de Servicio y valoración de méritos.</span><button type="button" data-rd-page="16">Ver evaluación docente</button></article>
+        </div>
+        <div class="rd-viewer">
+          <div class="rd-viewer-head"><strong><i class="fa-solid fa-file-pdf"></i> Documento oficial completo</strong><span id="rd-page-label">Página 1</span></div>
+          <iframe id="rd-pdf-frame" title="Reglamento del Ejercicio de la Profesión Docente" src="${PDF_URL}#page=1&view=FitH"></iframe>
+        </div>
+        <p class="rd-note"><i class="fa-solid fa-circle-info"></i> Esta pestaña funciona como biblioteca de consulta. No modifica la planificación ni los datos del docente.</p>`;
+      main.appendChild(sec);
+    }
+
+    if(!tab.dataset.rdBound){
+      tab.dataset.rdBound='1';
+      tab.addEventListener('click',()=>openSection(tab,sec));
+    }
+    sec.querySelectorAll('[data-rd-page]').forEach(btn=>{
+      if(btn.dataset.rdBound) return;btn.dataset.rdBound='1';
+      btn.addEventListener('click',()=>goPage(Number(btn.dataset.rdPage)||1));
+    });
+    const home=sec.querySelector('#rd-volver-inicio');
+    if(home&&!home.dataset.rdBound){home.dataset.rdBound='1';home.addEventListener('click',()=>goPage(1));}
+    return true;
+  }
+
+  function goPage(page){
+    const f=document.getElementById('rd-pdf-frame');
+    const l=document.getElementById('rd-page-label');
+    if(f) f.src=`${PDF_URL}#page=${page}&view=FitH`;
+    if(l) l.textContent=`Página ${page}`;
+    document.getElementById('section-reglamento-docente')?.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  function openSection(tab,sec){
+    document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});
+    document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));
+    tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');
+    const t=document.getElementById('page-title'),d=document.getElementById('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function syncVisibility(){
+    ensureUI();
+    const tab=document.getElementById(TAB_ID);
+    const sec=document.getElementById(SECTION_ID);
+    const show=permitido();
+    tab?.classList.toggle('rd-hidden',!show);
+    if(!show && sec && !sec.classList.contains('hidden')) document.getElementById('tab-asistencia')?.click();
+  }
+
+  function boot(){ensureUI();syncVisibility();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  document.addEventListener('click',e=>{if(e.target?.closest?.('#dp-save'))setTimeout(syncVisibility,240)});
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(syncVisibility,160));
+  const tm=setInterval(()=>{if(window.profesorActual || (typeof profesorActual!=='undefined'&&profesorActual)){syncVisibility();clearInterval(tm)}},400);setTimeout(()=>clearInterval(tm),12000);
+})();
+/* EDUGESTION_REGLAMENTO_DOCENTE_V40_END */
