@@ -10748,8 +10748,8 @@ Archivo enviado directamente desde EduGestión.`);
 
 El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);if(!ok)return;setAssignment(x.grado,x,'');render();if(typeof mostrarToast==='function')mostrarToast('Tema quitado del lapso. Ahora aparece como Sin asignar.','success','Panel por lapso')}))}
   function showUnassigned(){const list=document.getElementById('pl-list');if(!list)return;const arr=rowsForGrade().filter(x=>!x.lapso);if(!arr.length){list.innerHTML='<div class="pl-empty"><h4>Todos los temas ya tienen lapso asignado</h4></div>';return}list.innerHTML=`<div style="font-weight:900;color:var(--text-color,#24384c);margin-bottom:2px">Temas sin asignar · ${esc(gradoActual)}</div>`+arr.map((x,i)=>itemHtml(x,i)).join('');bindItems(list,arr)}
-  function openGrade(){const materia=String(window.profesorActual?.materia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const cn=materia.includes('ciencias naturales');const tabId=cn?'tab-cuadernillo-cn':'tab-cuadernillo-ef';document.getElementById(tabId)?.click();setTimeout(()=>{const selector=cn?'#cn-levels .cn-level':'#cef-levels .cef-level';const b=[...document.querySelectorAll(selector)].find(x=>norm(x.dataset.nivel)===norm(gradoActual));b?.click()},120)}
-  function openTopic(x){openGrade();setTimeout(()=>{const materia=String(window.profesorActual?.materia||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const cn=materia.includes('ciencias naturales');const cards=[...document.querySelectorAll(cn?'#cn-grid .cn-card':'#cef-grid .cef-card')];const c=cards.find(el=>norm(el.querySelector('h4')?.textContent)===norm(x.tema));c?.querySelector('[data-ver]')?.click()},250)}
+  function openGrade(){const activeBio=window.EDUGESTION_CEF_DATA===window.EDUGESTION_BIOLOGIA_DATA,activeCn=window.EDUGESTION_CEF_DATA===window.EDUGESTION_CIENCIAS_DATA;const tabId=activeBio?'tab-cuadernillo-bio':activeCn?'tab-cuadernillo-cn':'tab-cuadernillo-ef';document.getElementById(tabId)?.click();setTimeout(()=>{const selector=activeBio?'#bio-levels .bio-level':activeCn?'#cn-levels .cn-level':'#cef-levels .cef-level';const b=[...document.querySelectorAll(selector)].find(x=>norm(x.dataset.nivel)===norm(gradoActual));b?.click()},120)}
+  function openTopic(x){const activeBio=window.EDUGESTION_CEF_DATA===window.EDUGESTION_BIOLOGIA_DATA,activeCn=window.EDUGESTION_CEF_DATA===window.EDUGESTION_CIENCIAS_DATA;openGrade();setTimeout(()=>{const cards=[...document.querySelectorAll(activeBio?'#bio-grid .bio-card':activeCn?'#cn-grid .cn-card':'#cef-grid .cef-card')];const c=cards.find(el=>norm(el.querySelector('h4')?.textContent)===norm(x.tema));c?.querySelector('[data-ver]')?.click()},250)}
   function sendSingle(x){const materia=String(window.profesorActual?.materia||'Educación Física');const cn=materia.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes('ciencias naturales');const synthetic={...x,grado:gradoActual,fuente:cn?'Ciencias Naturales · Propuestas de contenidos MPPE · septiembre 2025':'Cuadernillo Curricular MPPE · Educación Física',seleccionadoEn:new Date().toISOString()};writeJSON(cn?'edugestion_cuadernillo_cn_seleccion':SELECT_KEY,synthetic);document.getElementById('tab-planificacion')?.click();setTimeout(()=>fillPlanning(synthetic),180)}
   function planLapso(){
     const topics=rowsForGrade().filter(x=>x.lapso===lapsoActual);if(!topics.length)return;
@@ -16169,6 +16169,46 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_CURRICULUM_PROFILE_BRIDGE_V38 */
 (() => {
  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
- function sync(){const m=norm(window.profesorActual?.materia||window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva||'');const bio=m.includes('biologia'),cn=m.includes('ciencias naturales');document.getElementById('tab-cuadernillo-bio')?.classList.toggle('dp-hidden-by-profile',!bio);document.getElementById('tab-cuadernillo-cn')?.classList.toggle('dp-hidden-by-profile',!cn);if(bio&&window.EDUGESTION_BIOLOGIA_DATA){window.EDUGESTION_CEF_DATA=window.EDUGESTION_BIOLOGIA_DATA;document.getElementById('tab-panel-lapsos-ef')?.classList.remove('dp-hidden-by-profile')}if(cn&&window.EDUGESTION_CIENCIAS_DATA){window.EDUGESTION_CEF_DATA=window.EDUGESTION_CIENCIAS_DATA;document.getElementById('tab-panel-lapsos-ef')?.classList.remove('dp-hidden-by-profile')}}
+ function sync(){const m=norm(window.profesorActual?.materia||window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva||'');const bio=m.includes('biologia'),cn=m.includes('ciencias naturales'),showBio=bio||cn;document.getElementById('tab-cuadernillo-bio')?.classList.toggle('dp-hidden-by-profile',!showBio);document.getElementById('tab-cuadernillo-cn')?.classList.toggle('dp-hidden-by-profile',!cn);if(bio&&window.EDUGESTION_BIOLOGIA_DATA){window.EDUGESTION_CEF_DATA=window.EDUGESTION_BIOLOGIA_DATA;document.getElementById('tab-panel-lapsos-ef')?.classList.remove('dp-hidden-by-profile')}if(cn&&window.EDUGESTION_CIENCIAS_DATA){window.EDUGESTION_CEF_DATA=window.EDUGESTION_CIENCIAS_DATA;document.getElementById('tab-panel-lapsos-ef')?.classList.remove('dp-hidden-by-profile')}}
  document.addEventListener('click',e=>{if(e.target?.closest?.('#dp-save'))setTimeout(sync,220)});window.addEventListener('edugestion:data-loaded',()=>setTimeout(sync,120));setTimeout(sync,500);setTimeout(sync,1800);
 })();
+
+
+/* EDUGESTION_CIENCIAS_BIOLOGIA_SWITCH_V39 */
+(() => {
+  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  const materia=()=>norm(window.profesorActual?.materia||window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva||'');
+  const isCN=()=>materia().includes('ciencias naturales');
+  const isBio=()=>materia().includes('biologia');
+  function updatePanel(data,label){
+    if(!data)return;
+    window.EDUGESTION_CEF_DATA=data;
+    const tab=document.getElementById('tab-panel-lapsos-ef');
+    if(tab){tab.classList.remove('dp-hidden-by-profile');tab.dataset.description=`Organiza los contenidos de ${label} por lapso y prepara planificaciones con IA.`}
+    const hero=document.querySelector('#section-panel-lapsos-ef .pl-hero p');
+    if(hero)hero.textContent=`Distribuye los contenidos esenciales de ${label} entre 1er, 2do y 3er lapso y genera planificaciones con IA usando únicamente los contenidos asignados.`;
+    const gs=document.getElementById('pl-grade');
+    if(gs){
+      const grades=Object.keys(data||{}),keep=grades.includes(gs.value)?gs.value:grades[0];
+      gs.innerHTML=grades.map(g=>`<option value="${String(g).replace(/"/g,'&quot;')}">${g}</option>`).join('');
+      if(keep){gs.value=keep;gs.dispatchEvent(new Event('change',{bubbles:true}))}
+    }
+  }
+  function sync(){
+    const cn=isCN(),bio=isBio(),showBio=cn||bio;
+    const cnTab=document.getElementById('tab-cuadernillo-cn'),bioTab=document.getElementById('tab-cuadernillo-bio');
+    if(cnTab)cnTab.classList.toggle('dp-hidden-by-profile',!cn);
+    if(bioTab)bioTab.classList.toggle('dp-hidden-by-profile',!showBio);
+    if(cn&&window.EDUGESTION_CIENCIAS_DATA&&!document.querySelector('#app-nav .nav-item.is-active#tab-cuadernillo-bio')){
+      window.EDUGESTION_CEF_DATA=window.EDUGESTION_CIENCIAS_DATA;
+    }
+  }
+  document.addEventListener('click',e=>{
+    if(e.target?.closest?.('#tab-cuadernillo-bio')) setTimeout(()=>updatePanel(window.EDUGESTION_BIOLOGIA_DATA,'Biología'),20);
+    if(e.target?.closest?.('#tab-cuadernillo-cn')) setTimeout(()=>updatePanel(window.EDUGESTION_CIENCIAS_DATA,'Ciencias Naturales'),20);
+    if(e.target?.closest?.('#dp-save')) setTimeout(sync,220);
+  });
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(sync,120));
+  setTimeout(sync,450);setTimeout(sync,1400);setTimeout(sync,2800);
+})();
+/* EDUGESTION_CIENCIAS_BIOLOGIA_SWITCH_V39_END */
