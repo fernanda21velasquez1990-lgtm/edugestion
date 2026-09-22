@@ -6397,19 +6397,108 @@ ${recurso.apunte}`);
 
 
 /* =========================================================
-   ASISTENCIA DEL PROFESOR
+   ASISTENCIA DEL PROFESOR · V4.8
+   Registro automático + corrección manual + edición/borrado
    ========================================================= */
 (() => {
   const IDS = { tab:'tab-asistencia-docente', section:'section-asistencia-docente' };
+  const LOCAL_PREFIX = 'edugestion_teacher_attendance_manual_v48_';
   let dataAsistenciaDocente = null;
 
   const escAD = v => String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const horasTexto = minutos => {
     const n = Math.max(0, Number(minutos) || 0);
     const h = Math.floor(n / 60);
-    const m = n % 60;
+    const m = Math.round(n % 60);
     return `${h} h ${String(m).padStart(2,'0')} min`;
   };
+  const pad = n => String(n).padStart(2,'0');
+  const hoyIso = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  };
+  const fechaAIso = valor => {
+    const t = String(valor || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    let m = t.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+    const d = new Date(t);
+    if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    return t;
+  };
+  const isoAFecha = iso => {
+    const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || '');
+  };
+  const minutosHora = hora => {
+    const m = String(hora || '').match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
+  };
+  const horaAmPm = hora => {
+    const m = String(hora || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?/);
+    if (!m) return String(hora || '—');
+    const h = Number(m[1]);
+    const min = m[2];
+    const periodo = h >= 12 ? 'p. m.' : 'a. m.';
+    const hh = h % 12 || 12;
+    return `${hh}:${min} ${periodo}`;
+  };
+  const minutosJornada = (entrada, salida) => {
+    const a = minutosHora(entrada), b = minutosHora(salida);
+    if (a == null || b == null) return 0;
+    return Math.max(0, b - a);
+  };
+  const profesorClave = () => String(
+    profesorActual?.usuario || profesorActual?.username || profesorActual?.cedula || profesorActual?.id || profesorActual?.nombre || 'docente'
+  ).replace(/[^a-z0-9_-]+/gi,'_').toLowerCase();
+  const localKey = () => `${LOCAL_PREFIX}${profesorClave()}`;
+  function leerLocal(){
+    try {
+      const raw = JSON.parse(localStorage.getItem(localKey()) || '{}');
+      return { overrides: raw.overrides || {}, deleted: raw.deleted || {} };
+    } catch (_) { return { overrides:{}, deleted:{} }; }
+  }
+  function guardarLocal(state){
+    try { localStorage.setItem(localKey(), JSON.stringify(state)); } catch (_) {}
+  }
+  function recalcularResumen(registros){
+    const ahora = new Date();
+    const inicioSemana = new Date(ahora); inicioSemana.setHours(0,0,0,0); inicioSemana.setDate(ahora.getDate() - ((ahora.getDay()+6)%7));
+    const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+    const isoHoy = hoyIso();
+    const acum = filtro => {
+      const items = registros.filter(r => r.estado !== 'Ausente' && filtro(fechaAIso(r.fecha)));
+      const mins = items.reduce((a,r)=>a+Number(r.minutosTrabajados || minutosJornada(r.horaLlegada,r.horaSalida) || 0),0);
+      return { horas: mins/60, diasTrabajados: items.length, promedioHorasDia: items.length ? (mins/60/items.length) : 0 };
+    };
+    const parseIso = iso => {
+      const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m) return null;
+      return new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+    };
+    return {
+      dia: acum(iso=>iso===isoHoy),
+      semana: acum(iso=>{const d=parseIso(iso);return d && d>=inicioSemana && d<=ahora;}),
+      mes: acum(iso=>{const d=parseIso(iso);return d && d>=inicioMes && d<=ahora;})
+    };
+  }
+  function aplicarAjustesLocales(datos){
+    const state = leerLocal();
+    const mapa = new Map();
+    (Array.isArray(datos?.registros) ? datos.registros : []).forEach(r => {
+      const iso = fechaAIso(r.fecha);
+      if (!iso || state.deleted[iso]) return;
+      mapa.set(iso, {...r, _iso:iso});
+    });
+    Object.entries(state.overrides).forEach(([iso,r]) => {
+      if (state.deleted[iso]) return;
+      mapa.set(iso, {...r, fecha:r.fecha || isoAFecha(iso), _iso:iso, _manual:true});
+    });
+    const registros = [...mapa.values()].sort((a,b)=>String(fechaAIso(b.fecha)).localeCompare(String(fechaAIso(a.fecha))));
+    const iso = hoyIso();
+    const hoy = mapa.get(iso) || (state.deleted[iso] ? {} : (datos?.hoy || {}));
+    return {...(datos||{}), registros, hoy, resumen:recalcularResumen(registros)};
+  }
 
   function crearSeccion() {
     if (document.getElementById(IDS.tab)) return;
@@ -6423,7 +6512,7 @@ ${recurso.apunte}`);
     tab.className = 'nav-item';
     tab.setAttribute('aria-selected','false');
     tab.dataset.title = 'Mi asistencia laboral';
-    tab.dataset.description = 'Registra tu llegada, salida, ausencias y horas trabajadas.';
+    tab.dataset.description = 'Registra llegada, salida, correcciones manuales, ausencias y horas trabajadas.';
     tab.innerHTML = '<i class="fa-solid fa-business-time"></i><span>Mi asistencia laboral</span>';
 
     const horario = nav.querySelector('#tab-horario');
@@ -6438,11 +6527,11 @@ ${recurso.apunte}`);
         <div class="platform-hero__copy">
           <span class="platform-hero__eyebrow"><i class="fa-solid fa-fingerprint"></i> Registro personal del docente</span>
           <h2>Mi asistencia laboral</h2>
-          <p>Registra la hora de llegada, la hora de salida o informa una ausencia. Consulta tus días y horas trabajadas.</p>
+          <p>Marca tu llegada y salida al momento o corrige manualmente una jornada si olvidaste registrarla.</p>
           <div class="platform-hero__badges">
             <span><i class="fa-solid fa-clock"></i> Llegada y salida</span>
-            <span><i class="fa-solid fa-calendar-check"></i> Resumen semanal y mensual</span>
-            <span><i class="fa-brands fa-telegram"></i> Disponible en Telegram</span>
+            <span><i class="fa-solid fa-pen-to-square"></i> Corrección manual</span>
+            <span><i class="fa-solid fa-trash-can"></i> Editar o borrar</span>
           </div>
         </div>
         <div class="platform-hero__icon"><i class="fa-solid fa-user-clock"></i></div>
@@ -6451,25 +6540,44 @@ ${recurso.apunte}`);
       <section class="teacher-clock-card">
         <div class="teacher-clock-card__date"><small>Fecha y hora actual</small><strong id="teacher-clock-date">—</strong><time id="teacher-clock-time">--:--:--</time></div>
         <div class="teacher-clock-card__status" id="teacher-attendance-status"><i class="fa-solid fa-circle-info"></i><div><small>Estado de hoy</small><strong>Sin registro</strong><span>Registra tu llegada o una ausencia.</span></div></div>
-        <div class="teacher-clock-actions">
-          <button id="teacher-register-arrival" type="button"><i class="fa-solid fa-right-to-bracket"></i><span><strong>Registrar llegada</strong><small>Guardar la hora actual</small></span></button>
-          <button id="teacher-register-exit" type="button"><i class="fa-solid fa-right-from-bracket"></i><span><strong>Registrar salida</strong><small>Calcular horas trabajadas</small></span></button>
+        <div class="teacher-clock-actions teacher-clock-actions--friendly">
+          <button id="teacher-register-arrival" type="button"><i class="fa-solid fa-right-to-bracket"></i><span><strong>Llegada ahora</strong><small>Guardar la hora actual</small></span></button>
+          <button id="teacher-register-exit" type="button"><i class="fa-solid fa-right-from-bracket"></i><span><strong>Salida ahora</strong><small>Calcular horas trabajadas</small></span></button>
+          <button id="teacher-register-manual" type="button" class="is-manual"><i class="fa-solid fa-pen-to-square"></i><span><strong>Registro manual</strong><small>Fecha, llegada y salida</small></span></button>
           <button id="teacher-register-absence" type="button"><i class="fa-solid fa-user-xmark"></i><span><strong>No asistiré</strong><small>Informar el motivo</small></span></button>
         </div>
       </section>
+
+      <div class="teacher-attendance-tip"><i class="fa-solid fa-circle-info"></i><span><strong>¿Olvidaste marcar?</strong> Usa <b>Registro manual</b>. También puedes editar o borrar cualquier jornada desde el historial.</span></div>
 
       <section class="teacher-hours-summary" id="teacher-hours-summary"></section>
 
       <section class="teacher-attendance-layout">
         <section class="teacher-attendance-panel">
-          <header><div><span><i class="fa-solid fa-chart-column"></i></span><div><h3>Horas de clase registradas</h3><p>Promedios calculados con tus entradas y salidas.</p></div></div></header>
+          <header><div><span><i class="fa-solid fa-chart-column"></i></span><div><h3>Horas registradas</h3><p>Promedios calculados con tus entradas y salidas.</p></div></div></header>
           <div id="teacher-hours-chart" class="teacher-hours-chart"></div>
         </section>
         <section class="teacher-attendance-panel">
-          <header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Historial reciente</h3><p>Últimos registros de asistencia laboral.</p></div></div></header>
+          <header><div><span><i class="fa-solid fa-clock-rotate-left"></i></span><div><h3>Historial reciente</h3><p>Edita o elimina un registro si te equivocaste.</p></div></div></header>
           <div id="teacher-attendance-history"></div>
         </section>
       </section>
+
+      <div class="teacher-absence-modal hidden" id="teacher-manual-modal" aria-hidden="true">
+        <div class="teacher-absence-modal__backdrop" data-close-teacher-manual></div>
+        <form class="teacher-absence-modal__card teacher-manual-card" id="teacher-manual-form">
+          <header><span><i class="fa-solid fa-pen-to-square"></i></span><div><small>Corrección de jornada</small><h3 id="teacher-manual-title">Registrar horario manualmente</h3></div><button type="button" data-close-teacher-manual><i class="fa-solid fa-xmark"></i></button></header>
+          <input id="teacher-manual-original-date" type="hidden">
+          <div class="teacher-manual-grid">
+            <label class="teacher-manual-full"><span>Fecha *</span><input id="teacher-manual-date" type="date" required></label>
+            <label><span>Hora de llegada *</span><input id="teacher-manual-arrival" type="time" required><small>Ej.: 07:30 = 7:30 a. m.</small></label>
+            <label><span>Hora de salida</span><input id="teacher-manual-exit" type="time"><small>Déjala vacía si aún no has salido.</small></label>
+            <label class="teacher-manual-full"><span>Observación (opcional)</span><textarea id="teacher-manual-note" rows="3" maxlength="300" placeholder="Ej.: Olvidé marcar al llegar y corrijo el registro."></textarea></label>
+          </div>
+          <div class="teacher-manual-preview" id="teacher-manual-preview"><i class="fa-solid fa-calculator"></i><span>Completa llegada y salida para ver las horas trabajadas.</span></div>
+          <footer><button type="button" data-close-teacher-manual>Cancelar</button><button type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar registro</button></footer>
+        </form>
+      </div>
 
       <div class="teacher-absence-modal hidden" id="teacher-absence-modal" aria-hidden="true">
         <div class="teacher-absence-modal__backdrop" data-close-teacher-absence></div>
@@ -6486,9 +6594,13 @@ ${recurso.apunte}`);
     tab.addEventListener('click', abrir);
     section.querySelector('#teacher-register-arrival')?.addEventListener('click', registrarLlegada);
     section.querySelector('#teacher-register-exit')?.addEventListener('click', registrarSalida);
+    section.querySelector('#teacher-register-manual')?.addEventListener('click', () => abrirManual());
     section.querySelector('#teacher-register-absence')?.addEventListener('click', abrirAusencia);
+    section.querySelector('#teacher-manual-form')?.addEventListener('submit', guardarManual);
     section.querySelector('#teacher-absence-form')?.addEventListener('submit', guardarAusencia);
+    section.querySelectorAll('[data-close-teacher-manual]').forEach(b => b.addEventListener('click', cerrarManual));
     section.querySelectorAll('[data-close-teacher-absence]').forEach(b => b.addEventListener('click', cerrarAusencia));
+    ['teacher-manual-arrival','teacher-manual-exit'].forEach(id => document.getElementById(id)?.addEventListener('input', actualizarVistaManual));
     iniciarReloj();
   }
 
@@ -6498,7 +6610,7 @@ ${recurso.apunte}`);
       const date = document.getElementById('teacher-clock-date');
       const time = document.getElementById('teacher-clock-time');
       if (date) date.textContent = ahora.toLocaleDateString('es-VE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
-      if (time) time.textContent = ahora.toLocaleTimeString('es-VE',{hour12:false});
+      if (time) time.textContent = ahora.toLocaleTimeString('es-VE',{hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
     };
     tick();
     setInterval(tick,1000);
@@ -6512,7 +6624,7 @@ ${recurso.apunte}`);
     document.getElementById(IDS.tab)?.setAttribute('aria-selected','true');
     document.getElementById(IDS.section)?.classList.remove('hidden');
     if (pageTitle) pageTitle.textContent = 'Mi asistencia laboral';
-    if (pageDescription) pageDescription.textContent = 'Entradas, salidas, ausencias y horas trabajadas.';
+    if (pageDescription) pageDescription.textContent = 'Llegadas, salidas, correcciones manuales, ausencias y horas trabajadas.';
     window.scrollTo({top:0,behavior:'smooth'});
     await cargar(true);
   }
@@ -6520,7 +6632,8 @@ ${recurso.apunte}`);
   async function cargar(forzar=false) {
     if (dataAsistenciaDocente && !forzar) return render();
     try {
-      dataAsistenciaDocente = await apiRequest('obtenerAsistenciaDocente');
+      const remoto = await apiRequest('obtenerAsistenciaDocente');
+      dataAsistenciaDocente = aplicarAjustesLocales(remoto);
       render();
     } catch (error) {
       mostrarToast(error.message || 'No se pudo cargar la asistencia docente.','error','Error');
@@ -6537,17 +6650,18 @@ ${recurso.apunte}`);
 
     if (hoy.estado === 'Ausente') {
       status.className = 'teacher-clock-card__status is-absent';
-      status.innerHTML = `<i class="fa-solid fa-user-xmark"></i><div><small>Estado de hoy</small><strong>Ausente</strong><span>${escAD(hoy.motivoAusencia || 'Motivo registrado')}</span></div>`;
+      status.innerHTML = `<i class="fa-solid fa-user-xmark"></i><div><small>Estado de hoy</small><strong>Ausente</strong><span>${escAD(hoy.motivoAusencia || 'Motivo registrado')}</span></div>${botonBorrarHoy()}`;
     } else if (hoy.horaSalida) {
       status.className = 'teacher-clock-card__status is-complete';
-      status.innerHTML = `<i class="fa-solid fa-circle-check"></i><div><small>Jornada completada</small><strong>${escAD(hoy.horaLlegada)} – ${escAD(hoy.horaSalida)}</strong><span>${horasTexto(hoy.minutosTrabajados)}</span></div>`;
+      status.innerHTML = `<i class="fa-solid fa-circle-check"></i><div><small>Jornada completada${hoy._manual?' · manual':''}</small><strong>${escAD(horaAmPm(hoy.horaLlegada))} – ${escAD(horaAmPm(hoy.horaSalida))}</strong><span>${horasTexto(hoy.minutosTrabajados)}</span></div>${botonBorrarHoy()}`;
     } else if (hoy.horaLlegada) {
       status.className = 'teacher-clock-card__status is-present';
-      status.innerHTML = `<i class="fa-solid fa-person-walking-arrow-right"></i><div><small>Entrada registrada</small><strong>Desde las ${escAD(hoy.horaLlegada)}</strong><span>Registra tu salida al finalizar.</span></div>`;
+      status.innerHTML = `<i class="fa-solid fa-person-walking-arrow-right"></i><div><small>Entrada registrada${hoy._manual?' · manual':''}</small><strong>Desde las ${escAD(horaAmPm(hoy.horaLlegada))}</strong><span>Registra tu salida al finalizar.</span></div>${botonBorrarHoy()}`;
     } else {
       status.className = 'teacher-clock-card__status';
-      status.innerHTML = '<i class="fa-solid fa-circle-info"></i><div><small>Estado de hoy</small><strong>Sin registro</strong><span>Registra tu llegada o una ausencia.</span></div>';
+      status.innerHTML = '<i class="fa-solid fa-circle-info"></i><div><small>Estado de hoy</small><strong>Sin registro</strong><span>Marca tu llegada ahora o usa el registro manual.</span></div>';
     }
+    status.querySelector('[data-delete-today]')?.addEventListener('click', () => eliminarRegistro(hoyIso()));
 
     if (llegada) llegada.disabled = Boolean(hoy.horaLlegada || hoy.estado === 'Ausente');
     if (salida) salida.disabled = Boolean(!hoy.horaLlegada || hoy.horaSalida || hoy.estado === 'Ausente');
@@ -6563,12 +6677,26 @@ ${recurso.apunte}`);
 
     const chart = document.getElementById('teacher-hours-chart');
     if (chart) {
-      const max = Math.max(1, ...(dataAsistenciaDocente.registros||[]).slice(0,7).map(x=>Number(x.minutosTrabajados||0)));
-      chart.innerHTML = (dataAsistenciaDocente.registros||[]).filter(x=>x.estado==='Presente').slice(0,7).reverse().map(x => `<article><div><span>${escAD(x.fecha)}</span><strong>${horasTexto(x.minutosTrabajados)}</strong></div><progress max="${max}" value="${Number(x.minutosTrabajados||0)}"></progress></article>`).join('') || '<div class="teacher-attendance-empty">Aún no hay jornadas completas para graficar.</div>';
+      const presentes = (dataAsistenciaDocente.registros||[]).filter(x=>x.estado!=='Ausente' && x.horaLlegada);
+      const max = Math.max(1, ...presentes.slice(0,7).map(x=>Number(x.minutosTrabajados||0)));
+      chart.innerHTML = presentes.slice(0,7).reverse().map(x => `<article><div><span>${escAD(x.fecha)}</span><strong>${x.horaSalida?horasTexto(x.minutosTrabajados):'Salida pendiente'}</strong></div><progress max="${max}" value="${Number(x.minutosTrabajados||0)}"></progress></article>`).join('') || '<div class="teacher-attendance-empty">Aún no hay jornadas completas para graficar.</div>';
     }
 
     const history = document.getElementById('teacher-attendance-history');
-    if (history) history.innerHTML = (dataAsistenciaDocente.registros||[]).slice(0,12).map(x => `<article class="${x.estado==='Ausente'?'is-absent':''}"><span><i class="fa-solid ${x.estado==='Ausente'?'fa-user-xmark':'fa-user-clock'}"></i></span><div><strong>${escAD(x.fecha)} · ${escAD(x.estado)}</strong><small>${x.estado==='Ausente'?escAD(x.motivoAusencia):`${escAD(x.horaLlegada||'—')} – ${escAD(x.horaSalida||'Pendiente')}`}</small></div><em>${x.estado==='Ausente'?'0 h':horasTexto(x.minutosTrabajados)}</em></article>`).join('') || '<div class="teacher-attendance-empty">No hay registros todavía.</div>';
+    if (history) {
+      history.innerHTML = (dataAsistenciaDocente.registros||[]).slice(0,20).map(x => {
+        const iso = fechaAIso(x.fecha);
+        const aus = x.estado==='Ausente';
+        const detalle = aus ? escAD(x.motivoAusencia || 'Ausencia registrada') : `${escAD(horaAmPm(x.horaLlegada||''))} – ${x.horaSalida?escAD(horaAmPm(x.horaSalida)):'Pendiente'}`;
+        return `<article class="${aus?'is-absent':''}" data-attendance-date="${escAD(iso)}"><span><i class="fa-solid ${aus?'fa-user-xmark':'fa-user-clock'}"></i></span><div><strong>${escAD(x.fecha)} · ${escAD(x.estado||'Presente')} ${x._manual?'<b class="teacher-manual-badge">Manual</b>':''}</strong><small>${detalle}${x.observacion?` · ${escAD(x.observacion)}`:''}</small></div><em>${aus?'0 h':(x.horaSalida?horasTexto(x.minutosTrabajados):'—')}</em><div class="teacher-history-actions">${aus?'':`<button type="button" data-edit-attendance="${escAD(iso)}" title="Editar"><i class="fa-solid fa-pen"></i></button>`}<button type="button" class="is-danger" data-delete-attendance="${escAD(iso)}" title="Borrar"><i class="fa-solid fa-trash-can"></i></button></div></article>`;
+      }).join('') || '<div class="teacher-attendance-empty">No hay registros todavía.</div>';
+      history.querySelectorAll('[data-edit-attendance]').forEach(b => b.addEventListener('click', () => abrirManual(b.dataset.editAttendance)));
+      history.querySelectorAll('[data-delete-attendance]').forEach(b => b.addEventListener('click', () => eliminarRegistro(b.dataset.deleteAttendance)));
+    }
+  }
+
+  function botonBorrarHoy(){
+    return '<button type="button" class="teacher-status-delete" data-delete-today title="Borrar registro de hoy"><i class="fa-solid fa-trash-can"></i></button>';
   }
 
   async function accion(action, mensaje) {
@@ -6584,10 +6712,91 @@ ${recurso.apunte}`);
   function registrarLlegada(){ accion('registrarLlegadaDocente','Hora de llegada registrada.'); }
   function registrarSalida(){ accion('registrarSalidaDocente','Hora de salida registrada.'); }
 
+  function abrirManual(isoEditar=''){
+    const modal = document.getElementById('teacher-manual-modal');
+    const date = document.getElementById('teacher-manual-date');
+    const llegada = document.getElementById('teacher-manual-arrival');
+    const salida = document.getElementById('teacher-manual-exit');
+    const note = document.getElementById('teacher-manual-note');
+    const original = document.getElementById('teacher-manual-original-date');
+    const title = document.getElementById('teacher-manual-title');
+    let registro = null;
+    if (isoEditar) registro = (dataAsistenciaDocente?.registros||[]).find(r=>fechaAIso(r.fecha)===isoEditar) || null;
+    if (original) original.value = isoEditar || '';
+    if (date) date.value = isoEditar || hoyIso();
+    if (llegada) llegada.value = registro?.horaLlegada ? String(registro.horaLlegada).slice(0,5) : '';
+    if (salida) salida.value = registro?.horaSalida ? String(registro.horaSalida).slice(0,5) : '';
+    if (note) note.value = registro?.observacion || '';
+    if (title) title.textContent = registro ? 'Corregir jornada registrada' : 'Registrar horario manualmente';
+    actualizarVistaManual();
+    modal?.classList.remove('hidden'); modal?.setAttribute('aria-hidden','false');
+  }
+  function cerrarManual(){
+    const modal = document.getElementById('teacher-manual-modal');
+    modal?.classList.add('hidden'); modal?.setAttribute('aria-hidden','true');
+  }
+  function actualizarVistaManual(){
+    const a = document.getElementById('teacher-manual-arrival')?.value;
+    const b = document.getElementById('teacher-manual-exit')?.value;
+    const box = document.getElementById('teacher-manual-preview');
+    if (!box) return;
+    if (!a || !b) { box.innerHTML='<i class="fa-solid fa-calculator"></i><span>Completa llegada y salida para ver las horas trabajadas.</span>'; return; }
+    const mins = minutosJornada(a,b);
+    box.innerHTML = mins>0 ? `<i class="fa-solid fa-circle-check"></i><span>Jornada estimada: <strong>${horasTexto(mins)}</strong> · ${horaAmPm(a)} a ${horaAmPm(b)}</span>` : '<i class="fa-solid fa-triangle-exclamation"></i><span>La hora de salida debe ser posterior a la llegada.</span>';
+  }
+  async function guardarManual(e){
+    e.preventDefault();
+    const fecha = document.getElementById('teacher-manual-date')?.value;
+    const llegada = document.getElementById('teacher-manual-arrival')?.value;
+    const salida = document.getElementById('teacher-manual-exit')?.value || '';
+    const observacion = document.getElementById('teacher-manual-note')?.value.trim() || '';
+    const original = document.getElementById('teacher-manual-original-date')?.value || '';
+    if (!fecha || !llegada) return mostrarToast('Indica la fecha y la hora de llegada.','warning','Faltan datos');
+    if (salida && minutosJornada(llegada,salida)<=0) return mostrarToast('La salida debe ser posterior a la llegada.','warning','Revisa las horas');
+    const payload = { fecha, horaLlegada:llegada, horaSalida:salida, observacion };
+    let remoto = false;
+    try {
+      await apiRequest('guardarAsistenciaDocenteManual', payload);
+      remoto = true;
+    } catch (_) {
+      const state = leerLocal();
+      if (original && original !== fecha) { delete state.overrides[original]; state.deleted[original] = true; }
+      state.deleted[fecha] = false;
+      state.overrides[fecha] = {
+        fecha: isoAFecha(fecha), estado:'Presente', horaLlegada:llegada, horaSalida:salida || '',
+        minutosTrabajados: salida ? minutosJornada(llegada,salida) : 0, observacion,
+        _manual:true, actualizadoEn:new Date().toISOString()
+      };
+      guardarLocal(state);
+    }
+    cerrarManual();
+    dataAsistenciaDocente = null;
+    await cargar(true);
+    mostrarToast(remoto ? 'Corrección guardada en EduGestión.' : 'Corrección guardada en este dispositivo.', remoto?'success':'warning', 'Horario actualizado');
+  }
+
+  async function eliminarRegistro(iso){
+    if (!iso) return;
+    if (!window.confirm(`¿Borrar el registro de asistencia del ${isoAFecha(iso)}?\n\nPodrás volver a registrarlo manualmente si lo necesitas.`)) return;
+    let remoto = false;
+    try {
+      await apiRequest('eliminarAsistenciaDocente',{fecha:iso});
+      remoto = true;
+    } catch (_) {
+      const state = leerLocal();
+      delete state.overrides[iso];
+      state.deleted[iso] = true;
+      guardarLocal(state);
+    }
+    dataAsistenciaDocente = null;
+    await cargar(true);
+    mostrarToast(remoto ? 'Registro eliminado.' : 'Registro ocultado y limpiado en este dispositivo.', remoto?'success':'warning','Asistencia actualizada');
+  }
+
   function abrirAusencia(){
     const modal=document.getElementById('teacher-absence-modal');
     const date=document.getElementById('teacher-absence-date');
-    if(date) date.value=new Date().toISOString().slice(0,10);
+    if(date) date.value=hoyIso();
     modal?.classList.remove('hidden'); modal?.setAttribute('aria-hidden','false');
   }
   function cerrarAusencia(){
