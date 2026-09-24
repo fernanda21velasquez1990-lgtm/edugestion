@@ -17277,3 +17277,165 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_SEGUIMIENTO_ACADEMICO_V45_END */
 
 /* EDUGESTION_PLANIFICACION_SEMANAL_POR_AREA_V47_END */
+
+/* ================================================================
+   EduGestión · PLANIFICACIÓN EXPRESS · V5.1
+   Ruta rápida independiente: seleccionar temas del cuadernillo,
+   asignar puntos/fecha y ver Control de Estudio + Plan de Evaluación.
+   ================================================================ */
+(() => {
+  const TAB_ID='tab-planificacion-express';
+  const SECTION_ID='section-planificacion-express';
+  const STYLE_ID='style-planificacion-express-v51';
+  const STORE_PREFIX='edugestion_plan_express_v1_';
+  const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
+  let grade='';
+  let lapso='1er Lapso';
+  let search='';
+  let activeView='control';
+
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))||f}catch(_){return f}};
+  const writeJSON=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+  const teacherKey=()=>String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'docente').replace(/[^a-z0-9_-]/gi,'_');
+  const storeKey=()=>STORE_PREFIX+teacherKey();
+  const materia=()=>String(window.profesorActual?.materia||window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva||'Educación Física');
+  const isScience=()=>{const m=norm(materia());return m.includes('ciencias naturales')||m.includes('biologia')};
+  const academicNum=v=>Number(String(v||'').match(/\d+/)?.[0]||0);
+  const toast=(m,t='success')=>{if(typeof mostrarToast==='function')mostrarToast(m,t,'Planificación Express');};
+
+  function dataMap(){
+    if(isScience()){
+      const cn=window.EDUGESTION_CIENCIAS_DATA||{};
+      const bio=window.EDUGESTION_BIOLOGIA_DATA||{};
+      return {...cn,...bio};
+    }
+    return window.EDUGESTION_EF_DATA||window.EDUGESTION_CEF_DATA||{};
+  }
+  function gradeSort(a,b){
+    const an=academicNum(a),bn=academicNum(b),ag=/grado/i.test(a),bg=/grado/i.test(b),aa=/año/i.test(a),ba=/año/i.test(b);
+    if(ag!==bg)return ag?-1:1;if(aa!==ba)return aa?-1:1;return an-bn||a.localeCompare(b,'es');
+  }
+  function grades(){return Object.keys(dataMap()).sort(gradeSort)}
+  function topics(){return Array.isArray(dataMap()[grade])?dataMap()[grade]:[]}
+  function itemKey(x){return `${grade}|||${String(x?.tema||'').trim()}|||p:${String(x?.pagina||'').trim()}|||d:${String(x?.descripcion||x?.tejido||x?.referentes||'').trim().replace(/\s+/g,' ')}`}
+  function recordKey(){return `${grade}|||${lapso}`}
+  function allStore(){return readJSON(storeKey(),{})}
+  function current(){
+    const st=allStore();
+    return st[recordKey()]||{grade,lapso,selected:{},updatedAt:null};
+  }
+  function saveCurrent(rec){const st=allStore();st[recordKey()]={...rec,grade,lapso,updatedAt:new Date().toISOString()};writeJSON(storeKey(),st)}
+  function selectedEntries(){
+    const rec=current(),map=rec.selected||{},rows=topics();
+    return rows.map((x,i)=>({x,i,key:itemKey(x),cfg:map[itemKey(x)]})).filter(r=>r.cfg?.selected);
+  }
+  function autoPoints(n){
+    if(!n)return [];
+    const total=20,base=Math.floor(total/n),rem=total-base*n;
+    return Array.from({length:n},(_,i)=>base+(i<rem?1:0));
+  }
+  function redistribute(){
+    const rec=current(),sel=selectedEntries(),pts=autoPoints(sel.length);
+    sel.forEach((r,i)=>{rec.selected[r.key]={...(rec.selected[r.key]||{}),selected:true,puntos:pts[i]||0}});
+    saveCurrent(rec);renderSelected();renderPreview();
+  }
+  function toggleTopic(x,on){
+    const rec=current(),k=itemKey(x);rec.selected=rec.selected||{};
+    if(on)rec.selected[k]={...(rec.selected[k]||{}),selected:true,puntos:Number(rec.selected[k]?.puntos)||0,fecha:rec.selected[k]?.fecha||''};
+    else delete rec.selected[k];
+    saveCurrent(rec);
+    const sel=selectedEntries();if(sel.length&&!sel.some(r=>Number(r.cfg?.puntos)>0))redistribute();else{renderSelected();renderPreview();}
+    renderTopics();
+  }
+  function updateCfg(k,field,value){
+    const rec=current();rec.selected=rec.selected||{};rec.selected[k]={...(rec.selected[k]||{}),selected:true,[field]:field==='puntos'?Number(value||0):value};saveCurrent(rec);renderSelected(false);renderPreview();
+  }
+  function clearSelection(){const rec=current();rec.selected={};saveCurrent(rec);renderAll();toast('Selección Express limpiada.','success')}
+
+  function autoEvaluationText(x){
+    const t=norm(`${x.tema||''} ${x.descripcion||''} ${x.tejido||''}`);
+    if(isScience()){
+      if(/investig|proyecto|ciencia y tecnologia/.test(t))return 'Actividad de indagación o proyecto breve, con registro de evidencias y rúbrica sencilla.';
+      if(/reaccion|materia|energia|agua|ecosistema|experi/.test(t))return 'Actividad práctica o de aplicación, con observación, registro de resultados y lista de cotejo.';
+      if(/sistema|genet|celul|cuerpo|seres vivos/.test(t))return 'Mapa conceptual, producción escrita o exposición breve, valorada con rúbrica o lista de cotejo.';
+      return 'Cuestionario breve y actividad de aplicación del contenido, con criterios claros de logro.';
+    }
+    if(/primeros auxilios|seguridad/.test(t))return 'Estudio de caso y demostración práctica, valorados mediante lista de cotejo.';
+    if(/deporte|juego|destreza|corporeidad|condicion|cualidad|movimiento|fisico/.test(t))return 'Prueba práctica y desempeño motor, valorados mediante observación directa y lista de cotejo.';
+    if(/salud|sustancia|aliment/.test(t))return 'Producción escrita, exposición breve o actividad reflexiva, valorada con escala de estimación.';
+    return 'Actividad práctica y reflexión guiada, valoradas mediante observación y lista de cotejo.';
+  }
+  function autoActivityText(x){
+    const t=String(x.tema||'').trim();
+    return isScience()?`Exploración guiada, actividad de aplicación y cierre reflexivo sobre: ${t}.`:`Activación, desarrollo práctico y cierre reflexivo vinculados con: ${t}.`;
+  }
+  function emphasis(x){
+    if(isScience())return '☑ Ciencia, tecnología e innovación · ☑ Oralidad, escritura y lectura · ☐ Educación física para la vida';
+    return '☑ Educación física para la vida · ☑ Oralidad, escritura y lectura · ☐ Ciencia, tecnología e innovación';
+  }
+  function controlRow(r){
+    const x=r.x,cfg=r.cfg||{};
+    const indispensable=x.temaIndispensable||x.componente||x.eje||'—';
+    const ref=x.referentes||x.tejido||x.descripcion||'—';
+    const pot=x.intencionalidad||x.aprendizajes||x.aprendizaje||`Desarrollar aprendizajes vinculados con ${x.tema||'el contenido seleccionado'}.`;
+    return `<tr><td>${esc(indispensable)}</td><td><b>${esc(x.tema||'')}</b></td><td>${esc(ref)}</td><td>${esc(pot)}</td><td>${esc(autoActivityText(x))}</td><td>${esc(emphasis(x))}</td><td>${esc(pot)}</td><td class="pex-center">${esc(cfg.fecha||'')}</td><td class="pex-center"><b>${esc(cfg.puntos||'')}</b></td></tr>`;
+  }
+  function evalRow(r,i){const x=r.x,cfg=r.cfg||{};return `<tr><td class="pex-center">${i+1}</td><td><b>${esc(x.tema||'')}</b></td><td>${esc(autoEvaluationText(x))}</td><td class="pex-center">${isScience()?'Aula':'Aula / Cancha'}</td><td class="pex-center"><b>${esc(cfg.puntos||0)} pts</b></td><td class="pex-center">${esc(cfg.fecha||'Por definir')}</td></tr>`}
+
+  function styles(){
+    if($(STYLE_ID))return;const st=document.createElement('style');st.id=STYLE_ID;st.textContent=`
+      #${SECTION_ID}{padding-bottom:36px}.pex-hero{background:linear-gradient(135deg,#172c68,#1c8a87);color:#fff;border-radius:24px;padding:24px 28px;margin-bottom:18px}.pex-hero small{font-weight:900;letter-spacing:.08em;text-transform:uppercase}.pex-hero h2{font-size:1.85rem;margin:7px 0}.pex-hero p{margin:0;max-width:920px;line-height:1.55;opacity:.95}
+      .pex-card{background:var(--card-bg,#fff);border:1px solid var(--border-color,#d7e2ec);border-radius:19px;padding:17px;margin-bottom:16px}.pex-step{display:flex;align-items:center;gap:10px;margin-bottom:13px}.pex-step span{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#e8efff;color:#2d48cc;font-weight:900}.pex-step h3{margin:0;color:var(--text-color,#23384c)}
+      .pex-controls{display:grid;grid-template-columns:1.2fr 1fr 1.5fr;gap:12px}.pex-field{display:flex;flex-direction:column;gap:6px}.pex-field label{font-size:.76rem;font-weight:900;text-transform:uppercase;color:#64788c}.pex-field select,.pex-field input{min-height:44px;border:1px solid #cad8e5;border-radius:11px;padding:9px 11px;font:inherit;background:var(--card-bg,#fff);color:var(--text-color,#253a4e)}
+      .pex-topbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}.pex-btn{border:0;border-radius:11px;padding:10px 13px;font-weight:900;cursor:pointer}.pex-btn.primary{background:#2757d7;color:#fff}.pex-btn.green{background:#16805d;color:#fff}.pex-btn.soft{background:#edf4fa;color:#195d85}.pex-btn.danger{background:#fff0f0;color:#b42318}.pex-btn.active{box-shadow:0 0 0 3px #c9dcff inset}.pex-status{margin-left:auto;font-size:.82rem;color:#5f7488;font-weight:750}
+      .pex-topic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:480px;overflow:auto;padding-right:3px}.pex-topic{display:grid;grid-template-columns:auto 1fr;gap:10px;border:1px solid #dbe5ed;border-radius:14px;padding:12px;background:var(--card-bg,#fff)}.pex-topic input{width:18px;height:18px;margin-top:3px}.pex-topic h4{margin:0;color:var(--text-color,#22384b);font-size:.95rem}.pex-topic p{margin:5px 0 0;color:#6c8194;font-size:.8rem;line-height:1.35}.pex-chip{display:inline-block;margin-top:6px;background:#eff4f8;border-radius:999px;padding:4px 7px;font-size:.72rem;font-weight:800;color:#5d7082}
+      .pex-selected{overflow:auto}.pex-selected table,.pex-preview table{width:100%;border-collapse:collapse;table-layout:fixed}.pex-selected th,.pex-selected td{border-bottom:1px solid #e3ebf2;padding:8px;text-align:left;vertical-align:middle}.pex-selected th{font-size:.74rem;text-transform:uppercase;color:#61768a}.pex-selected input{width:100%;min-height:38px;border:1px solid #d1dde7;border-radius:9px;padding:7px 8px;font:inherit}.pex-selected input[type=number]{max-width:90px}.pex-total{display:flex;justify-content:flex-end;gap:8px;font-weight:900;margin-top:10px;color:#173c62}.pex-empty{text-align:center;color:#718599;padding:24px;border:1px dashed #c4d2df;border-radius:14px}
+      .pex-view-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.pex-preview{overflow:auto;border:1px solid #d4e0e9;border-radius:15px;background:#fff}.pex-preview-head{padding:13px 15px;border-bottom:1px solid #d9e4ed;display:flex;justify-content:space-between;gap:10px;align-items:center}.pex-preview-head h3{margin:0;color:#20384d}.pex-preview-body{padding:13px;min-width:980px}.pex-preview th,.pex-preview td{border:1px solid #9eabb7;padding:6px;vertical-align:top;font-size:10.5px;line-height:1.35}.pex-preview th{background:#edf2f6;text-align:center;font-weight:900}.pex-center{text-align:center!important}.pex-note{padding:9px 11px;background:#eff9f5;color:#246b51;border-radius:10px;font-size:.82rem;margin-top:10px}
+      .dark-mode .pex-preview{background:#fff;color:#111}.dark-mode .pex-topic,.dark-mode .pex-card{border-color:#34495e}.dark-mode .pex-topic p{color:#aab8c5}
+      @media(max-width:850px){.pex-controls{grid-template-columns:1fr}.pex-topic-grid{grid-template-columns:1fr}.pex-status{width:100%;margin-left:0}.pex-view-actions .pex-btn{flex:1 1 180px}}
+      @media print{body *{visibility:hidden!important}#${SECTION_ID} .pex-preview,#${SECTION_ID} .pex-preview *{visibility:visible!important}#${SECTION_ID} .pex-preview{position:absolute;left:0;top:0;width:100%;border:0}.pex-preview-head button{display:none!important}.pex-preview-body{min-width:0;padding:0}.pex-preview th,.pex-preview td{font-size:9px}}
+    `;document.head.appendChild(st);
+  }
+
+  function create(){
+    if($(SECTION_ID))return true;const nav=$('app-nav')||document.querySelector('.app-sidebar nav'),main=$('app-main')||document.querySelector('main');if(!nav||!main||!grades().length)return false;styles();
+    const tab=document.createElement('button');tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');tab.dataset.title='Planificación Express';tab.dataset.description='Ruta rápida: selecciona temas del cuadernillo y obtén el cuadro de Control de Estudio y el Plan de Evaluación con los mismos puntos.';tab.innerHTML='<i class="fa-solid fa-bolt"></i><span>Planificación Express</span>';
+    const ref=$('tab-panel-lapsos-ef')||$('tab-planificacion');if(ref?.parentElement===nav)nav.insertBefore(tab,ref);else nav.appendChild(tab);
+    const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
+      <header class="pex-hero"><small><i class="fa-solid fa-bolt"></i> Ruta rápida para el docente</small><h2>Planificación Express</h2><p>Selecciona los temas directamente del cuadernillo, coloca los puntos y la fecha si la conoces. EduGestión arma de inmediato dos vistas usando la misma información: <b>Cuadro de Control de Estudio</b> y <b>Plan de Evaluación para los alumnos</b>. Esta opción funciona aparte de la planificación detallada.</p></header>
+      <div class="pex-card"><div class="pex-step"><span>1</span><h3>Selecciona año, lapso y temas</h3></div><div class="pex-controls"><div class="pex-field"><label>Grado / Año</label><select id="pex-grade"></select></div><div class="pex-field"><label>Lapso</label><select id="pex-lapso">${LAPSOS.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="pex-field"><label>Buscar en el cuadernillo</label><input id="pex-search" placeholder="Escribe una palabra del tema..."></div></div><div class="pex-topbar"><button class="pex-btn soft" id="pex-all"><i class="fa-solid fa-check-double"></i> Seleccionar visibles</button><button class="pex-btn soft" id="pex-distribute"><i class="fa-solid fa-calculator"></i> Distribuir 20 puntos</button><button class="pex-btn danger" id="pex-clear"><i class="fa-solid fa-trash-can"></i> Limpiar</button><span class="pex-status" id="pex-status">Guardado automático</span></div><div class="pex-topic-grid" id="pex-topics"></div></div>
+      <div class="pex-card"><div class="pex-step"><span>2</span><h3>Puntos y fecha de evaluación</h3></div><div class="pex-selected" id="pex-selected"></div></div>
+      <div class="pex-card"><div class="pex-step"><span>3</span><h3>Revisa el documento que necesitas</h3></div><div class="pex-view-actions"><button class="pex-btn primary active" id="pex-view-control"><i class="fa-solid fa-table-columns"></i> Ver cuadro de Control</button><button class="pex-btn green" id="pex-view-eval"><i class="fa-solid fa-list-check"></i> Ver Plan de Evaluación</button><button class="pex-btn soft" id="pex-print"><i class="fa-solid fa-print"></i> Imprimir vista actual</button></div><div class="pex-preview" id="pex-preview"></div></div>`;
+    main.appendChild(sec);
+    tab.addEventListener('click',()=>open(tab,sec));
+    const gs=$('pex-grade');gs.innerHTML=grades().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');grade=grades()[0]||'';gs.value=grade;
+    gs.addEventListener('change',()=>{grade=gs.value;search='';if($('pex-search'))$('pex-search').value='';renderAll()});
+    $('pex-lapso').addEventListener('change',e=>{lapso=e.target.value;renderAll()});
+    $('pex-search').addEventListener('input',e=>{search=norm(e.target.value);renderTopics()});
+    $('pex-all').addEventListener('click',selectVisible);
+    $('pex-distribute').addEventListener('click',redistribute);
+    $('pex-clear').addEventListener('click',clearSelection);
+    $('pex-view-control').addEventListener('click',()=>{activeView='control';syncViewButtons();renderPreview()});
+    $('pex-view-eval').addEventListener('click',()=>{activeView='eval';syncViewButtons();renderPreview()});
+    $('pex-print').addEventListener('click',()=>window.print());
+    renderAll();return true;
+  }
+  function open(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=$('page-title'),d=$('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;window.scrollTo({top:0,behavior:'smooth'});renderAll()}
+  function filtered(){const rows=topics();if(!search)return rows;return rows.filter(x=>norm(`${x.tema||''} ${x.descripcion||''} ${x.tejido||''} ${x.referentes||''}`).includes(search))}
+  function renderTopics(){const host=$('pex-topics');if(!host)return;const rec=current(),rows=filtered();if(!rows.length){host.innerHTML='<div class="pex-empty" style="grid-column:1/-1">No hay coincidencias con esa búsqueda.</div>';return}host.innerHTML=rows.map((x,i)=>{const k=itemKey(x),on=!!rec.selected?.[k]?.selected,desc=x.descripcion||x.tejido||x.referentes||'';return `<label class="pex-topic"><input type="checkbox" data-topic="${i}" ${on?'checked':''}><div><h4>${esc(x.tema||'Contenido')}</h4><p>${esc(String(desc).slice(0,150))}${String(desc).length>150?'…':''}</p><span class="pex-chip">${esc(grade)}${x.pagina?` · p. ${esc(x.pagina)}`:''}</span></div></label>`}).join('');host.querySelectorAll('[data-topic]').forEach(cb=>cb.addEventListener('change',()=>toggleTopic(rows[Number(cb.dataset.topic)],cb.checked)))}
+  function selectVisible(){const rec=current();rec.selected=rec.selected||{};filtered().forEach(x=>{const k=itemKey(x);rec.selected[k]={...(rec.selected[k]||{}),selected:true,puntos:Number(rec.selected[k]?.puntos)||0,fecha:rec.selected[k]?.fecha||''}});saveCurrent(rec);redistribute();renderTopics();toast('Temas visibles seleccionados.','success')}
+  function renderSelected(bind=true){const host=$('pex-selected');if(!host)return;const sel=selectedEntries();if(!sel.length){host.innerHTML='<div class="pex-empty"><i class="fa-solid fa-bolt"></i><p>Selecciona uno o varios temas arriba. Aquí aparecerán los puntos y la fecha para cada uno.</p></div>';return}const total=sel.reduce((s,r)=>s+(Number(r.cfg?.puntos)||0),0);host.innerHTML=`<table><thead><tr><th>Tema seleccionado</th><th style="width:110px">Puntos</th><th style="width:170px">Fecha</th><th style="width:48px"></th></tr></thead><tbody>${sel.map((r,i)=>`<tr><td><b>${esc(r.x.tema)}</b><div style="font-size:.76rem;color:#718599">${esc(grade)}${r.x.pagina?` · p. ${esc(r.x.pagina)}`:''}</div></td><td><input type="number" min="0" max="20" step="0.5" data-points="${esc(r.key)}" value="${esc(r.cfg?.puntos||'')}"></td><td><input type="date" data-date="${esc(r.key)}" value="${esc(r.cfg?.fecha||'')}"></td><td><button class="pex-btn danger" style="padding:8px 10px" data-remove="${esc(r.key)}" title="Quitar"><i class="fa-solid fa-xmark"></i></button></td></tr>`).join('')}</tbody></table><div class="pex-total"><span>Total seleccionado:</span><span>${total} puntos</span></div><div class="pex-note">Los puntos y fechas que escribas aquí se usan exactamente igual en el Cuadro de Control y en el Plan de Evaluación.</div>`;
+    if(!bind)return;host.querySelectorAll('[data-points]').forEach(el=>el.addEventListener('input',()=>updateCfg(el.dataset.points,'puntos',el.value)));host.querySelectorAll('[data-date]').forEach(el=>el.addEventListener('change',()=>updateCfg(el.dataset.date,'fecha',el.value)));host.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{const rec=current();delete rec.selected?.[b.dataset.remove];saveCurrent(rec);renderAll()}))}
+  function syncViewButtons(){$('pex-view-control')?.classList.toggle('active',activeView==='control');$('pex-view-eval')?.classList.toggle('active',activeView==='eval')}
+  function renderPreview(){const host=$('pex-preview');if(!host)return;const sel=selectedEntries();if(!sel.length){host.innerHTML='<div class="pex-empty" style="margin:14px">Selecciona temas para generar la vista.</div>';return}const total=sel.reduce((s,r)=>s+(Number(r.cfg?.puntos)||0),0),doc=window.profesorActual?.nombre||'Docente',area=materia();if(activeView==='control'){host.innerHTML=`<div class="pex-preview-head"><h3>Vista Express · Cuadro de Control de Estudio</h3><span>${esc(grade)} · ${esc(lapso)} · ${total} pts</span></div><div class="pex-preview-body"><div style="text-align:center;margin-bottom:9px"><b>PLANIFICACIÓN EDUCACIÓN MEDIA</b><br><span style="font-size:11px">Docente: ${esc(doc)} · Área: ${esc(area)} · ${esc(grade)} · ${esc(lapso)}</span></div><table><thead><tr><th>Tema indispensable</th><th>Tema generador</th><th>Referente teórico-práctico</th><th>Potencialidades</th><th>Actividades</th><th>Énfasis curricular</th><th>Intencionalidades pedagógicas</th><th>Fecha</th><th>Puntos</th></tr></thead><tbody>${sel.map(controlRow).join('')}</tbody></table><div class="pex-note">Esta es una vista rápida generada directamente con los temas del cuadernillo. Puedes volver arriba y cambiar puntos o fechas; ambas vistas se actualizan automáticamente.</div></div>`}else{host.innerHTML=`<div class="pex-preview-head"><h3>Vista Express · Plan de Evaluación para los alumnos</h3><span>Total: ${total} pts</span></div><div class="pex-preview-body"><div style="text-align:center;margin-bottom:9px"><b>PLAN DE EVALUACIÓN</b><br><span style="font-size:11px">Docente: ${esc(doc)} · Área: ${esc(area)} · ${esc(grade)} · ${esc(lapso)}</span></div><table><thead><tr><th style="width:4%">N°</th><th style="width:25%">Actividad / contenido evaluado</th><th>Cómo se evaluará</th><th style="width:12%">Espacio</th><th style="width:8%">Puntos</th><th style="width:13%">Fecha</th></tr></thead><tbody>${sel.map(evalRow).join('')}<tr><td colspan="4" style="text-align:right;font-weight:900">TOTAL</td><td class="pex-center"><b>${total} pts</b></td><td></td></tr></tbody></table><div class="pex-note">El docente puede usar esta propuesta tal cual o continuar luego en el módulo completo de Plan de Evaluación si desea ampliar técnicas, instrumentos o fechas por sección.</div></div>`}}
+  function renderAll(){const gs=$('pex-grade');if(gs&&!grades().includes(grade)){grade=grades()[0]||'';gs.innerHTML=grades().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');gs.value=grade}else if(gs)gs.value=grade;const lp=$('pex-lapso');if(lp)lp.value=lapso;renderTopics();renderSelected();syncViewButtons();renderPreview()}
+
+  function init(){try{return create()}catch(e){console.warn('EduGestión Planificación Express:',e);return false}}
+  if(!init()){let n=0;const tm=setInterval(()=>{n++;if(init()||n>50)clearInterval(tm)},250)}
+  window.addEventListener('edugestion:session',()=>setTimeout(()=>{if($(SECTION_ID))renderAll();else init()},300));
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{if($(SECTION_ID)){const gs=$('pex-grade');if(gs){gs.innerHTML=grades().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');if(!grades().includes(grade))grade=grades()[0]||'';gs.value=grade}renderAll()}else init()},150));
+})();
+/* EDUGESTION_PLANIFICACION_EXPRESS_V51_END */
