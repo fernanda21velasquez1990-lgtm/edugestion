@@ -8517,3 +8517,39 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
+
+
+/* =========================================================
+   EduGestión V5.7 · NÚMERO DE LISTA EN CONTROL DE ASISTENCIA
+   ========================================================= */
+.attendance-student-main{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+}
+.attendance-list-number{
+  width:38px;
+  height:38px;
+  min-width:38px;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#173b67;
+  color:#fff;
+  font-size:16px;
+  line-height:1;
+  font-weight:900;
+  box-shadow:0 7px 18px rgba(23,59,103,.16);
+}
+@media (max-width: 760px){
+  .attendance-student-main{gap:9px;}
+  .attendance-list-number{
+    width:34px;
+    height:34px;
+    min-width:34px;
+    border-radius:10px;
+    font-size:14px;
+  }
+}

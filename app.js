@@ -1419,6 +1419,9 @@ const SESSION_KEY = 'edugestion_session_v2';
         const idDom = `alumno-${String(al.id).replace(/[^a-zA-Z0-9_-]/g, '-')}-${indice}`;
         const nombre = escaparHTML(al.nombre || 'Estudiante');
         const cedula = escaparHTML(al.cedula || 'Sin cédula');
+        const numeroLista = Number(al.numeroLista) > 0
+          ? Number(al.numeroLista)
+          : (alumnosSeccion.findIndex(item => String(item.id) === String(al.id)) + 1);
         const estadoInicial = normalizarEstadoAsistencia(asistenciaTemporal[al.id]);
         const botones = ESTADOS_ASISTENCIA.map(estado => {
           const cfg = configuracionEstados[estado];
@@ -1437,7 +1440,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
         const d = document.createElement('div');
         d.className = `attendance-student-row attendance-student-row--advanced${esCopiaDuplicada ? ' is-duplicate-copy' : ''}`;
-        d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span>${esCopiaDuplicada ? '<span class="attendance-duplicate-badge"><i class="fa-solid fa-copy"></i> Duplicado</span>' : ''}</div>${botonEliminarDuplicado}</div></div><div class="attendance-state-grid">${botones}</div>`;
+        d.innerHTML = `<div class="attendance-student-main"><div class="attendance-list-number" title="Número de lista">${numeroLista}</div><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">N° ${numeroLista}</span><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span>${esCopiaDuplicada ? '<span class="attendance-duplicate-badge"><i class="fa-solid fa-copy"></i> Duplicado</span>' : ''}</div>${botonEliminarDuplicado}</div></div><div class="attendance-state-grid">${botones}</div>`;
         d.querySelectorAll('[data-attendance-state]').forEach(boton => {
           boton.addEventListener('click', () => setA(al.id, boton.dataset.attendanceState, idDom));
         });
@@ -2414,7 +2417,8 @@ const SESSION_KEY = 'edugestion_session_v2';
           const op = document.createElement('option');
           op.value = alumno.id;
           const curso = [alumno.ano, alumno.seccion ? `Secc. ${alumno.seccion}` : '', alumno.turno || ''].filter(Boolean).join(' · ');
-          op.textContent = `${alumno.nombre || 'Sin nombre'}${curso ? ` — ${curso}` : ''}`;
+          const numero = Number(alumno.numeroLista) > 0 ? `N° ${alumno.numeroLista} · ` : '';
+          op.textContent = `${numero}${alumno.nombre || 'Sin nombre'}${curso ? ` — ${curso}` : ''}`;
           select.appendChild(op);
         });
         if (valorActual && alumnosRegistroCache.some(a => String(a.id) === String(valorActual))) select.value = valorActual;
@@ -2506,13 +2510,34 @@ const SESSION_KEY = 'edugestion_session_v2';
       try {
         const accion = idExistente ? 'actualizarAlumno' : 'registrarAlumno';
         const data = await apiRequest(accion, payload);
-        mostrarToast(data.message || 'La ficha fue guardada correctamente.', 'success', idExistente ? 'Ficha actualizada' : 'Estudiante guardado');
         alumnosRegistroCache = [];
         await cargarEstudiantesRegistro(true);
+
+        // V5.7: confirma visualmente que el alumno ya existe en el servidor.
+        // Si el docente intenta guardarlo otra vez, el backend devuelve la ficha
+        // existente y no crea una segunda copia.
+        const guardado = data.alumno?.id
+          ? alumnosRegistroCache.find(a => String(a.id) === String(data.alumno.id))
+          : null;
         if (data.alumno?.id) {
           establecerValorRegistro('reg-id', data.alumno.id);
           const select = document.getElementById('reg-estudiante-existente');
           if (select) select.value = data.alumno.id;
+        }
+
+        const numero = Number(guardado?.numeroLista || data.alumno?.numeroLista || 0);
+        if (data.duplicadoEvitado) {
+          mostrarToast(
+            `${data.message || 'Ese estudiante ya estaba registrado.'}${numero ? ` Número de lista: ${numero}.` : ''}`,
+            'info',
+            'Duplicado evitado'
+          );
+        } else {
+          mostrarToast(
+            `${data.message || 'La ficha fue guardada correctamente.'}${numero ? ` Número de lista: ${numero}.` : ''}`,
+            'success',
+            idExistente ? 'Ficha actualizada' : 'Estudiante confirmado'
+          );
         }
         actualizarModoRegistro();
         actualizarRegistroInteractivo();

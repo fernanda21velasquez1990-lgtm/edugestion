@@ -4891,7 +4891,8 @@ function splitStudentList(students) {
   students.forEach((student, index) => {
     const icon = escapeHtml(student.icono || '⚪');
     const state = escapeHtml(student.estado || 'Presente');
-    const line = `${index + 1}. ${icon} ${escapeHtml(student.nombre || 'Estudiante')} · <i>${state}</i>\n`;
+    const numero = Number(student.numeroLista) > 0 ? Number(student.numeroLista) : index + 1;
+    const line = `${numero}. ${icon} ${escapeHtml(student.nombre || 'Estudiante')} · <i>${state}</i>\n`;
     if ((current + line).length > MAX_TELEGRAM_MESSAGE && current) {
       chunks.push(current.trim());
       current = line;
