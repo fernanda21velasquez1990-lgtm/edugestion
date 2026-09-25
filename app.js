@@ -2307,12 +2307,115 @@ const SESSION_KEY = 'edugestion_session_v2';
     actaFiltroAno.addEventListener('change', filtrarAlumnosParaActas); actaFiltroSeccion.addEventListener('change', filtrarAlumnosParaActas); actaFiltroTurno.addEventListener('change', filtrarAlumnosParaActas);
 
     const formRegistroManual = document.getElementById('form-registro-manual');
+    let alumnosRegistroCache = [];
+
+    function valorSiNoRegistro(valor) {
+      const v = String(valor || '').trim().toLowerCase();
+      return (v === 'si' || v === 'sí' || v === 'yes') ? 'Si' : 'No';
+    }
+
+    function actualizarModoRegistro() {
+      const id = document.getElementById('reg-id')?.value || '';
+      const texto = document.getElementById('reg-modo-edicion');
+      const btn = document.getElementById('btn-registrar-matriz');
+      if (texto) {
+        texto.textContent = id
+          ? 'Modo: actualizando una ficha existente. Los cambios se guardarán sobre el mismo estudiante.'
+          : 'Modo: nueva ficha. Puedes guardar con los datos disponibles y completarla más adelante.';
+      }
+      if (btn && !btn.disabled) {
+        btn.innerHTML = id
+          ? `<i class="fa-solid fa-floppy-disk"></i><span>Actualizar ficha</span>`
+          : `<i class="fa-solid fa-user-check"></i><span>Guardar estudiante</span>`;
+      }
+    }
+
+    async function cargarEstudiantesRegistro(forzar = false) {
+      const select = document.getElementById('reg-estudiante-existente');
+      if (!select || !sessionToken) return;
+      if (alumnosRegistroCache.length && !forzar) return;
+      const valorActual = select.value;
+      select.innerHTML = '<option value="">Cargando estudiantes...</option>';
+      try {
+        const data = await apiRequest('obtenerAlumnos', {});
+        alumnosRegistroCache = Array.isArray(data.alumnos) ? data.alumnos : [];
+        alumnosRegistroCache.sort((a,b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', {sensitivity:'base'}));
+        select.innerHTML = '<option value="">Nueva ficha de estudiante</option>';
+        alumnosRegistroCache.forEach(alumno => {
+          const op = document.createElement('option');
+          op.value = alumno.id;
+          const curso = [alumno.ano, alumno.seccion ? `Secc. ${alumno.seccion}` : '', alumno.turno || ''].filter(Boolean).join(' · ');
+          op.textContent = `${alumno.nombre || 'Sin nombre'}${curso ? ` — ${curso}` : ''}`;
+          select.appendChild(op);
+        });
+        if (valorActual && alumnosRegistroCache.some(a => String(a.id) === String(valorActual))) select.value = valorActual;
+      } catch (error) {
+        console.error('No se pudo cargar la lista de estudiantes:', error);
+        select.innerHTML = '<option value="">No se pudo cargar la lista</option>';
+      }
+    }
+
+    function establecerValorRegistro(id, valor) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.value = valor == null ? '' : String(valor);
+    }
+
+    function cargarFichaRegistro(alumno) {
+      if (!alumno) return;
+      establecerValorRegistro('reg-id', alumno.id || '');
+      establecerValorRegistro('reg-nombre', alumno.nombre || '');
+      establecerValorRegistro('reg-cedula', alumno.cedula || '');
+      establecerValorRegistro('reg-ano', alumno.ano || '1ero');
+      establecerValorRegistro('reg-seccion', alumno.seccion || 'A');
+      establecerValorRegistro('reg-turno', alumno.turno === 'Mañana' ? 'Manana' : (alumno.turno || 'Manana'));
+      establecerValorRegistro('reg-repite', valorSiNoRegistro(alumno.repite));
+      establecerValorRegistro('reg-pendiente', alumno.materiaPendiente || '');
+      establecerValorRegistro('reg-direccion', alumno.direccion || '');
+      establecerValorRegistro('reg-representante', alumno.representante || '');
+      establecerValorRegistro('reg-telefono-rep', alumno.telefonoRepresentante || '');
+      establecerValorRegistro('reg-email-rep', alumno.emailRepresentante || '');
+      establecerValorRegistro('reg-practica-deporte', valorSiNoRegistro(alumno.practicaDeporte));
+      establecerValorRegistro('reg-deporte', alumno.deporte || '');
+      establecerValorRegistro('reg-tiene-hermanos', valorSiNoRegistro(alumno.tieneHermanosInstitucion));
+      establecerValorRegistro('reg-hermanos', alumno.hermanosInstitucion || '');
+      establecerValorRegistro('reg-tiene-alergia', valorSiNoRegistro(alumno.tieneAlergia));
+      establecerValorRegistro('reg-alergias', alumno.alergias || '');
+      establecerValorRegistro('reg-observaciones', alumno.observaciones || '');
+      const select = document.getElementById('reg-estudiante-existente');
+      if (select) select.value = alumno.id || '';
+      actualizarRegistroInteractivo();
+      actualizarModoRegistro();
+      document.getElementById('reg-nombre')?.focus();
+    }
+
+    function nuevaFichaRegistro() {
+      formRegistroManual.reset();
+      establecerValorRegistro('reg-id', '');
+      const select = document.getElementById('reg-estudiante-existente');
+      if (select) select.value = '';
+      actualizarRegistroInteractivo();
+      actualizarModoRegistro();
+      document.getElementById('reg-nombre')?.focus();
+    }
+
     formRegistroManual.addEventListener('submit', async (e) => {
-      e.preventDefault(); const btn = document.getElementById('btn-registrar-matriz'); btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> Registrando...`;
-      let turnoSel = document.getElementById('reg-turno').value; if (turnoSel === "Mañana" || turnoSel === "Manana") turnoSel = "Manana";
+      e.preventDefault();
+      const btn = document.getElementById('btn-registrar-matriz');
+      const idExistente = document.getElementById('reg-id')?.value.trim() || '';
+      const nombre = document.getElementById('reg-nombre').value.trim();
+      if (!nombre) {
+        mostrarToast('Escribe al menos el nombre del estudiante.', 'warning', 'Dato necesario');
+        document.getElementById('reg-nombre')?.focus();
+        return;
+      }
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-circle-notch animate-spin"></i> Guardando...`;
+      let turnoSel = document.getElementById('reg-turno').value;
+      if (turnoSel === 'Mañana' || turnoSel === 'Manana') turnoSel = 'Manana';
       const payload = {
-        action: 'registrarAlumno',
-        nombre: document.getElementById('reg-nombre').value.trim(),
+        id: idExistente,
+        nombre,
         cedula: document.getElementById('reg-cedula').value.trim(),
         ano: document.getElementById('reg-ano').value,
         seccion: document.getElementById('reg-seccion').value,
@@ -2332,14 +2435,25 @@ const SESSION_KEY = 'edugestion_session_v2';
         observaciones: document.getElementById('reg-observaciones').value.trim()
       };
       try {
-        delete payload.action;
-        const data = await apiRequest('registrarAlumno', payload);
-        mostrarToast(data.message || 'El estudiante fue registrado correctamente.', 'success', 'Estudiante registrado');
-        formRegistroManual.reset(); actualizarRegistroInteractivo();
+        const accion = idExistente ? 'actualizarAlumno' : 'registrarAlumno';
+        const data = await apiRequest(accion, payload);
+        mostrarToast(data.message || 'La ficha fue guardada correctamente.', 'success', idExistente ? 'Ficha actualizada' : 'Estudiante guardado');
+        alumnosRegistroCache = [];
+        await cargarEstudiantesRegistro(true);
+        if (data.alumno?.id) {
+          establecerValorRegistro('reg-id', data.alumno.id);
+          const select = document.getElementById('reg-estudiante-existente');
+          if (select) select.value = data.alumno.id;
+        }
+        actualizarModoRegistro();
+        actualizarRegistroInteractivo();
       } catch (err) {
-        console.error('Error al registrar estudiante:', err);
-        mostrarToast('Verifica la conexión e inténtalo nuevamente.', 'error', 'No se registró el estudiante');
-      } finally { btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-user-plus"></i> Registrar Alumno`; }
+        console.error('Error al guardar estudiante:', err);
+        mostrarToast(err?.message || 'Verifica la conexión e inténtalo nuevamente.', 'error', 'No se guardó la ficha');
+      } finally {
+        btn.disabled = false;
+        actualizarModoRegistro();
+      }
     });
 
 
@@ -2358,7 +2472,8 @@ const SESSION_KEY = 'edugestion_session_v2';
       if (!select || !field || !input) return;
       const visible = select.value === 'Si';
       field.classList.toggle('is-hidden', !visible);
-      input.required = visible;
+      // En el registro flexible ningún dato complementario bloquea el guardado.
+      input.required = false;
       if (!visible) input.value = '';
     }
 
@@ -2373,13 +2488,13 @@ const SESSION_KEY = 'edugestion_session_v2';
       const turno = document.getElementById('reg-turno')?.selectedOptions?.[0]?.textContent?.trim() || 'Mañana';
       const representante = document.getElementById('reg-representante')?.value.trim() || 'No registrado';
       const deporte = document.getElementById('reg-practica-deporte')?.value === 'Si'
-        ? (document.getElementById('reg-deporte')?.value.trim() || 'Por especificar')
+        ? (document.getElementById('reg-deporte')?.value.trim() || 'Sí, por completar')
         : 'No practica';
       const hermanos = document.getElementById('reg-tiene-hermanos')?.value === 'Si'
-        ? (document.getElementById('reg-hermanos')?.value.trim() || 'Sí, por especificar')
+        ? (document.getElementById('reg-hermanos')?.value.trim() || 'Sí, por completar')
         : 'No';
       const alergias = document.getElementById('reg-tiene-alergia')?.value === 'Si'
-        ? (document.getElementById('reg-alergias')?.value.trim() || 'Sí, por especificar')
+        ? (document.getElementById('reg-alergias')?.value.trim() || 'Sí, por completar')
         : 'No registradas';
 
       const setText = (id, value) => {
@@ -2414,17 +2529,39 @@ const SESSION_KEY = 'edugestion_session_v2';
       field.addEventListener('change', actualizarRegistroInteractivo);
     });
 
+    document.getElementById('btn-cargar-estudiante')?.addEventListener('click', async () => {
+      if (!alumnosRegistroCache.length) await cargarEstudiantesRegistro(true);
+      const id = document.getElementById('reg-estudiante-existente')?.value || '';
+      if (!id) {
+        nuevaFichaRegistro();
+        return;
+      }
+      const alumno = alumnosRegistroCache.find(a => String(a.id) === String(id));
+      if (!alumno) {
+        mostrarToast('No se encontró esa ficha. Actualiza la lista e inténtalo nuevamente.', 'warning', 'Ficha no encontrada');
+        return;
+      }
+      cargarFichaRegistro(alumno);
+    });
+
+    document.getElementById('reg-estudiante-existente')?.addEventListener('change', (e) => {
+      if (!e.target.value) return;
+      const alumno = alumnosRegistroCache.find(a => String(a.id) === String(e.target.value));
+      if (alumno) cargarFichaRegistro(alumno);
+    });
+
+    document.getElementById('btn-nueva-ficha')?.addEventListener('click', nuevaFichaRegistro);
+
     const btnLimpiarRegistro = document.getElementById('btn-limpiar-registro');
     if (btnLimpiarRegistro) {
-      btnLimpiarRegistro.addEventListener('click', () => {
-        formRegistroManual.reset();
-        actualizarRegistroInteractivo();
-        document.getElementById('reg-nombre')?.focus();
-      });
+      btnLimpiarRegistro.addEventListener('click', nuevaFichaRegistro);
     }
 
-    actualizarRegistroInteractivo();
+    tabRegistro?.addEventListener('click', () => setTimeout(() => cargarEstudiantesRegistro(false), 80));
+    window.addEventListener('edugestion:session', () => setTimeout(() => cargarEstudiantesRegistro(true), 180));
 
+    actualizarRegistroInteractivo();
+    actualizarModoRegistro();
     // ==========================================
     // FASE 5: INTEGRACIÓN CON WHATSAPP (BOTONES CORREGIDOS)
     // ==========================================

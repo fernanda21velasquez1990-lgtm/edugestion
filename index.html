@@ -1312,7 +1312,7 @@
        <div class="student-register-hero__content">
         <span class="student-register-hero__eyebrow"><i class="fa-solid fa-user-graduate"></i> Expediente escolar</span>
         <h2>Registro de estudiantes</h2>
-        <p>Completa la ficha académica, familiar, deportiva y de salud del estudiante en un solo proceso.</p>
+        <p>Registra al estudiante con los datos que tengas hoy y completa o actualiza su ficha cuando recibas nueva información.</p>
         <div class="student-register-hero__meta">
          <span><i class="fa-solid fa-shield-halved"></i> Datos protegidos</span>
          <span><i class="fa-solid fa-list-check"></i> Formulario guiado</span>
@@ -1366,6 +1366,26 @@
 
       <div class="student-register-layout">
        <form class="student-register-form" id="form-registro-manual">
+        <input id="reg-id" type="hidden" value="">
+        <div class="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+         <div class="flex items-start gap-3">
+          <span class="w-10 h-10 shrink-0 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><i class="fa-solid fa-floppy-disk"></i></span>
+          <div>
+           <strong class="block text-sm font-black text-emerald-900">Registro flexible</strong>
+           <p class="text-sm text-emerald-800 mt-1">Puedes guardar la ficha aunque esté incompleta. Solo necesitamos <b>nombre, año, sección y turno</b>. Cédula, dirección, representante, teléfono, salud y demás datos pueden agregarse después.</p>
+          </div>
+         </div>
+        </div>
+        <div class="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+         <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
+          <label class="student-field"><span>Completar una ficha ya registrada <em>Opcional</em></span>
+           <select id="reg-estudiante-existente"><option value="">Nueva ficha de estudiante</option></select>
+          </label>
+          <button class="student-btn student-btn--ghost" id="btn-cargar-estudiante" type="button"><i class="fa-solid fa-pen-to-square"></i><span>Cargar ficha</span></button>
+          <button class="student-btn student-btn--ghost" id="btn-nueva-ficha" type="button"><i class="fa-solid fa-file-circle-plus"></i><span>Nueva ficha</span></button>
+         </div>
+         <p id="reg-modo-edicion" class="text-xs text-slate-500 mt-2">Modo: nueva ficha. Podrás volver a esta pantalla y completar los datos más adelante.</p>
+        </div>
         <div class="student-form-progress" aria-label="Progreso del formulario">
          <div class="student-form-progress__bar"><span id="student-form-progress-bar"></span></div>
          <div class="student-form-progress__text">
@@ -1385,8 +1405,8 @@
            <input id="reg-nombre" placeholder="Ej.: Marcos Torres" required type="text">
           </label>
           <label class="student-field">
-           <span>Cédula</span>
-           <input id="reg-cedula" inputmode="numeric" placeholder="Número de identificación" required type="text">
+           <span>Cédula <em>Opcional</em></span>
+           <input id="reg-cedula" inputmode="numeric" placeholder="Puedes agregarla después" type="text">
           </label>
           <label class="student-field">
            <span>Año escolar</span>
@@ -1398,15 +1418,15 @@
           </label>
           <label class="student-field">
            <span>Sección</span>
-           <select id="reg-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+           <select id="reg-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select>
           </label>
           <label class="student-field">
            <span>Turno</span>
            <select id="reg-turno"><option value="Manana">Mañana</option><option value="Tarde">Tarde</option></select>
           </label>
           <label class="student-field student-field--two">
-           <span>Dirección</span>
-           <input id="reg-direccion" placeholder="Urbanización, calle, número de vivienda" required type="text">
+           <span>Dirección <em>Opcional</em></span>
+           <input id="reg-direccion" placeholder="Puedes agregarla después" type="text">
           </label>
           <label class="student-field">
            <span>¿Repite el año?</span>
@@ -1426,12 +1446,12 @@
          </div>
          <div class="student-form-grid student-form-grid--2">
           <label class="student-field">
-           <span>Nombre del representante</span>
-           <input id="reg-representante" placeholder="Nombre completo" required type="text">
+           <span>Nombre del representante <em>Opcional</em></span>
+           <input id="reg-representante" placeholder="Puedes agregarlo después" type="text">
           </label>
           <label class="student-field">
-           <span>WhatsApp</span>
-           <input id="reg-telefono-rep" inputmode="tel" placeholder="Ej.: 58414678097" required type="tel">
+           <span>WhatsApp <em>Opcional</em></span>
+           <input id="reg-telefono-rep" inputmode="tel" placeholder="Puedes agregarlo después" type="tel">
           </label>
           <label class="student-field student-field--wide">
            <span>Correo del representante <em>Opcional</em></span>
@@ -1481,7 +1501,7 @@
 
         <div class="student-form-actions">
          <button class="student-btn student-btn--ghost" id="btn-limpiar-registro" type="button"><i class="fa-solid fa-eraser"></i><span>Limpiar formulario</span></button>
-         <button class="student-btn student-btn--primary" id="btn-registrar-matriz" type="submit"><i class="fa-solid fa-user-check"></i><span>Registrar estudiante</span></button>
+         <button class="student-btn student-btn--primary" id="btn-registrar-matriz" type="submit"><i class="fa-solid fa-user-check"></i><span>Guardar estudiante</span></button>
         </div>
        </form>
 
@@ -1964,7 +1984,7 @@
   </div>
   <script src="config.js">
   </script>
-  <script src="app.js?v=20260924-53">
+  <script src="app.js?v=20260924-54">
   </script>
  
   <div aria-hidden="true" class="user-guide-modal hidden" id="user-guide-modal">
