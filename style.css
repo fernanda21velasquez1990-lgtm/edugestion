@@ -8343,6 +8343,53 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
   font-size: .82rem;
 }
 
+#section-asistencia .attendance-student-row--advanced.is-duplicate-copy {
+  border-color: #fecaca !important;
+  background: linear-gradient(180deg, #fff 0%, #fffafa 100%) !important;
+}
+
+#section-asistencia .attendance-duplicate-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: .27rem .55rem;
+  border-radius: 999px;
+  background: #fff1f2;
+  color: #be123c;
+  border: 1px solid #fecdd3;
+  font-size: .68rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+#section-asistencia .attendance-delete-duplicate {
+  margin-top: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff5f5;
+  color: #c62828;
+  font-size: .74rem;
+  font-weight: 850;
+  cursor: pointer;
+  transition: .18s ease;
+}
+
+#section-asistencia .attendance-delete-duplicate:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  transform: translateY(-1px);
+}
+
+#section-asistencia .attendance-delete-duplicate:focus-visible {
+  outline: 3px solid rgba(239,68,68,.2);
+  outline-offset: 2px;
+}
+
 #section-asistencia #btn-guardar-asistencia {
   min-height: 56px;
   font-size: 1rem !important;

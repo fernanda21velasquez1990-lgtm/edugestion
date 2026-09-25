@@ -911,6 +911,53 @@ const SESSION_KEY = 'edugestion_session_v2';
       return normalizado.includes('manana') ? 'Manana' : normalizado.includes('tarde') ? 'Tarde' : String(valor || '');
     }
 
+    function claveAlumnoDuplicadoAsistencia(alumno) {
+      return [
+        normalizarTextoAsistencia(alumno?.nombre || ''),
+        normalizarTextoAsistencia(alumno?.ano || ''),
+        String(alumno?.seccion || '').trim().toUpperCase(),
+        turnoAsistencia(alumno?.turno || '')
+      ].join('|');
+    }
+
+    async function eliminarAlumnoDuplicadoDesdeAsistencia(alumno) {
+      if (!alumno?.id) return;
+      const nombre = String(alumno.nombre || 'este estudiante').trim();
+      const confirmado = window.confirm(
+        `¿Eliminar la ficha duplicada de "${nombre}"?\n\n` +
+        'Se eliminará únicamente esta copia y sus registros vinculados de asistencia, calificaciones y actas. ' +
+        'La otra ficha idéntica se conservará.\n\nEsta acción no se puede deshacer.'
+      );
+      if (!confirmado) return;
+
+      try {
+        mostrarToast('Eliminando la copia duplicada...', 'info', 'Un momento');
+        const data = await apiRequest('eliminarAlumnoDuplicado', {
+          id: alumno.id,
+          confirmar: true
+        });
+
+        alumnosSeccion = alumnosSeccion.filter(item => String(item.id) !== String(alumno.id));
+        delete asistenciaTemporal[alumno.id];
+        delete estadisticasAlumnos[alumno.id];
+        alumnosRegistroCache = [];
+
+        renderAsistencia();
+        actualizarStatsSeccion();
+        llenarSelectActaRapida();
+        contadorAsistencia.textContent = `${alumnosSeccion.length} Alumnos`;
+        mostrarToast(data.message || 'La ficha duplicada fue eliminada.', 'success', 'Duplicado eliminado');
+      } catch (error) {
+        console.error('No se pudo eliminar el estudiante duplicado:', error);
+        mostrarToast(
+          error?.message || 'No se pudo eliminar esta ficha. Verifica que realmente exista otra copia del mismo alumno.',
+          'error',
+          'No se eliminó'
+        );
+      }
+    }
+
+
     function claveClaseAgenda(clase, fecha = '') {
       return [
         fecha,
@@ -1341,6 +1388,17 @@ const SESSION_KEY = 'edugestion_session_v2';
         ? alumnosSeccion.filter(alumno => normalizarTextoAsistencia(`${alumno.nombre || ''} ${alumno.cedula || ''}`).includes(termino))
         : alumnosSeccion;
 
+      // Detecta copias idénticas dentro de la misma sección. Por seguridad,
+      // el botón de eliminar aparece únicamente desde la segunda copia.
+      const contadorDuplicados = new Map();
+      const posicionDuplicadoPorId = new Map();
+      alumnosSeccion.forEach(alumno => {
+        const clave = claveAlumnoDuplicadoAsistencia(alumno);
+        const posicion = contadorDuplicados.get(clave) || 0;
+        posicionDuplicadoPorId.set(String(alumno.id), posicion);
+        contadorDuplicados.set(clave, posicion + 1);
+      });
+
       contadorAsistencia.textContent = termino
         ? `${visibles.length}/${alumnosSeccion.length} Alumnos`
         : `${alumnosSeccion.length} Alumnos`;
@@ -1369,11 +1427,22 @@ const SESSION_KEY = 'edugestion_session_v2';
           return `<button id="${idBoton}" type="button" class="attendance-state-button${activo}" data-attendance-state="${estado}" aria-label="Marcar ${estado.toLowerCase()} a ${nombre}"><i class="fa-solid ${cfg.icono}"></i><span>${cfg.texto}</span></button>`;
         }).join('');
 
+        const claveDuplicado = claveAlumnoDuplicadoAsistencia(al);
+        const totalCopias = contadorDuplicados.get(claveDuplicado) || 1;
+        const posicionCopia = posicionDuplicadoPorId.get(String(al.id)) || 0;
+        const esCopiaDuplicada = totalCopias > 1 && posicionCopia > 0;
+        const botonEliminarDuplicado = esCopiaDuplicada
+          ? `<button type="button" class="attendance-delete-duplicate" data-delete-duplicate="${escaparHTML(String(al.id))}" title="Eliminar esta copia duplicada"><i class="fa-solid fa-trash-can"></i><span>Eliminar duplicado</span></button>`
+          : '';
+
         const d = document.createElement('div');
-        d.className = 'attendance-student-row attendance-student-row--advanced';
-        d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span></div></div></div><div class="attendance-state-grid">${botones}</div>`;
+        d.className = `attendance-student-row attendance-student-row--advanced${esCopiaDuplicada ? ' is-duplicate-copy' : ''}`;
+        d.innerHTML = `<div class="flex items-center gap-3 min-w-0"><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span>${esCopiaDuplicada ? '<span class="attendance-duplicate-badge"><i class="fa-solid fa-copy"></i> Duplicado</span>' : ''}</div>${botonEliminarDuplicado}</div></div><div class="attendance-state-grid">${botones}</div>`;
         d.querySelectorAll('[data-attendance-state]').forEach(boton => {
           boton.addEventListener('click', () => setA(al.id, boton.dataset.attendanceState, idDom));
+        });
+        d.querySelector('[data-delete-duplicate]')?.addEventListener('click', () => {
+          eliminarAlumnoDuplicadoDesdeAsistencia(al);
         });
         listaAlumnosAsistencia.appendChild(d);
       });
