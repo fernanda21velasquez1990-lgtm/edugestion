@@ -322,6 +322,9 @@ const SESSION_KEY = 'edugestion_session_v2';
       if (!profesorActual) return;
       try {
         const datos = await apiRequest('obtenerDatosIniciales');
+        if (window.EDUGESTION_APLICAR_ESTADO_NUBE && datos.estadoDocente) {
+          await window.EDUGESTION_APLICAR_ESTADO_NUBE(datos.estadoDocente);
+        }
         planesProfesor = Array.isArray(datos.planes) ? datos.planes : [];
         horariosProfesor = Array.isArray(datos.horarios) ? datos.horarios : [];
         actualizarUIPlanificacion();
@@ -6711,10 +6714,43 @@ ${recurso.apunte}`);
     await cargar(true);
   }
 
+  async function sincronizarAjustesLocalesAsistencia(){
+    const state = leerLocal();
+    const pendientes = Object.entries(state.overrides || {});
+    const borrados = Object.entries(state.deleted || {}).filter(([,v])=>!!v);
+    if (!pendientes.length && !borrados.length) return false;
+    let cambio = false;
+    for (const [iso,r] of pendientes) {
+      try {
+        await apiRequest('guardarAsistenciaDocenteManual', {
+          fecha: iso,
+          horaLlegada: String(r.horaLlegada || '').slice(0,5),
+          horaSalida: String(r.horaSalida || '').slice(0,5),
+          observacion: r.observacion || ''
+        });
+        delete state.overrides[iso];
+        delete state.deleted[iso];
+        cambio = true;
+      } catch (_) {}
+    }
+    for (const [iso] of borrados) {
+      try {
+        await apiRequest('eliminarAsistenciaDocente', { fecha: iso });
+        delete state.deleted[iso];
+        delete state.overrides[iso];
+        cambio = true;
+      } catch (_) {}
+    }
+    if (cambio) guardarLocal(state);
+    return cambio;
+  }
+
   async function cargar(forzar=false) {
     if (dataAsistenciaDocente && !forzar) return render();
     try {
-      const remoto = await apiRequest('obtenerAsistenciaDocente');
+      let remoto = await apiRequest('obtenerAsistenciaDocente');
+      const migrado = await sincronizarAjustesLocalesAsistencia();
+      if (migrado) remoto = await apiRequest('obtenerAsistenciaDocente');
       dataAsistenciaDocente = aplicarAjustesLocales(remoto);
       render();
     } catch (error) {
@@ -6913,11 +6949,15 @@ ${recurso.apunte}`);
     const original = document.getElementById('teacher-manual-original-date')?.value || '';
     if (!fecha || !llegada) return mostrarToast('Indica la fecha y la hora de llegada.','warning','Faltan datos');
     if (salida && minutosJornada(llegada,salida)<=0) return mostrarToast('La salida debe ser posterior a la llegada.','warning','Revisa las horas');
-    const payload = { fecha, horaLlegada:llegada, horaSalida:salida, observacion };
+    const payload = { fecha, fechaOriginal: original || '', horaLlegada:llegada, horaSalida:salida, observacion };
     let remoto = false;
     try {
       await apiRequest('guardarAsistenciaDocenteManual', payload);
       remoto = true;
+      const state = leerLocal();
+      if (original) { delete state.overrides[original]; delete state.deleted[original]; }
+      delete state.overrides[fecha]; delete state.deleted[fecha];
+      guardarLocal(state);
     } catch (_) {
       const state = leerLocal();
       if (original && original !== fecha) { delete state.overrides[original]; state.deleted[original] = true; }
@@ -6942,6 +6982,9 @@ ${recurso.apunte}`);
     try {
       await apiRequest('eliminarAsistenciaDocente',{fecha:iso});
       remoto = true;
+      const state = leerLocal();
+      delete state.overrides[iso]; delete state.deleted[iso];
+      guardarLocal(state);
     } catch (_) {
       const state = leerLocal();
       delete state.overrides[iso];
@@ -11311,6 +11354,7 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     'edugestion_cuadernillo_ef_historial_v1',
     'edugestion_cuadernillo_ef_lapsos_v1',
     'edugestion_cuadernillo_cn_seleccion',
+    'edugestion_cuadernillo_bio_seleccion',
     'edugestion_ui_settings_v1',
     'nombreInstitucion'
   ]);
@@ -11361,17 +11405,34 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   Storage.prototype.setItem = function(key, value) {
     const k = String(key);
     if (this === window.localStorage && isPersonalKey(k) && activeIdentity()) {
-      return rawSet.call(this, scopedKey(k), String(value));
+      const effective = scopedKey(k);
+      const result = rawSet.call(this, effective, String(value));
+      try { window.EDUGESTION_NUBE_CAMBIO_LOCAL?.(effective, String(value), 'set'); } catch (_) {}
+      return result;
     }
-    return rawSet.call(this, k, String(value));
+    const result = rawSet.call(this, k, String(value));
+    if (this === window.localStorage) {
+      try { window.EDUGESTION_NUBE_CAMBIO_LOCAL?.(k, String(value), 'set'); } catch (_) {}
+    }
+    return result;
   };
   Storage.prototype.removeItem = function(key) {
     const k = String(key);
     if (this === window.localStorage && isPersonalKey(k) && activeIdentity()) {
-      return rawRemove.call(this, scopedKey(k));
+      const effective = scopedKey(k);
+      const result = rawRemove.call(this, effective);
+      try { window.EDUGESTION_NUBE_CAMBIO_LOCAL?.(effective, '', 'remove'); } catch (_) {}
+      return result;
     }
-    return rawRemove.call(this, k);
+    const result = rawRemove.call(this, k);
+    if (this === window.localStorage) {
+      try { window.EDUGESTION_NUBE_CAMBIO_LOCAL?.(k, '', 'remove'); } catch (_) {}
+    }
+    return result;
   };
+  window.EDUGESTION_RAW_LOCAL_GET = (key) => rawGet.call(window.localStorage, String(key));
+  window.EDUGESTION_RAW_LOCAL_SET = (key, value) => rawSet.call(window.localStorage, String(key), String(value));
+  window.EDUGESTION_RAW_LOCAL_REMOVE = (key) => rawRemove.call(window.localStorage, String(key));
 
   function migrateLegacyDataForFirstTeacher(prof) {
     const identity = identityFrom(prof);
@@ -17599,3 +17660,143 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{if($(SECTION_ID)){const gs=$('pex-grade');if(gs){gs.innerHTML=grades().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');if(!grades().includes(grade))grade=grades()[0]||'';gs.value=grade}renderAll()}else init()},150));
 })();
 /* EDUGESTION_PLANIFICACION_EXPRESS_V51_END */
+
+
+/* ================================================================
+   EduGestión · PERSISTENCIA EN NUBE POR DOCENTE · V5.3
+   Sincroniza configuraciones/avances locales con Google Sheets.
+   La hoja EstadoDocente es independiente por idProfesor.
+   ================================================================ */
+(() => {
+  const MARK='EDUGESTION_CLOUD_STATE_V53';
+  if(window[MARK]) return;
+  window[MARK]=true;
+
+  let applying=false;
+  let timer=null;
+  const pendingSet=new Map();
+  const pendingDelete=new Set();
+
+  const teacherIdentity=()=>String(
+    window.EDUGESTION_DOCENTE_PERFIL?.docenteId ||
+    window.profesorActual?.id || window.profesorActual?.usuario || window.profesorActual?.email || ''
+  ).trim().toLowerCase().replace(/[^a-z0-9._-]+/g,'_');
+
+  function allowedKey(key){
+    const k=String(key||'');
+    if(!k) return false;
+    if(k==='edugestion_session_v2'||k==='edugestion_local_data_owner_v1') return false;
+    if(k.startsWith('edugestion:director:')) return false;
+    if(k.startsWith('edugestion_teacher_attendance_manual_v48_')) return false; // se migra a AsistenciaDocentes real
+    return k.startsWith('edugestion_') || k.startsWith('filtros_asistencia_');
+  }
+
+  function belongsToCurrentTeacher(key){
+    const k=String(key||''), id=teacherIdentity();
+    if(!id) return false;
+    const scoped='__docente_'+id;
+    if(k.includes('__docente_')) return k.endsWith(scoped);
+    const rawId=String(window.profesorActual?.id||window.profesorActual?.usuario||'').replace(/[^a-z0-9_-]/gi,'_');
+    const dynamicPrefixes=[
+      'edugestion_weekly_planning_v1_','edugestion_formato_control_v1_',
+      'edugestion_plan_alumnos_puntos_v1_','edugestion_plan_express_v1_',
+      'edugestion_seguimiento_criterios_v1_','edugestion_control_estudio_v1_',
+      'edugestion_docente_perfil_'
+    ];
+    if(dynamicPrefixes.some(p=>k.startsWith(p))) return !rawId || k.includes(rawId) || k.includes(id);
+    // Claves no dinámicas deben estar ya separadas por el wrapper de perfil.
+    return false;
+  }
+
+  function rawSet(key,value){
+    if(typeof window.EDUGESTION_RAW_LOCAL_SET==='function') return window.EDUGESTION_RAW_LOCAL_SET(key,value);
+    try{return localStorage.setItem(key,value)}catch(_){return undefined}
+  }
+  function rawGet(key){
+    if(typeof window.EDUGESTION_RAW_LOCAL_GET==='function') return window.EDUGESTION_RAW_LOCAL_GET(key);
+    try{return localStorage.getItem(key)}catch(_){return null}
+  }
+  function rawRemove(key){
+    if(typeof window.EDUGESTION_RAW_LOCAL_REMOVE==='function') return window.EDUGESTION_RAW_LOCAL_REMOVE(key);
+    try{return localStorage.removeItem(key)}catch(_){return undefined}
+  }
+
+  function schedule(){
+    if(timer) clearTimeout(timer);
+    timer=setTimeout(flush,900);
+  }
+
+  async function flush(){
+    timer=null;
+    if(applying || !window.profesorActual || typeof window.EDUGESTION_API_REQUEST!=='function') return;
+    const estados={};
+    for(const [k,v] of pendingSet.entries()) estados[k]=v;
+    const deletes=[...pendingDelete];
+    pendingSet.clear(); pendingDelete.clear();
+    try{
+      if(Object.keys(estados).length){
+        await window.EDUGESTION_API_REQUEST('guardarEstadosDocente',{estados});
+      }
+      for(const clave of deletes){
+        await window.EDUGESTION_API_REQUEST('eliminarEstadoDocente',{clave});
+      }
+      window.dispatchEvent(new CustomEvent('edugestion:cloud-saved',{detail:{keys:Object.keys(estados),deleted:deletes}}));
+    }catch(err){
+      Object.entries(estados).forEach(([k,v])=>pendingSet.set(k,v));
+      deletes.forEach(k=>pendingDelete.add(k));
+      console.warn('EduGestión: sincronización pendiente; se reintentará.',err);
+      setTimeout(schedule,5000);
+    }
+  }
+
+  window.EDUGESTION_NUBE_CAMBIO_LOCAL=function(key,value,op){
+    if(applying || !window.profesorActual || !allowedKey(key) || !belongsToCurrentTeacher(key)) return;
+    if(op==='remove'){
+      pendingSet.delete(String(key));
+      pendingDelete.add(String(key));
+    }else{
+      pendingDelete.delete(String(key));
+      pendingSet.set(String(key),String(value??''));
+    }
+    schedule();
+  };
+
+  function collectCurrentLocal(){
+    const out={};
+    const id=teacherIdentity();
+    if(!id) return out;
+    try{
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(!allowedKey(k)||!belongsToCurrentTeacher(k)) continue;
+        const v=rawGet(k);
+        if(v!==null) out[k]=v;
+      }
+    }catch(_){}
+    return out;
+  }
+
+  window.EDUGESTION_APLICAR_ESTADO_NUBE=async function(estados){
+    if(!window.profesorActual) return;
+    estados=estados&&typeof estados==='object'?estados:{};
+    applying=true;
+    try{
+      Object.entries(estados).forEach(([k,v])=>{
+        if(allowedKey(k) && belongsToCurrentTeacher(k)) rawSet(k,String(v??''));
+      });
+    }finally{applying=false;}
+
+    // Primera migración: cualquier dato local del docente que aún no exista en nube se sube.
+    const local=collectCurrentLocal();
+    const faltantes={};
+    Object.entries(local).forEach(([k,v])=>{if(!Object.prototype.hasOwnProperty.call(estados,k))faltantes[k]=v});
+    if(Object.keys(faltantes).length && typeof window.EDUGESTION_API_REQUEST==='function'){
+      try{await window.EDUGESTION_API_REQUEST('guardarEstadosDocente',{estados:faltantes})}
+      catch(err){Object.entries(faltantes).forEach(([k,v])=>pendingSet.set(k,v));schedule()}
+    }
+    window.dispatchEvent(new CustomEvent('edugestion:cloud-state-loaded',{detail:{total:Object.keys(estados).length,migrados:Object.keys(faltantes).length}}));
+  };
+
+  window.addEventListener('beforeunload',()=>{try{if(timer)clearTimeout(timer)}catch(_){}});
+})();
+/* EDUGESTION_CLOUD_STATE_V53_END */
