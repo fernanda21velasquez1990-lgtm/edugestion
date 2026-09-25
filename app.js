@@ -1351,10 +1351,10 @@ const SESSION_KEY = 'edugestion_session_v2';
       }
 
       const configuracionEstados = {
-        Presente: { icono: 'fa-check', texto: 'PRES', clase: 'is-present' },
-        Ausente: { icono: 'fa-xmark', texto: 'AUS', clase: 'is-absent' },
-        Tardanza: { icono: 'fa-clock', texto: 'TARD', clase: 'is-late' },
-        Justificada: { icono: 'fa-file-circle-check', texto: 'JUST', clase: 'is-justified' }
+        Presente: { icono: 'fa-check', texto: 'Presente', clase: 'is-present' },
+        Ausente: { icono: 'fa-xmark', texto: 'Ausente', clase: 'is-absent' },
+        Tardanza: { icono: 'fa-clock', texto: 'Tarde', clase: 'is-late' },
+        Justificada: { icono: 'fa-file-circle-check', texto: 'Justificada', clase: 'is-justified' }
       };
 
       visibles.forEach((al, indice) => {
