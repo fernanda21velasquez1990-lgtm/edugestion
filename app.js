@@ -9,6 +9,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     let alumnosSeccion = [];
     let alumnosFiltradosActas = [];
     let horariosProfesor = [];
+    let horarioContingenciaActual = null;
     let asistenciaTemporal = {};
     let estadisticasAlumnos = {};
     let actaTipoActual = 'incidencia';
@@ -327,8 +328,10 @@ const SESSION_KEY = 'edugestion_session_v2';
         }
         planesProfesor = Array.isArray(datos.planes) ? datos.planes : [];
         horariosProfesor = Array.isArray(datos.horarios) ? datos.horarios : [];
+        horarioContingenciaActual = datos.horarioContingencia && datos.horarioContingencia.activo ? datos.horarioContingencia : null;
         actualizarUIPlanificacion();
         actualizarUIHorario();
+        renderHorarioContingenciaActual();
         try { window.dispatchEvent(new CustomEvent('edugestion:data-loaded', { detail: { planes: planesProfesor, horarios: horariosProfesor } })); } catch (_) {}
         await renderAgendaAsistencia();
 
@@ -2120,6 +2123,39 @@ const SESSION_KEY = 'edugestion_session_v2';
       panelListaHorario.classList.add('hidden'); panelFormHorario.classList.remove('hidden');
     }
 
+    function esBloqueContingencia(h) {
+      return String(h?.id || '').indexOf('CONT-2026-') === 0;
+    }
+
+    function renderHorarioContingenciaActual() {
+      const banner = document.getElementById('horario-contingencia-banner');
+      const hoyBox = document.getElementById('horario-contingencia-hoy');
+      const resumen = document.getElementById('horario-contingencia-resumen');
+      if (!banner) return;
+      const bloques = (Array.isArray(horariosProfesor) ? horariosProfesor : []).filter(esBloqueContingencia);
+      if (!horarioContingenciaActual && !bloques.length) {
+        banner.classList.add('hidden');
+        return;
+      }
+      banner.classList.remove('hidden');
+      const diasOrden = ['Lunes','Martes','Miercoles','Jueves','Viernes'];
+      const nombreDia = diasOrden[new Date().getDay() - 1] || '';
+      const hoy = bloques.filter(b => normalizarTextoAsistencia(b.dia) === normalizarTextoAsistencia(nombreDia));
+      const etiquetaAno = a => ({'1ero':'1.º Año','2do':'2.º Año','3ero':'3.º Año','4to':'4.º Año','5to':'5.º Año'}[String(a)] || String(a || ''));
+      if (hoyBox) {
+        hoyBox.innerHTML = hoy.length
+          ? `<i class="fa-solid fa-calendar-day mr-2"></i>Hoy ${escaparHTML(nombreDia === 'Miercoles' ? 'Miércoles' : nombreDia)}: ${hoy.map(b => `${escaparHTML(etiquetaAno(b.ano))} · Sección ${escaparHTML(b.seccion)}`).join(' &nbsp;·&nbsp; ')} <span class="ml-2 text-slate-500">08:00–11:00</span>`
+          : '<i class="fa-solid fa-calendar-day mr-2"></i>Hoy no corresponde jornada de contingencia.';
+      }
+      if (resumen) {
+        resumen.innerHTML = diasOrden.map(dia => {
+          const items = bloques.filter(b => normalizarTextoAsistencia(b.dia) === normalizarTextoAsistencia(dia));
+          const nombre = dia === 'Miercoles' ? 'Miércoles' : dia;
+          return `<div class="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm"><strong class="block text-slate-700">${escaparHTML(nombre)}</strong><span class="mt-1 block font-bold text-slate-500">${items.map(b => `${escaparHTML(etiquetaAno(b.ano))} ${escaparHTML(b.seccion)}`).join(' · ') || '—'}</span></div>`;
+        }).join('');
+      }
+    }
+
     function renderMenuHorario() {
       menuSeccionesHorario.innerHTML = '';
       if(horariosProfesor.length === 0) { menuSeccionesHorario.innerHTML = '<p class="text-xs text-center text-gray-400 mt-4">Sin bloques registrados.</p>'; return; }
@@ -2171,8 +2207,13 @@ const SESSION_KEY = 'edugestion_session_v2';
       else {
         filtrados.forEach((h, index) => {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="px-4 py-3 font-bold text-gray-800">${escaparHTML(h.dia)}</td><td class="px-4 py-3 text-center text-gray-600 font-semibold">${escaparHTML(formatearHoraHorario(h.horaInicio))} - ${escaparHTML(formatearHoraHorario(h.horaFin))}</td><td class="px-4 py-3 text-center text-gray-500">${escaparHTML(h.turno)}</td><td class="px-4 py-3 text-center"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar bloque"><i class="fa-solid fa-trash-can"></i></button></td>`;
-          tr.querySelector('button').addEventListener('click', () => eliminarHorarioLocal(index, ano, seccion));
+          const esContingencia = esBloqueContingencia(h);
+          const accion = esContingencia
+            ? '<span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-700"><i class="fa-solid fa-shield-halved"></i> Contingencia</span>'
+            : '<button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar bloque"><i class="fa-solid fa-trash-can"></i></button>';
+          tr.innerHTML = `<td class="px-4 py-3 font-bold text-gray-800">${escaparHTML(h.dia === 'Miercoles' ? 'Miércoles' : h.dia)}</td><td class="px-4 py-3 text-center text-gray-600 font-semibold">${escaparHTML(formatearHoraHorario(h.horaInicio))} - ${escaparHTML(formatearHoraHorario(h.horaFin))}</td><td class="px-4 py-3 text-center text-gray-500">${escaparHTML(h.turno === 'Manana' ? 'Mañana' : h.turno)}</td><td class="px-4 py-3 text-center">${accion}</td>`;
+          const botonEliminar = tr.querySelector('button');
+          if (botonEliminar) botonEliminar.addEventListener('click', () => eliminarHorarioLocal(index, ano, seccion));
           tablaBodyHorario.appendChild(tr);
         });
       }
@@ -2226,7 +2267,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       });
     }
 
-    function actualizarUIHorario() { renderMenuHorario(); renderHorarioVisual(); }
+    function actualizarUIHorario() { renderMenuHorario(); renderHorarioVisual(); renderHorarioContingenciaActual(); }
 
     formHorario.addEventListener('submit', async (e) => {
       e.preventDefault();
