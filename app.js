@@ -31,7 +31,10 @@ const SESSION_KEY = 'edugestion_session_v2';
         { ano: '1ero', seccion: 'C', turno: 'Tarde' },
         { ano: '1ero', seccion: 'D', turno: 'Tarde' },
         { ano: '2do', seccion: 'C', turno: 'Tarde' },
-        { ano: '2do', seccion: 'D', turno: 'Tarde' }
+        { ano: '2do', seccion: 'D', turno: 'Tarde' },
+        { ano: '3ero', seccion: 'C', turno: 'Tarde' },
+        { ano: '4to', seccion: 'C', turno: 'Tarde' },
+        { ano: '5to', seccion: 'B', turno: 'Tarde' }
       ];
     }
     let asistenciaClaseActiva = null;
@@ -1353,6 +1356,9 @@ const SESSION_KEY = 'edugestion_session_v2';
             : `Registro pendiente · ${fechaLegible} · Guarda al finalizar`;
         }
         marcarClaseActivaAgenda();
+        if (Number(d.nombresCompartidosAgregados || 0) > 0) {
+          mostrarToast(`Se incorporaron ${Number(d.nombresCompartidosAgregados)} alumno(s) ya registrados en esta misma sección por otro docente. Solo se compartieron los nombres.`, 'success', 'Lista institucional sincronizada');
+        }
         if (registro.existe) mostrarToast('Se cargó la asistencia que ya estaba guardada para esta fecha.', 'info', 'Registro recuperado');
       } catch (e) {
         console.error('Error al cargar estudiantes o asistencia:', e);
@@ -2131,6 +2137,9 @@ const SESSION_KEY = 'edugestion_session_v2';
       const banner = document.getElementById('horario-contingencia-banner');
       const hoyBox = document.getElementById('horario-contingencia-hoy');
       const resumen = document.getElementById('horario-contingencia-resumen');
+      const titulo = document.getElementById('horario-contingencia-titulo');
+      const descripcion = document.getElementById('horario-contingencia-descripcion');
+      const linkOriginal = document.getElementById('horario-contingencia-link');
       if (!banner) return;
       const bloques = (Array.isArray(horariosProfesor) ? horariosProfesor : []).filter(esBloqueContingencia);
       if (!horarioContingenciaActual && !bloques.length) {
@@ -2138,20 +2147,45 @@ const SESSION_KEY = 'edugestion_session_v2';
         return;
       }
       banner.classList.remove('hidden');
+      const esCiencias = edugestionEsCienciasNaturales();
+      if (titulo) titulo.textContent = esCiencias ? 'Horario de contingencia · Turnos mañana y tarde' : 'Horario de contingencia · Turno mañana';
+      if (descripcion) descripcion.textContent = esCiencias
+        ? 'Vigente para Ciencias Naturales. La plataforma y Telegram reconocerán las secciones de ambos turnos según el día.'
+        : 'Vigente para Educación Física. La plataforma y Telegram usarán este horario para reconocer automáticamente las secciones del día.';
+      if (linkOriginal) linkOriginal.href = esCiencias
+        ? 'assets/horario/horario_contingencia_dos_turnos_2026-2027.jpg'
+        : 'assets/horario/horario_contingencia_2026-2027.png';
+
       const diasOrden = ['Lunes','Martes','Miercoles','Jueves','Viernes'];
       const nombreDia = diasOrden[new Date().getDay() - 1] || '';
       const hoy = bloques.filter(b => normalizarTextoAsistencia(b.dia) === normalizarTextoAsistencia(nombreDia));
       const etiquetaAno = a => ({'1ero':'1.º Año','2do':'2.º Año','3ero':'3.º Año','4to':'4.º Año','5to':'5.º Año'}[String(a)] || String(a || ''));
+      const etiquetaTurno = t => normalizarTextoAsistencia(t).includes('tarde') ? 'Tarde' : 'Mañana';
+      const rangoTurno = items => {
+        if (!items.length) return '';
+        const ini = items.map(x => formatearHoraHorario(x.horaInicio)).filter(Boolean).sort()[0] || '';
+        const fin = items.map(x => formatearHoraHorario(x.horaFin)).filter(Boolean).sort().slice(-1)[0] || '';
+        return ini && fin ? `${ini}–${fin}` : '';
+      };
+      const grupoTurnoHtml = (turno, items) => {
+        if (!items.length) return '';
+        return `<span class="inline-flex flex-wrap items-center gap-1 mr-2"><b>${escaparHTML(turno)}:</b> ${items.map(b => `${escaparHTML(etiquetaAno(b.ano))} ${escaparHTML(b.seccion)}`).join(' · ')} <span class="text-slate-500">(${escaparHTML(rangoTurno(items))})</span></span>`;
+      };
       if (hoyBox) {
+        const manana = hoy.filter(b => etiquetaTurno(b.turno) === 'Mañana');
+        const tarde = hoy.filter(b => etiquetaTurno(b.turno) === 'Tarde');
         hoyBox.innerHTML = hoy.length
-          ? `<i class="fa-solid fa-calendar-day mr-2"></i>Hoy ${escaparHTML(nombreDia === 'Miercoles' ? 'Miércoles' : nombreDia)}: ${hoy.map(b => `${escaparHTML(etiquetaAno(b.ano))} · Sección ${escaparHTML(b.seccion)}`).join(' &nbsp;·&nbsp; ')} <span class="ml-2 text-slate-500">08:00–11:00</span>`
+          ? `<i class="fa-solid fa-calendar-day mr-2"></i>Hoy ${escaparHTML(nombreDia === 'Miercoles' ? 'Miércoles' : nombreDia)}: ${grupoTurnoHtml('Mañana', manana)} ${grupoTurnoHtml('Tarde', tarde)}`
           : '<i class="fa-solid fa-calendar-day mr-2"></i>Hoy no corresponde jornada de contingencia.';
       }
       if (resumen) {
         resumen.innerHTML = diasOrden.map(dia => {
           const items = bloques.filter(b => normalizarTextoAsistencia(b.dia) === normalizarTextoAsistencia(dia));
+          const manana = items.filter(b => etiquetaTurno(b.turno) === 'Mañana');
+          const tarde = items.filter(b => etiquetaTurno(b.turno) === 'Tarde');
           const nombre = dia === 'Miercoles' ? 'Miércoles' : dia;
-          return `<div class="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm"><strong class="block text-slate-700">${escaparHTML(nombre)}</strong><span class="mt-1 block font-bold text-slate-500">${items.map(b => `${escaparHTML(etiquetaAno(b.ano))} ${escaparHTML(b.seccion)}`).join(' · ') || '—'}</span></div>`;
+          const linea = (label, lista) => lista.length ? `<span class="block"><b>${escaparHTML(label)}:</b> ${lista.map(b => `${escaparHTML(etiquetaAno(b.ano))} ${escaparHTML(b.seccion)}`).join(' · ')}</span>` : '';
+          return `<div class="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm"><strong class="block text-slate-700">${escaparHTML(nombre)}</strong><span class="mt-1 block font-bold text-slate-500">${linea('Mañana', manana)}${linea('Tarde', tarde) || (!manana.length ? '—' : '')}</span></div>`;
         }).join('');
       }
     }
