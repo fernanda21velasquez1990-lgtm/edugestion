@@ -17772,14 +17772,14 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_PLANIFICACION_SEMANAL_POR_AREA_V47_END */
 
 /* ================================================================
-   EduGestión · PLANIFICACIÓN EXPRESS · V5.1
+   EduGestión · PLANIFICACIÓN EXPRESS · V5.9
    Ruta rápida independiente: seleccionar temas del cuadernillo,
    asignar puntos/fecha y ver Control de Estudio + Plan de Evaluación.
    ================================================================ */
 (() => {
   const TAB_ID='tab-planificacion-express';
   const SECTION_ID='section-planificacion-express';
-  const STYLE_ID='style-planificacion-express-v51';
+  const STYLE_ID='style-planificacion-express-v59';
   const STORE_PREFIX='edugestion_plan_express_v1_';
   const LAPSOS=['1er Lapso','2do Lapso','3er Lapso'];
   let grade='';
@@ -17825,6 +17825,32 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const rec=current(),map=rec.selected||{},rows=topics();
     return rows.map((x,i)=>({x,i,key:itemKey(x),cfg:map[itemKey(x)]})).filter(r=>r.cfg?.selected);
   }
+  function pointsTotal(){
+    return Math.round(selectedEntries().reduce((s,r)=>s+(Number(r.cfg?.puntos)||0),0)*100)/100;
+  }
+  function pointsState(total){
+    const t=Number(total||0),diff=Math.round((20-t)*100)/100;
+    if(t===20)return {cls:'ok',label:'Plan completo',detail:'20 / 20 puntos'};
+    if(t<20)return {cls:'pending',label:`Faltan ${diff} pts`,detail:`${t} / 20 puntos`};
+    return {cls:'over',label:`Excede por ${Math.abs(diff)} pts`,detail:`${t} / 20 puntos`};
+  }
+  function refreshPointsSummary(){
+    const sel=selectedEntries();
+    let acumulado=0;
+    sel.forEach(r=>{
+      acumulado=Math.round((acumulado+(Number(r.cfg?.puntos)||0))*100)/100;
+      const cell=document.querySelector(`[data-cumulative="${CSS.escape(r.key)}"]`);
+      if(cell)cell.textContent=`${acumulado} pts`;
+    });
+    const total=pointsTotal(),state=pointsState(total);
+    const box=$('pex-points-summary');
+    if(box){
+      box.className=`pex-points-summary ${state.cls}`;
+      box.innerHTML=`<div><small>TOTAL ACUMULADO</small><strong>${esc(state.detail)}</strong></div><span>${esc(state.label)}</span>`;
+    }
+    const previewTotal=$('pex-live-total');
+    if(previewTotal)previewTotal.textContent=`${total} pts`;
+  }
   function autoPoints(n){
     if(!n)return [];
     const total=20,base=Math.floor(total/n),rem=total-base*n;
@@ -17840,11 +17866,30 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if(on)rec.selected[k]={...(rec.selected[k]||{}),selected:true,puntos:Number(rec.selected[k]?.puntos)||0,fecha:rec.selected[k]?.fecha||''};
     else delete rec.selected[k];
     saveCurrent(rec);
-    const sel=selectedEntries();if(sel.length&&!sel.some(r=>Number(r.cfg?.puntos)>0))redistribute();else{renderSelected();renderPreview();}
+    renderSelected();
+    renderPreview();
     renderTopics();
   }
   function updateCfg(k,field,value){
-    const rec=current();rec.selected=rec.selected||{};rec.selected[k]={...(rec.selected[k]||{}),selected:true,[field]:field==='puntos'?Number(value||0):value};saveCurrent(rec);renderSelected(false);renderPreview();
+    const rec=current();rec.selected=rec.selected||{};
+    let v=value;
+    if(field==='puntos'){
+      v=Number(value||0);
+      if(!Number.isFinite(v))v=0;
+      v=Math.max(0,Math.min(20,v));
+    }
+    rec.selected[k]={...(rec.selected[k]||{}),selected:true,[field]:v};
+    saveCurrent(rec);
+    refreshPointsSummary();
+    renderPreview();
+  }
+  function saveExpress(){
+    const sel=selectedEntries();
+    if(!sel.length){toast('Selecciona al menos un tema antes de guardar.','warning');return;}
+    saveCurrent(current());
+    refreshPointsSummary();
+    const total=pointsTotal(),state=pointsState(total);
+    toast(`Planificación Express guardada. Total acumulado: ${total} puntos. ${state.label}.`, total===20?'success':'warning');
   }
   function clearSelection(){const rec=current();rec.selected={};saveCurrent(rec);renderAll();toast('Selección Express limpiada.','success')}
 
@@ -17885,7 +17930,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       .pex-controls{display:grid;grid-template-columns:1.2fr 1fr 1.5fr;gap:12px}.pex-field{display:flex;flex-direction:column;gap:6px}.pex-field label{font-size:.76rem;font-weight:900;text-transform:uppercase;color:#64788c}.pex-field select,.pex-field input{min-height:44px;border:1px solid #cad8e5;border-radius:11px;padding:9px 11px;font:inherit;background:var(--card-bg,#fff);color:var(--text-color,#253a4e)}
       .pex-topbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}.pex-btn{border:0;border-radius:11px;padding:10px 13px;font-weight:900;cursor:pointer}.pex-btn.primary{background:#2757d7;color:#fff}.pex-btn.green{background:#16805d;color:#fff}.pex-btn.soft{background:#edf4fa;color:#195d85}.pex-btn.danger{background:#fff0f0;color:#b42318}.pex-btn.active{box-shadow:0 0 0 3px #c9dcff inset}.pex-status{margin-left:auto;font-size:.82rem;color:#5f7488;font-weight:750}
       .pex-topic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:480px;overflow:auto;padding-right:3px}.pex-topic{display:grid;grid-template-columns:auto 1fr;gap:10px;border:1px solid #dbe5ed;border-radius:14px;padding:12px;background:var(--card-bg,#fff)}.pex-topic input{width:18px;height:18px;margin-top:3px}.pex-topic h4{margin:0;color:var(--text-color,#22384b);font-size:.95rem}.pex-topic p{margin:5px 0 0;color:#6c8194;font-size:.8rem;line-height:1.35}.pex-chip{display:inline-block;margin-top:6px;background:#eff4f8;border-radius:999px;padding:4px 7px;font-size:.72rem;font-weight:800;color:#5d7082}
-      .pex-selected{overflow:auto}.pex-selected table,.pex-preview table{width:100%;border-collapse:collapse;table-layout:fixed}.pex-selected th,.pex-selected td{border-bottom:1px solid #e3ebf2;padding:8px;text-align:left;vertical-align:middle}.pex-selected th{font-size:.74rem;text-transform:uppercase;color:#61768a}.pex-selected input{width:100%;min-height:38px;border:1px solid #d1dde7;border-radius:9px;padding:7px 8px;font:inherit}.pex-selected input[type=number]{max-width:90px}.pex-total{display:flex;justify-content:flex-end;gap:8px;font-weight:900;margin-top:10px;color:#173c62}.pex-empty{text-align:center;color:#718599;padding:24px;border:1px dashed #c4d2df;border-radius:14px}
+      .pex-selected{overflow:auto}.pex-selected table,.pex-preview table{width:100%;border-collapse:collapse;table-layout:fixed}.pex-selected th,.pex-selected td{border-bottom:1px solid #e3ebf2;padding:8px;text-align:left;vertical-align:middle}.pex-selected th{font-size:.74rem;text-transform:uppercase;color:#61768a}.pex-selected input{width:100%;min-height:38px;border:1px solid #d1dde7;border-radius:9px;padding:7px 8px;font:inherit}.pex-selected input[type=number]{max-width:90px}.pex-cumulative{font-weight:900;color:#225b87;text-align:center!important;white-space:nowrap}.pex-helper{display:flex;gap:9px;align-items:flex-start;background:#f3f8fd;color:#345b7c;border-radius:11px;padding:10px 12px;margin-bottom:10px;font-size:.82rem;line-height:1.4}.pex-points-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:12px;padding:12px 14px;border-radius:13px;border:1px solid #d5e2ec}.pex-points-summary div{display:flex;flex-direction:column;gap:2px}.pex-points-summary small{font-size:.7rem;font-weight:900;letter-spacing:.07em}.pex-points-summary strong{font-size:1.15rem}.pex-points-summary>span{font-weight:900}.pex-points-summary.ok{background:#eafaf2;border-color:#93dfb7;color:#116a45}.pex-points-summary.pending{background:#fff8e7;border-color:#f1d184;color:#925f00}.pex-points-summary.over{background:#fff0f0;border-color:#efb0b0;color:#a7261d}.pex-total{display:flex;justify-content:flex-end;gap:8px;font-weight:900;margin-top:10px;color:#173c62}.pex-empty{text-align:center;color:#718599;padding:24px;border:1px dashed #c4d2df;border-radius:14px}
       .pex-view-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}.pex-preview{overflow:auto;border:1px solid #d4e0e9;border-radius:15px;background:#fff}.pex-preview-head{padding:13px 15px;border-bottom:1px solid #d9e4ed;display:flex;justify-content:space-between;gap:10px;align-items:center}.pex-preview-head h3{margin:0;color:#20384d}.pex-preview-body{padding:13px;min-width:980px}.pex-preview th,.pex-preview td{border:1px solid #9eabb7;padding:6px;vertical-align:top;font-size:10.5px;line-height:1.35}.pex-preview th{background:#edf2f6;text-align:center;font-weight:900}.pex-center{text-align:center!important}.pex-note{padding:9px 11px;background:#eff9f5;color:#246b51;border-radius:10px;font-size:.82rem;margin-top:10px}
       .dark-mode .pex-preview{background:#fff;color:#111}.dark-mode .pex-topic,.dark-mode .pex-card{border-color:#34495e}.dark-mode .pex-topic p{color:#aab8c5}
       @media(max-width:850px){.pex-controls{grid-template-columns:1fr}.pex-topic-grid{grid-template-columns:1fr}.pex-status{width:100%;margin-left:0}.pex-view-actions .pex-btn{flex:1 1 180px}}
@@ -17899,8 +17944,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const ref=$('tab-panel-lapsos-ef')||$('tab-planificacion');if(ref?.parentElement===nav)nav.insertBefore(tab,ref);else nav.appendChild(tab);
     const sec=document.createElement('section');sec.id=SECTION_ID;sec.className='hidden';sec.innerHTML=`
       <header class="pex-hero"><small><i class="fa-solid fa-bolt"></i> Ruta rápida para el docente</small><h2>Planificación Express</h2><p>Selecciona los temas directamente del cuadernillo, coloca los puntos y la fecha si la conoces. EduGestión arma de inmediato dos vistas usando la misma información: <b>Cuadro de Control de Estudio</b> y <b>Plan de Evaluación para los alumnos</b>. Esta opción funciona aparte de la planificación detallada.</p></header>
-      <div class="pex-card"><div class="pex-step"><span>1</span><h3>Selecciona año, lapso y temas</h3></div><div class="pex-controls"><div class="pex-field"><label>Grado / Año</label><select id="pex-grade"></select></div><div class="pex-field"><label>Lapso</label><select id="pex-lapso">${LAPSOS.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="pex-field"><label>Buscar en el cuadernillo</label><input id="pex-search" placeholder="Escribe una palabra del tema..."></div></div><div class="pex-topbar"><button class="pex-btn soft" id="pex-all"><i class="fa-solid fa-check-double"></i> Seleccionar visibles</button><button class="pex-btn soft" id="pex-distribute"><i class="fa-solid fa-calculator"></i> Distribuir 20 puntos</button><button class="pex-btn danger" id="pex-clear"><i class="fa-solid fa-trash-can"></i> Limpiar</button><span class="pex-status" id="pex-status">Guardado automático</span></div><div class="pex-topic-grid" id="pex-topics"></div></div>
-      <div class="pex-card"><div class="pex-step"><span>2</span><h3>Puntos y fecha de evaluación</h3></div><div class="pex-selected" id="pex-selected"></div></div>
+      <div class="pex-card"><div class="pex-step"><span>1</span><h3>Selecciona año, lapso y temas</h3></div><div class="pex-controls"><div class="pex-field"><label>Grado / Año</label><select id="pex-grade"></select></div><div class="pex-field"><label>Lapso</label><select id="pex-lapso">${LAPSOS.map(x=>`<option>${x}</option>`).join('')}</select></div><div class="pex-field"><label>Buscar en el cuadernillo</label><input id="pex-search" placeholder="Escribe una palabra del tema..."></div></div><div class="pex-topbar"><button class="pex-btn soft" id="pex-all"><i class="fa-solid fa-check-double"></i> Seleccionar visibles</button><button class="pex-btn soft" id="pex-distribute"><i class="fa-solid fa-calculator"></i> Distribuir 20 puntos</button><button class="pex-btn green" id="pex-save"><i class="fa-solid fa-floppy-disk"></i> Guardar planificación</button><button class="pex-btn danger" id="pex-clear"><i class="fa-solid fa-trash-can"></i> Limpiar</button><span class="pex-status" id="pex-status">Guardado automático activo</span></div><div class="pex-topic-grid" id="pex-topics"></div></div>
+      <div class="pex-card"><div class="pex-step"><span>2</span><h3>Configura cada evaluación: puntos y fecha</h3></div><div class="pex-selected" id="pex-selected"></div></div>
       <div class="pex-card"><div class="pex-step"><span>3</span><h3>Revisa el documento que necesitas</h3></div><div class="pex-view-actions"><button class="pex-btn primary active" id="pex-view-control"><i class="fa-solid fa-table-columns"></i> Ver cuadro de Control</button><button class="pex-btn green" id="pex-view-eval"><i class="fa-solid fa-list-check"></i> Ver Plan de Evaluación</button><button class="pex-btn soft" id="pex-print"><i class="fa-solid fa-print"></i> Imprimir vista actual</button></div><div class="pex-preview" id="pex-preview"></div></div>`;
     main.appendChild(sec);
     tab.addEventListener('click',()=>open(tab,sec));
@@ -17910,6 +17955,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     $('pex-search').addEventListener('input',e=>{search=norm(e.target.value);renderTopics()});
     $('pex-all').addEventListener('click',selectVisible);
     $('pex-distribute').addEventListener('click',redistribute);
+    $('pex-save').addEventListener('click',saveExpress);
     $('pex-clear').addEventListener('click',clearSelection);
     $('pex-view-control').addEventListener('click',()=>{activeView='control';syncViewButtons();renderPreview()});
     $('pex-view-eval').addEventListener('click',()=>{activeView='eval';syncViewButtons();renderPreview()});
@@ -17919,11 +17965,25 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function open(tab,sec){document.querySelectorAll('.app-sidebar .nav-item,#app-nav .nav-item').forEach(x=>{x.classList.remove('is-active');x.setAttribute('aria-selected','false')});document.querySelectorAll('#app-main > section').forEach(x=>x.classList.add('hidden'));tab.classList.add('is-active');tab.setAttribute('aria-selected','true');sec.classList.remove('hidden');const t=$('page-title'),d=$('page-description');if(t)t.textContent=tab.dataset.title;if(d)d.textContent=tab.dataset.description;window.scrollTo({top:0,behavior:'smooth'});renderAll()}
   function filtered(){const rows=topics();if(!search)return rows;return rows.filter(x=>norm(`${x.tema||''} ${x.descripcion||''} ${x.tejido||''} ${x.referentes||''}`).includes(search))}
   function renderTopics(){const host=$('pex-topics');if(!host)return;const rec=current(),rows=filtered();if(!rows.length){host.innerHTML='<div class="pex-empty" style="grid-column:1/-1">No hay coincidencias con esa búsqueda.</div>';return}host.innerHTML=rows.map((x,i)=>{const k=itemKey(x),on=!!rec.selected?.[k]?.selected,desc=x.descripcion||x.tejido||x.referentes||'';return `<label class="pex-topic"><input type="checkbox" data-topic="${i}" ${on?'checked':''}><div><h4>${esc(x.tema||'Contenido')}</h4><p>${esc(String(desc).slice(0,150))}${String(desc).length>150?'…':''}</p><span class="pex-chip">${esc(grade)}${x.pagina?` · p. ${esc(x.pagina)}`:''}</span></div></label>`}).join('');host.querySelectorAll('[data-topic]').forEach(cb=>cb.addEventListener('change',()=>toggleTopic(rows[Number(cb.dataset.topic)],cb.checked)))}
-  function selectVisible(){const rec=current();rec.selected=rec.selected||{};filtered().forEach(x=>{const k=itemKey(x);rec.selected[k]={...(rec.selected[k]||{}),selected:true,puntos:Number(rec.selected[k]?.puntos)||0,fecha:rec.selected[k]?.fecha||''}});saveCurrent(rec);redistribute();renderTopics();toast('Temas visibles seleccionados.','success')}
-  function renderSelected(bind=true){const host=$('pex-selected');if(!host)return;const sel=selectedEntries();if(!sel.length){host.innerHTML='<div class="pex-empty"><i class="fa-solid fa-bolt"></i><p>Selecciona uno o varios temas arriba. Aquí aparecerán los puntos y la fecha para cada uno.</p></div>';return}const total=sel.reduce((s,r)=>s+(Number(r.cfg?.puntos)||0),0);host.innerHTML=`<table><thead><tr><th>Tema seleccionado</th><th style="width:110px">Puntos</th><th style="width:170px">Fecha</th><th style="width:48px"></th></tr></thead><tbody>${sel.map((r,i)=>`<tr><td><b>${esc(r.x.tema)}</b><div style="font-size:.76rem;color:#718599">${esc(grade)}${r.x.pagina?` · p. ${esc(r.x.pagina)}`:''}</div></td><td><input type="number" min="0" max="20" step="0.5" data-points="${esc(r.key)}" value="${esc(r.cfg?.puntos||'')}"></td><td><input type="date" data-date="${esc(r.key)}" value="${esc(r.cfg?.fecha||'')}"></td><td><button class="pex-btn danger" style="padding:8px 10px" data-remove="${esc(r.key)}" title="Quitar"><i class="fa-solid fa-xmark"></i></button></td></tr>`).join('')}</tbody></table><div class="pex-total"><span>Total seleccionado:</span><span>${total} puntos</span></div><div class="pex-note">Los puntos y fechas que escribas aquí se usan exactamente igual en el Cuadro de Control y en el Plan de Evaluación.</div>`;
-    if(!bind)return;host.querySelectorAll('[data-points]').forEach(el=>el.addEventListener('input',()=>updateCfg(el.dataset.points,'puntos',el.value)));host.querySelectorAll('[data-date]').forEach(el=>el.addEventListener('change',()=>updateCfg(el.dataset.date,'fecha',el.value)));host.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{const rec=current();delete rec.selected?.[b.dataset.remove];saveCurrent(rec);renderAll()}))}
+  function selectVisible(){const rec=current();rec.selected=rec.selected||{};filtered().forEach(x=>{const k=itemKey(x);rec.selected[k]={...(rec.selected[k]||{}),selected:true,puntos:Number(rec.selected[k]?.puntos)||0,fecha:rec.selected[k]?.fecha||''}});saveCurrent(rec);renderSelected();renderPreview();renderTopics();toast('Temas visibles seleccionados. Ahora coloca los puntos y la fecha de cada evaluación.','success')}
+  function renderSelected(bind=true){
+    const host=$('pex-selected');if(!host)return;
+    const sel=selectedEntries();
+    if(!sel.length){host.innerHTML='<div class="pex-empty"><i class="fa-solid fa-bolt"></i><p>Selecciona uno o varios temas arriba. Aquí podrás colocar <b>los puntos y la fecha de evaluación de cada tema</b>.</p></div>';return}
+    let acumulado=0;
+    const rows=sel.map((r,i)=>{
+      acumulado=Math.round((acumulado+(Number(r.cfg?.puntos)||0))*100)/100;
+      return `<tr><td><b>${esc(r.x.tema)}</b><div style="font-size:.76rem;color:#718599">${esc(grade)}${r.x.pagina?` · p. ${esc(r.x.pagina)}`:''}</div></td><td><input type="number" min="0" max="20" step="0.5" data-points="${esc(r.key)}" value="${esc(r.cfg?.puntos||'')}" placeholder="Ej. 3"></td><td class="pex-cumulative" data-cumulative="${esc(r.key)}">${acumulado} pts</td><td><input type="date" data-date="${esc(r.key)}" value="${esc(r.cfg?.fecha||'')}"></td><td><button class="pex-btn danger" style="padding:8px 10px" data-remove="${esc(r.key)}" title="Quitar"><i class="fa-solid fa-xmark"></i></button></td></tr>`;
+    }).join('');
+    const total=pointsTotal(),state=pointsState(total);
+    host.innerHTML=`<div class="pex-helper"><i class="fa-solid fa-circle-info"></i><span>Escribe los puntos de cada tema. El acumulado se actualiza inmediatamente y al final podrás comprobar si llegaste a los <b>20 puntos del lapso</b>.</span></div><table><thead><tr><th>Tema seleccionado</th><th style="width:105px">Puntos</th><th style="width:120px">Acumulado</th><th style="width:180px">Fecha de evaluación</th><th style="width:48px"></th></tr></thead><tbody>${rows}</tbody></table><div id="pex-points-summary" class="pex-points-summary ${state.cls}"><div><small>TOTAL ACUMULADO</small><strong>${esc(state.detail)}</strong></div><span>${esc(state.label)}</span></div><div class="pex-note">Los puntos y las fechas se guardan automáticamente y se reflejan en las dos vistas: <b>Cuadro de Control de Estudio</b> y <b>Plan de Evaluación</b>.</div>`;
+    if(!bind)return;
+    host.querySelectorAll('[data-points]').forEach(el=>el.addEventListener('input',()=>updateCfg(el.dataset.points,'puntos',el.value)));
+    host.querySelectorAll('[data-date]').forEach(el=>el.addEventListener('change',()=>updateCfg(el.dataset.date,'fecha',el.value)));
+    host.querySelectorAll('[data-remove]').forEach(b=>b.addEventListener('click',()=>{const rec=current();delete rec.selected?.[b.dataset.remove];saveCurrent(rec);renderAll()}));
+  }
   function syncViewButtons(){$('pex-view-control')?.classList.toggle('active',activeView==='control');$('pex-view-eval')?.classList.toggle('active',activeView==='eval')}
-  function renderPreview(){const host=$('pex-preview');if(!host)return;const sel=selectedEntries();if(!sel.length){host.innerHTML='<div class="pex-empty" style="margin:14px">Selecciona temas para generar la vista.</div>';return}const total=sel.reduce((s,r)=>s+(Number(r.cfg?.puntos)||0),0),doc=window.profesorActual?.nombre||'Docente',area=materia();if(activeView==='control'){host.innerHTML=`<div class="pex-preview-head"><h3>Vista Express · Cuadro de Control de Estudio</h3><span>${esc(grade)} · ${esc(lapso)} · ${total} pts</span></div><div class="pex-preview-body"><div style="text-align:center;margin-bottom:9px"><b>PLANIFICACIÓN EDUCACIÓN MEDIA</b><br><span style="font-size:11px">Docente: ${esc(doc)} · Área: ${esc(area)} · ${esc(grade)} · ${esc(lapso)}</span></div><table><thead><tr><th>Tema indispensable</th><th>Tema generador</th><th>Referente teórico-práctico</th><th>Potencialidades</th><th>Actividades</th><th>Énfasis curricular</th><th>Intencionalidades pedagógicas</th><th>Fecha</th><th>Puntos</th></tr></thead><tbody>${sel.map(controlRow).join('')}</tbody></table><div class="pex-note">Esta es una vista rápida generada directamente con los temas del cuadernillo. Puedes volver arriba y cambiar puntos o fechas; ambas vistas se actualizan automáticamente.</div></div>`}else{host.innerHTML=`<div class="pex-preview-head"><h3>Vista Express · Plan de Evaluación para los alumnos</h3><span>Total: ${total} pts</span></div><div class="pex-preview-body"><div style="text-align:center;margin-bottom:9px"><b>PLAN DE EVALUACIÓN</b><br><span style="font-size:11px">Docente: ${esc(doc)} · Área: ${esc(area)} · ${esc(grade)} · ${esc(lapso)}</span></div><table><thead><tr><th style="width:4%">N°</th><th style="width:25%">Actividad / contenido evaluado</th><th>Cómo se evaluará</th><th style="width:12%">Espacio</th><th style="width:8%">Puntos</th><th style="width:13%">Fecha</th></tr></thead><tbody>${sel.map(evalRow).join('')}<tr><td colspan="4" style="text-align:right;font-weight:900">TOTAL</td><td class="pex-center"><b>${total} pts</b></td><td></td></tr></tbody></table><div class="pex-note">El docente puede usar esta propuesta tal cual o continuar luego en el módulo completo de Plan de Evaluación si desea ampliar técnicas, instrumentos o fechas por sección.</div></div>`}}
+  function renderPreview(){const host=$('pex-preview');if(!host)return;const sel=selectedEntries();if(!sel.length){host.innerHTML='<div class="pex-empty" style="margin:14px">Selecciona temas para generar la vista.</div>';return}const total=sel.reduce((s,r)=>s+(Number(r.cfg?.puntos)||0),0),doc=window.profesorActual?.nombre||'Docente',area=materia();if(activeView==='control'){host.innerHTML=`<div class="pex-preview-head"><h3>Vista Express · Cuadro de Control de Estudio</h3><span>${esc(grade)} · ${esc(lapso)} · <b id="pex-live-total">${total} pts</b></span></div><div class="pex-preview-body"><div style="text-align:center;margin-bottom:9px"><b>PLANIFICACIÓN EDUCACIÓN MEDIA</b><br><span style="font-size:11px">Docente: ${esc(doc)} · Área: ${esc(area)} · ${esc(grade)} · ${esc(lapso)}</span></div><table><thead><tr><th>Tema indispensable</th><th>Tema generador</th><th>Referente teórico-práctico</th><th>Potencialidades</th><th>Actividades</th><th>Énfasis curricular</th><th>Intencionalidades pedagógicas</th><th>Fecha</th><th>Puntos</th></tr></thead><tbody>${sel.map(controlRow).join('')}</tbody></table><div class="pex-note">Esta es una vista rápida generada directamente con los temas del cuadernillo. Puedes volver arriba y cambiar puntos o fechas; ambas vistas se actualizan automáticamente.</div></div>`}else{host.innerHTML=`<div class="pex-preview-head"><h3>Vista Express · Plan de Evaluación para los alumnos</h3><span>Total: <b id="pex-live-total">${total} pts</b></span></div><div class="pex-preview-body"><div style="text-align:center;margin-bottom:9px"><b>PLAN DE EVALUACIÓN</b><br><span style="font-size:11px">Docente: ${esc(doc)} · Área: ${esc(area)} · ${esc(grade)} · ${esc(lapso)}</span></div><table><thead><tr><th style="width:4%">N°</th><th style="width:25%">Actividad / contenido evaluado</th><th>Cómo se evaluará</th><th style="width:12%">Espacio</th><th style="width:8%">Puntos</th><th style="width:13%">Fecha</th></tr></thead><tbody>${sel.map(evalRow).join('')}<tr><td colspan="4" style="text-align:right;font-weight:900">TOTAL</td><td class="pex-center"><b>${total} pts</b></td><td></td></tr></tbody></table><div class="pex-note">El docente puede usar esta propuesta tal cual o continuar luego en el módulo completo de Plan de Evaluación si desea ampliar técnicas, instrumentos o fechas por sección.</div></div>`}}
   function renderAll(){const gs=$('pex-grade');if(gs&&!grades().includes(grade)){grade=grades()[0]||'';gs.innerHTML=grades().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');gs.value=grade}else if(gs)gs.value=grade;const lp=$('pex-lapso');if(lp)lp.value=lapso;renderTopics();renderSelected();syncViewButtons();renderPreview()}
 
   function init(){try{return create()}catch(e){console.warn('EduGestión Planificación Express:',e);return false}}
@@ -17931,7 +17991,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('edugestion:session',()=>setTimeout(()=>{if($(SECTION_ID))renderAll();else init()},300));
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{if($(SECTION_ID)){const gs=$('pex-grade');if(gs){gs.innerHTML=grades().map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');if(!grades().includes(grade))grade=grades()[0]||'';gs.value=grade}renderAll()}else init()},150));
 })();
-/* EDUGESTION_PLANIFICACION_EXPRESS_V51_END */
+/* EDUGESTION_PLANIFICACION_EXPRESS_V59_END */
 
 
 /* ================================================================
