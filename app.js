@@ -19091,3 +19091,416 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,300),{once:true});else setTimeout(init,150);
 })();
+
+
+/* ================================================================
+   EduGestión · GESTIÓN INTEGRAL DE EVALUACIONES Y NOTAS · V6.6
+   Planificación → Entrega → Nota → Alertas → Representante
+   ================================================================ */
+(() => {
+  const MARK='EDUGESTION_EVALUACIONES_INTEGRALES_V66';
+  if(window[MARK]) return;
+  window[MARK]=true;
+
+  const TAB_ID='tab-evaluaciones-integrales';
+  const SECTION_ID='section-evaluaciones-integrales';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+
+  let data=null;
+  let actividadActual='';
+  let vista='actividad';
+  let cursos=[];
+  let studentActual='';
+
+  function esInstitucional(){
+    const rol=String(window.profesorActual?.rol||'').toLowerCase();
+    return rol==='director'||rol==='control_estudio';
+  }
+
+  function api(action,payload={}){
+    if(typeof window.EDUGESTION_API_REQUEST==='function') return window.EDUGESTION_API_REQUEST(action,payload);
+    if(typeof apiRequest==='function') return apiRequest(action,payload);
+    return Promise.reject(new Error('La conexión con EduGestión no está disponible.'));
+  }
+
+  function activar(){
+    const tab=$(TAB_ID),sec=$(SECTION_ID);
+    if(!tab||!sec)return;
+    document.querySelectorAll('#app-nav .nav-item').forEach(x=>{
+      x.classList.toggle('is-active',x===tab);
+      x.setAttribute('aria-selected',x===tab?'true':'false');
+    });
+    document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==sec));
+    const title=$('page-title'),desc=$('page-description');
+    if(title)title.textContent='Evaluaciones y Notas';
+    if(desc)desc.textContent='Planificación, entregas, calificaciones y seguimiento académico en un solo lugar.';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function crearUI(){
+    const nav=$('app-nav')||document.querySelector('.app-sidebar nav');
+    const main=$('app-main')||document.querySelector('main');
+    if(!nav||!main)return;
+
+    let tab=$(TAB_ID);
+    if(!tab){
+      tab=document.createElement('button');
+      tab.id=TAB_ID;tab.type='button';tab.className='nav-item';tab.setAttribute('aria-selected','false');
+      tab.dataset.title='Evaluaciones y Notas';
+      tab.dataset.description='Registro de entregas, notas, alertas y seguimiento por estudiante.';
+      tab.innerHTML='<i class="fa-solid fa-graduation-cap"></i><span>Evaluaciones y Notas</span><em id="eval-v66-nav-alert" class="eval-v66-nav-alert hidden">0</em>';
+      const ref=$('tab-actas')||$('tab-registro');
+      nav.insertBefore(tab,ref||null);
+      tab.addEventListener('click',abrir);
+    }
+
+    let sec=$(SECTION_ID);
+    if(!sec){
+      sec=document.createElement('section');
+      sec.id=SECTION_ID;sec.className='hidden eval-v66-shell';
+      sec.innerHTML=`
+        <header class="eval-v66-hero">
+          <div>
+            <span><i class="fa-solid fa-link"></i> Expediente académico conectado</span>
+            <h2>Evaluaciones, entregas y notas</h2>
+            <p>Las actividades nacen de tu planificación y continúan aquí hasta la calificación y el seguimiento del representante.</p>
+          </div>
+          <div class="eval-v66-flow">
+            <span>Planificación</span><i class="fa-solid fa-arrow-right"></i><span>Entrega</span><i class="fa-solid fa-arrow-right"></i><span>Nota</span><i class="fa-solid fa-arrow-right"></i><span>Seguimiento</span>
+          </div>
+        </header>
+
+        <section class="eval-v66-filters">
+          <label><span>Lapso</span><select id="eval-v66-lapso"><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select></label>
+          <label><span>Sección</span><select id="eval-v66-course"><option value="">Selecciona una sección</option></select></label>
+          <button type="button" id="eval-v66-load"><i class="fa-solid fa-rotate"></i> Cargar registro</button>
+        </section>
+
+        <section class="eval-v66-summary">
+          <article><i class="fa-solid fa-clipboard-list"></i><div><strong id="eval-v66-total-act">0</strong><small>Actividades planificadas</small></div></article>
+          <article><i class="fa-solid fa-check-double"></i><div><strong id="eval-v66-delivered">0</strong><small>Entregas registradas</small></div></article>
+          <article><i class="fa-solid fa-circle-xmark"></i><div><strong id="eval-v66-missing">0</strong><small>No entregadas</small></div></article>
+          <article class="is-alert"><i class="fa-solid fa-bell"></i><div><strong id="eval-v66-alerts">0</strong><small>Alertas de representante</small></div></article>
+        </section>
+
+        <section class="eval-v66-work">
+          <aside class="eval-v66-sidebar">
+            <div class="eval-v66-sidebar-head"><span>Actividades</span><strong>Plan de evaluación</strong></div>
+            <div id="eval-v66-activities" class="eval-v66-activities"><div class="eval-v66-empty">Carga una sección.</div></div>
+          </aside>
+          <main class="eval-v66-main">
+            <div class="eval-v66-tabs">
+              <button type="button" data-eval-v66-view="actividad" class="is-active"><i class="fa-solid fa-list-check"></i> Por actividad</button>
+              <button type="button" data-eval-v66-view="alumno"><i class="fa-solid fa-user-graduate"></i> Por alumno</button>
+              <button type="button" data-eval-v66-view="seccion"><i class="fa-solid fa-table"></i> Resumen de sección</button>
+              <button type="button" data-eval-v66-view="alertas"><i class="fa-solid fa-triangle-exclamation"></i> Alertas</button>
+            </div>
+            <div id="eval-v66-content"><div class="eval-v66-empty">Selecciona una sección para comenzar.</div></div>
+          </main>
+        </section>
+
+        <section id="eval-v66-followup" class="eval-v66-followup hidden">
+          <div class="eval-v66-followup-head">
+            <div><span>Seguimiento con representante</span><strong id="eval-v66-followup-student">Estudiante</strong></div>
+            <button type="button" id="eval-v66-followup-close"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="eval-v66-followup-grid">
+            <label><span>Tipo</span><select id="eval-v66-followup-type"><option value="LLAMADA_REPRESENTANTE">Llamada al representante</option><option value="SEGUIMIENTO">Seguimiento académico</option><option value="ORIENTACION">Remisión a Orientación</option><option value="ACTA">Acta / constancia</option></select></label>
+            <label><span>Medio</span><select id="eval-v66-followup-medium"><option>Teléfono</option><option>WhatsApp</option><option>Presencial</option><option>Correo</option><option>Otro</option></select></label>
+            <label><span>Representante</span><input id="eval-v66-followup-rep"></label>
+            <label><span>Fecha</span><input id="eval-v66-followup-date" type="date"></label>
+            <label class="is-wide"><span>Motivo</span><textarea id="eval-v66-followup-reason" rows="2"></textarea></label>
+            <label class="is-wide"><span>Compromiso acordado</span><textarea id="eval-v66-followup-commitment" rows="2" placeholder="Ej.: entregar actividades pendientes antes del viernes"></textarea></label>
+            <label class="is-wide"><span>Observación</span><textarea id="eval-v66-followup-note" rows="2"></textarea></label>
+          </div>
+          <div class="eval-v66-followup-actions">
+            <button type="button" id="eval-v66-followup-save"><i class="fa-solid fa-floppy-disk"></i> Guardar seguimiento</button>
+            <button type="button" id="eval-v66-followup-whatsapp"><i class="fa-brands fa-whatsapp"></i> Abrir WhatsApp</button>
+            <button type="button" id="eval-v66-followup-orientation"><i class="fa-solid fa-compass"></i> Orientación y Convivencia</button>
+          </div>
+          <div id="eval-v66-followup-history" class="eval-v66-followup-history"></div>
+        </section>`;
+      main.appendChild(sec);
+    }
+
+    tab.classList.toggle('role-hidden',!window.profesorActual||esInstitucional());
+    bindUI();
+  }
+
+  function bindUI(){
+    $('eval-v66-load')?.addEventListener('click',cargar);
+    $('eval-v66-lapso')?.addEventListener('change',cargar);
+    $('eval-v66-course')?.addEventListener('change',cargar);
+    document.querySelectorAll('[data-eval-v66-view]').forEach(b=>b.addEventListener('click',()=>{
+      vista=b.dataset.evalV66View;
+      document.querySelectorAll('[data-eval-v66-view]').forEach(x=>x.classList.toggle('is-active',x===b));
+      renderVista();
+    }));
+    $('eval-v66-followup-close')?.addEventListener('click',()=> $('eval-v66-followup')?.classList.add('hidden'));
+    $('eval-v66-followup-save')?.addEventListener('click',guardarSeguimiento);
+    $('eval-v66-followup-whatsapp')?.addEventListener('click',abrirWhatsApp);
+    $('eval-v66-followup-orientation')?.addEventListener('click',()=>document.getElementById('tab-orientacion-convivencia')?.click());
+  }
+
+  function cursosDisponibles(){
+    const map=new Map();
+    const add=(ano,seccion,turno)=>{
+      ano=String(ano||'').trim();seccion=String(seccion||'').trim().toUpperCase();turno=turnoAsistencia?turnoAsistencia(turno||''):String(turno||'');
+      if(!ano||!seccion)return;
+      const key=[ano,seccion,turno||'Manana'].join('|');
+      if(!map.has(key))map.set(key,{ano,seccion,turno:turno||'Manana'});
+    };
+    (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>add(h.ano,h.seccion,h.turno));
+    (Array.isArray(planesProfesor)?planesProfesor:[]).forEach(p=>{
+      const h=(horariosProfesor||[]).find(x=>String(x.ano)===String(p.ano)&&String(x.seccion).toUpperCase()===String(p.seccion).toUpperCase());
+      add(p.ano,p.seccion,h?.turno||selectFiltroTurno?.value||'Manana');
+    });
+    return [...map.values()].sort((a,b)=>String(a.ano).localeCompare(String(b.ano),'es')||a.seccion.localeCompare(b.seccion,'es'));
+  }
+
+  function cargarCursos(){
+    cursos=cursosDisponibles();
+    const sel=$('eval-v66-course');if(!sel)return;
+    const old=sel.value;
+    sel.innerHTML='<option value="">-- Selecciona una sección --</option>'+cursos.map(c=>`<option value="${esc([c.ano,c.seccion,c.turno].join('|'))}">${esc(c.ano)} · Sección ${esc(c.seccion)} · ${esc(c.turno==='Manana'?'Mañana':c.turno)}</option>`).join('');
+    if(cursos.some(c=>[c.ano,c.seccion,c.turno].join('|')===old))sel.value=old;
+    else if(cursos.length)sel.value=[cursos[0].ano,cursos[0].seccion,cursos[0].turno].join('|');
+  }
+
+  async function abrir(){
+    activar();cargarCursos();
+    if($('eval-v66-course')?.value) await cargar();
+  }
+
+  function contexto(){
+    const parts=String($('eval-v66-course')?.value||'').split('|');
+    return {ano:parts[0]||'',seccion:parts[1]||'',turno:parts[2]||'',lapso:$('eval-v66-lapso')?.value||'1er Lapso'};
+  }
+
+  async function cargar(){
+    const c=contexto();
+    if(!c.ano||!c.seccion)return;
+    const host=$('eval-v66-content');if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente académico…</div>';
+    try{
+      data=await api('obtenerGestionEvaluaciones',c);
+      actividadActual=(data.actividades||[]).some(a=>a.id===actividadActual)?actividadActual:(data.actividades?.[0]?.id||'');
+      renderTodo();
+    }catch(e){
+      console.error(e);
+      if(host)host.innerHTML=`<div class="eval-v66-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar Evaluaciones y Notas.</strong><span>${esc(e?.message||'Actualiza el Code.gs de la V6.6 y vuelve a intentarlo.')}</span></div>`;
+    }
+  }
+
+  function renderTodo(){
+    renderSummary();renderActividades();renderVista();actualizarNavAlert();
+  }
+
+  function renderSummary(){
+    const r=data?.resumen||{};
+    const regs=Object.values(data?.registros||{});
+    const delivered=regs.filter(x=>['Entrego','Tardia'].includes(x.estadoEntrega)).length;
+    const missing=regs.filter(x=>x.estadoEntrega==='No entrego').length;
+    $('eval-v66-total-act').textContent=String(r.totalActividades||0);
+    $('eval-v66-delivered').textContent=String(delivered);
+    $('eval-v66-missing').textContent=String(missing);
+    $('eval-v66-alerts').textContent=String(r.alertas||0);
+  }
+
+  function actualizarNavAlert(){
+    const badge=$('eval-v66-nav-alert'),n=Number(data?.resumen?.alertas||0);
+    if(!badge)return;badge.textContent=String(n);badge.classList.toggle('hidden',n<=0);
+  }
+
+  function renderActividades(){
+    const host=$('eval-v66-activities');if(!host)return;
+    const acts=data?.actividades||[];
+    if(!acts.length){
+      host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-calendar-plus"></i><strong>No hay actividades planificadas en este lapso.</strong><span>Créala primero en Planificación y aparecerá automáticamente aquí.</span><button id="eval-v66-open-plan" type="button">Ir a Planificación</button></div>';
+      host.querySelector('#eval-v66-open-plan')?.addEventListener('click',()=>tabPlanificacion?.click());
+      return;
+    }
+    host.innerHTML=acts.map((a,i)=>{
+      const regs=(data?.alumnos||[]).map(al=>data.registros?.[`${a.id}|${al.id}`]).filter(Boolean);
+      const no=regs.filter(r=>r.estadoEntrega==='No entrego').length;
+      const ent=regs.filter(r=>['Entrego','Tardia'].includes(r.estadoEntrega)).length;
+      return `<button type="button" class="eval-v66-activity ${a.id===actividadActual?'is-active':''}" data-v66-activity="${esc(a.id)}"><span class="eval-v66-activity__num">${i+1}</span><span><strong>${esc(a.nombre)}</strong><small>${esc(a.fecha||'Sin fecha')} · ${Number(a.puntos||0)} pts</small><em>${ent} entregas · ${no} sin entregar</em></span></button>`;
+    }).join('');
+    host.querySelectorAll('[data-v66-activity]').forEach(b=>b.addEventListener('click',()=>{
+      actividadActual=b.dataset.v66Activity;vista='actividad';
+      document.querySelectorAll('[data-eval-v66-view]').forEach(x=>x.classList.toggle('is-active',x.dataset.evalV66View==='actividad'));
+      renderActividades();renderVista();
+    }));
+  }
+
+  function estadoOptions(actual){
+    return ['Pendiente','Entrego','No entrego','Tardia','Justificada'].map(x=>`<option value="${x}" ${x===actual?'selected':''}>${x==='Entrego'?'Entregó':x==='No entrego'?'No entregó':x==='Tardia'?'Entrega tardía':x}</option>`).join('');
+  }
+
+  function badgeAsistencia(v){
+    if(!v)return '<span class="eval-v66-att is-empty">Sin registro</span>';
+    const cls=v==='Ausente'?'is-absent':v==='Tardanza'?'is-late':v==='Justificada'?'is-justified':'is-present';
+    return `<span class="eval-v66-att ${cls}">${esc(v)}</span>`;
+  }
+
+  function renderActividad(){
+    const host=$('eval-v66-content');if(!host)return;
+    const act=(data?.actividades||[]).find(a=>a.id===actividadActual);
+    if(!act){host.innerHTML='<div class="eval-v66-empty">Selecciona una actividad.</div>';return;}
+    const alumnos=data?.alumnos||[];
+    host.innerHTML=`
+      <div class="eval-v66-view-head"><div><span>Registro de actividad</span><h3>${esc(act.nombre)}</h3><p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b></p></div><button type="button" id="eval-v66-save-activity"><i class="fa-solid fa-cloud-arrow-up"></i> Guardar entregas y notas</button></div>
+      <div class="eval-v66-help"><i class="fa-solid fa-circle-info"></i> Entrega y nota son datos distintos. Puedes marcar <b>Entregó</b> y dejar la nota vacía hasta corregir la actividad.</div>
+      <div class="eval-v66-table-wrap"><table class="eval-v66-table"><thead><tr><th>N°</th><th>Estudiante</th><th>Asistencia ese día</th><th>Estado de entrega</th><th>Fecha real</th><th>Nota / ${Number(act.puntos||0)}</th><th>Observación</th></tr></thead><tbody>
+      ${alumnos.map((al,i)=>{
+        const r=data.registros?.[`${act.id}|${al.id}`]||{};
+        const estado=r.estadoEntrega||'Pendiente';
+        const asi=data.asistenciaPorActividad?.[act.id]?.[al.id]||'';
+        return `<tr data-v66-row="${esc(al.id)}"><td>${al.numeroLista||i+1}</td><td><strong>${esc(al.nombre)}</strong><small>${esc(al.cedula||'Sin C.I.')}</small></td><td>${badgeAsistencia(asi)}${asi==='Ausente'?'<small class="eval-v66-absent-note">Ausente el día de la evaluación</small>':''}</td><td><select data-v66-status>${estadoOptions(estado)}</select></td><td><input data-v66-date type="date" value="${esc(r.fechaEntrega||'')}"></td><td><input data-v66-grade type="number" min="0" max="${Number(act.puntos||0)}" step="0.01" value="${r.nota===''||r.nota==null?'':esc(r.nota)}" placeholder="—"></td><td><input data-v66-note value="${esc(r.observacion||'')}" placeholder="Observación opcional"></td></tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+    $('eval-v66-save-activity')?.addEventListener('click',guardarActividad);
+  }
+
+  async function guardarActividad(){
+    const act=(data?.actividades||[]).find(a=>a.id===actividadActual);if(!act)return;
+    const c=contexto(),rows=[...document.querySelectorAll('[data-v66-row]')];
+    const registros=rows.map(row=>({
+      idAlumno:row.dataset.v66Row,
+      estadoEntrega:row.querySelector('[data-v66-status]')?.value||'Pendiente',
+      fechaEntrega:row.querySelector('[data-v66-date]')?.value||'',
+      nota:row.querySelector('[data-v66-grade]')?.value??'',
+      observacion:row.querySelector('[data-v66-note]')?.value||''
+    }));
+    const btn=$('eval-v66-save-activity');if(btn){btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Guardando…';}
+    try{
+      await api('guardarRegistrosEvaluacion',{...c,idActividad:act.id,registros});
+      if(typeof mostrarToast==='function')mostrarToast('Entregas, notas y alertas fueron actualizadas.','success','Evaluación guardada');
+      await cargar();
+    }catch(e){
+      if(typeof mostrarToast==='function')mostrarToast(e?.message||'No se pudo guardar.','error','Error');
+    }finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Guardar entregas y notas';}}
+  }
+
+  function resumenAlumno(id){
+    return (data?.resumen?.estudiantes||[]).find(x=>String(x.idAlumno)===String(id));
+  }
+
+  function renderAlumno(){
+    const host=$('eval-v66-content');if(!host)return;
+    const alumnos=data?.alumnos||[];
+    if(!studentActual&&alumnos.length)studentActual=alumnos[0].id;
+    const al=alumnos.find(x=>String(x.id)===String(studentActual));
+    if(!al){host.innerHTML='<div class="eval-v66-empty">No hay estudiantes en esta sección.</div>';return;}
+    const r=resumenAlumno(al.id)||{};
+    const acts=data?.actividades||[];
+    host.innerHTML=`<div class="eval-v66-student-select"><label>Estudiante<select id="eval-v66-student-select">${alumnos.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(al.id)?'selected':''}>${x.numeroLista}. ${esc(x.nombre)}</option>`).join('')}</select></label></div>
+    <div class="eval-v66-student-hero"><div><span class="eval-v66-avatar">${esc((al.nombre||'E')[0])}</span><div><h3>${esc(al.nombre)}</h3><p>${esc(data.ano)} ${esc(data.seccion)} · ${esc(data.materia)}</p></div></div><span class="eval-v66-risk is-${String(r.alerta||'VERDE').toLowerCase()}">${r.alerta==='ROJA'?'Riesgo académico alto':r.alerta==='AMARILLA'?'Requiere seguimiento':'Sin alerta'}</span></div>
+    <div class="eval-v66-student-stats"><article><b>${r.entregadas||0}</b><small>Entregadas</small></article><article class="is-danger"><b>${r.noEntregadas||0}</b><small>No entregadas</small></article><article><b>${r.tardias||0}</b><small>Tardías</small></article><article><b>${r.puntosAcumulados||0}/${r.puntosPlanificados||0}</b><small>Puntos</small></article><article><b>${r.porcentajeAsistencia||0}%</b><small>Asistencia</small></article></div>
+    ${Number(r.noEntregadas||0)>=2?`<div class="eval-v66-callout"><i class="fa-solid fa-bell"></i><div><strong>Alerta: ${Number(r.noEntregadas)} actividades sin entregar</strong><span>Se recomienda realizar contacto con el representante y dejar registro del seguimiento.</span></div><button type="button" data-v66-follow="${esc(al.id)}">Contactar representante</button></div>`:''}
+    <div class="eval-v66-table-wrap"><table class="eval-v66-table"><thead><tr><th>Actividad</th><th>Fecha</th><th>Entrega</th><th>Nota</th><th>Asistencia</th></tr></thead><tbody>${acts.map(a=>{const reg=data.registros?.[`${a.id}|${al.id}`]||{};const asi=data.asistenciaPorActividad?.[a.id]?.[al.id]||'';return `<tr><td><strong>${esc(a.nombre)}</strong></td><td>${esc(a.fecha||'—')}</td><td>${esc(reg.estadoEntrega||'Pendiente')}</td><td>${reg.nota===''||reg.nota==null?'—':`${esc(reg.nota)}/${Number(a.puntos||0)}`}</td><td>${badgeAsistencia(asi)}</td></tr>`}).join('')}</tbody></table></div>`;
+    $('eval-v66-student-select')?.addEventListener('change',e=>{studentActual=e.target.value;renderAlumno();});
+    host.querySelector('[data-v66-follow]')?.addEventListener('click',()=>abrirSeguimiento(al.id));
+  }
+
+  function cellEstado(act,al){
+    const r=data.registros?.[`${act.id}|${al.id}`]||{};
+    const e=r.estadoEntrega||'Pendiente';
+    const letra=e==='Entrego'?'E':e==='No entrego'?'NE':e==='Tardia'?'T':e==='Justificada'?'J':'—';
+    const cls=e==='No entrego'?'is-no':e==='Entrego'?'is-ok':e==='Tardia'?'is-late':e==='Justificada'?'is-just':'';
+    return `<span class="eval-v66-matrix-cell ${cls}" title="${esc(e)}">${letra}${r.nota!==''&&r.nota!=null?` · ${esc(r.nota)}`:''}</span>`;
+  }
+
+  function renderSeccion(){
+    const host=$('eval-v66-content');if(!host)return;
+    const acts=data?.actividades||[],alumnos=data?.alumnos||[];
+    host.innerHTML=`<div class="eval-v66-view-head"><div><span>Resumen de sección</span><h3>${esc(data.ano)} · Sección ${esc(data.seccion)}</h3><p>Estado de todas las actividades y puntos acumulados.</p></div><button id="eval-v66-print-section" type="button"><i class="fa-solid fa-print"></i> Imprimir libro de notas</button></div>
+    <div class="eval-v66-table-wrap"><table class="eval-v66-table eval-v66-matrix"><thead><tr><th>N°</th><th>Estudiante</th>${acts.map((a,i)=>`<th title="${esc(a.nombre)}">A${i+1}<small>${Number(a.puntos||0)} pts</small></th>`).join('')}<th>Acumulado</th><th>No entregó</th><th>Alerta</th></tr></thead><tbody>${alumnos.map((al,i)=>{const r=resumenAlumno(al.id)||{};return `<tr><td>${al.numeroLista||i+1}</td><td><strong>${esc(al.nombre)}</strong></td>${acts.map(a=>`<td>${cellEstado(a,al)}</td>`).join('')}<td><b>${r.puntosAcumulados||0}/${r.puntosPlanificados||0}</b></td><td>${r.noEntregadas||0}</td><td><span class="eval-v66-risk is-${String(r.alerta||'VERDE').toLowerCase()}">${r.alerta||'VERDE'}</span></td></tr>`}).join('')}</tbody></table></div>
+    <div class="eval-v66-legend"><span><b>E</b> Entregó</span><span><b>NE</b> No entregó</span><span><b>T</b> Tardía</span><span><b>J</b> Justificada</span></div>`;
+    $('eval-v66-print-section')?.addEventListener('click',()=>window.print());
+  }
+
+  function renderAlertas(){
+    const host=$('eval-v66-content');if(!host)return;
+    const alerts=data?.alertas||[];
+    if(!alerts.length){host.innerHTML='<div class="eval-v66-empty is-success"><i class="fa-solid fa-circle-check"></i><strong>No hay estudiantes con 2 o más actividades sin entregar.</strong><span>El sistema seguirá revisando automáticamente al guardar cada actividad.</span></div>';return;}
+    host.innerHTML=`<div class="eval-v66-alert-head"><div><span>Alertas automáticas</span><h3>Estudiantes que requieren contacto con representante</h3></div><strong>${alerts.length}</strong></div>
+    <div class="eval-v66-alert-list">${alerts.map(a=>`<article class="eval-v66-alert-card ${a.noEntregadas>=3?'is-red':'is-yellow'}"><div class="eval-v66-alert-icon"><i class="fa-solid ${a.noEntregadas>=3?'fa-circle-exclamation':'fa-bell'}"></i></div><div class="eval-v66-alert-copy"><strong>${esc(a.alumno)}</strong><span>${a.noEntregadas} actividades sin entregar · ${a.puntosAcumulados}/${a.puntosPlanificados} pts · Asistencia ${a.porcentajeAsistencia}%</span><small>Representante: ${esc(a.representante||'No registrado')} ${a.telefonoRepresentante?`· ${esc(a.telefonoRepresentante)}`:''}</small></div><div class="eval-v66-alert-actions"><button type="button" data-v66-follow="${esc(a.idAlumno)}"><i class="fa-solid fa-phone"></i> Representante</button><button type="button" data-v66-acta="${esc(a.idAlumno)}"><i class="fa-solid fa-file-signature"></i> Acta</button><button type="button" data-v66-orient="${esc(a.idAlumno)}"><i class="fa-solid fa-compass"></i> Orientación</button></div></article>`).join('')}</div>`;
+    host.querySelectorAll('[data-v66-follow]').forEach(b=>b.addEventListener('click',()=>abrirSeguimiento(b.dataset.v66Follow)));
+    host.querySelectorAll('[data-v66-acta]').forEach(b=>b.addEventListener('click',()=>abrirActaAlumno(b.dataset.v66Acta)));
+    host.querySelectorAll('[data-v66-orient]').forEach(b=>b.addEventListener('click',()=>abrirOrientacionAlumno(b.dataset.v66Orient)));
+  }
+
+  function renderVista(){
+    if(!data)return;
+    if(vista==='alumno')renderAlumno();
+    else if(vista==='seccion')renderSeccion();
+    else if(vista==='alertas')renderAlertas();
+    else renderActividad();
+  }
+
+  async function abrirSeguimiento(id){
+    const r=resumenAlumno(id);if(!r)return;
+    studentActual=id;
+    $('eval-v66-followup').classList.remove('hidden');
+    $('eval-v66-followup-student').textContent=r.alumno;
+    $('eval-v66-followup-rep').value=r.representante||'';
+    $('eval-v66-followup-date').value=new Date().toISOString().slice(0,10);
+    $('eval-v66-followup-reason').value=`Seguimiento por ${r.noEntregadas} actividades sin entregar.`;
+    $('eval-v66-followup-commitment').value='';
+    $('eval-v66-followup-note').value=`Puntos acumulados: ${r.puntosAcumulados}/${r.puntosPlanificados}. Asistencia: ${r.porcentajeAsistencia}%.`;
+    await cargarHistorialSeguimiento(id);
+    $('eval-v66-followup').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+
+  async function cargarHistorialSeguimiento(id){
+    const host=$('eval-v66-followup-history');if(!host)return;
+    try{
+      const r=await api('obtenerSeguimientoAcademico',{...contexto(),idAlumno:id});
+      const items=r.seguimiento||[];
+      host.innerHTML=items.length?`<h4>Historial de seguimiento</h4>${items.map(x=>`<div class="eval-v66-followup-item"><strong>${esc(x.fecha)} · ${esc(x.tipo)}</strong><span>${esc(x.motivo||'')}</span><small>${esc(x.medio||'')} ${x.compromiso?`· Compromiso: ${esc(x.compromiso)}`:''}</small></div>`).join('')}`:'<div class="eval-v66-empty">No hay seguimientos previos.</div>';
+    }catch(e){host.innerHTML='<div class="eval-v66-empty">No se pudo cargar el historial.</div>';}
+  }
+
+  async function guardarSeguimiento(){
+    const r=resumenAlumno(studentActual);if(!r)return;
+    const payload={...contexto(),idAlumno:studentActual,tipo:$('eval-v66-followup-type').value,fecha:$('eval-v66-followup-date').value,motivo:$('eval-v66-followup-reason').value,medio:$('eval-v66-followup-medium').value,representante:$('eval-v66-followup-rep').value,compromiso:$('eval-v66-followup-commitment').value,observacion:$('eval-v66-followup-note').value};
+    try{
+      await api('registrarSeguimientoAcademico',payload);
+      if(typeof mostrarToast==='function')mostrarToast('El contacto y compromiso quedaron registrados.','success','Seguimiento guardado');
+      await cargarHistorialSeguimiento(studentActual);
+    }catch(e){if(typeof mostrarToast==='function')mostrarToast(e?.message||'No se pudo guardar.','error','Error');}
+  }
+
+  function abrirWhatsApp(){
+    const r=resumenAlumno(studentActual);if(!r)return;
+    const tel=String(r.telefonoRepresentante||'').replace(/\D/g,'');
+    if(!tel){if(typeof mostrarToast==='function')mostrarToast('Este estudiante no tiene teléfono de representante registrado.','warning','Sin teléfono');return;}
+    const msg=`Buenos días. Le contactamos desde ${data?.materia||'la institución'} por el estudiante ${r.alumno}. Actualmente registra ${r.noEntregadas} actividades sin entregar. Agradecemos comunicarse con el docente para acordar el seguimiento correspondiente.`;
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,'_blank');
+  }
+
+  function abrirActaAlumno(id){
+    const al=(data?.alumnos||[]).find(x=>String(x.id)===String(id));if(!al)return;
+    try{
+      selectFiltroAno.value=data.ano;selectFiltroSeccion.value=data.seccion;selectFiltroTurno.value=data.turno;
+      cambiarPestana(tabAsistencia,sectionAsistencia);
+      setTimeout(async()=>{await cargarAlumnosDeSeccion();if(selectActaRapida){selectActaRapida.value=id;}window.generarActaInasistenciaRapida?.();},300);
+    }catch(_){if(typeof mostrarToast==='function')mostrarToast('Abre Actas y selecciona al estudiante.','info','Acta');}
+  }
+
+  function abrirOrientacionAlumno(id){
+    studentActual=id;
+    const tab=document.getElementById('tab-orientacion-convivencia');
+    if(tab){tab.click();setTimeout(()=>mostrarToast?.('Registra el seguimiento del estudiante en Orientación y Convivencia.','info','Seguimiento académico'),250);}
+    else if(typeof mostrarToast==='function')mostrarToast('El módulo de Orientación y Convivencia no está visible para este usuario.','warning','No disponible');
+  }
+
+  function init(){
+    crearUI();
+    window.addEventListener('edugestion:session',()=>setTimeout(()=>{crearUI();cargarCursos();},250));
+    window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{crearUI();cargarCursos();},250));
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,350),{once:true});else setTimeout(init,180);
+})();
