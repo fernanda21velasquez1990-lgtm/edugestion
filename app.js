@@ -18907,3 +18907,187 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,250),{once:true});else setTimeout(init,150);
 })();
+
+
+/* ================================================================
+   EduGestión · GESTIÓN ESCOLAR DE ASISTENCIA · V6.5
+   ================================================================ */
+(() => {
+  const MARK='EDUGESTION_ASISTENCIA_GESTION_V65';
+  if(window[MARK]) return;
+  window[MARK]=true;
+
+  const $=id=>document.getElementById(id);
+  const esc=v=>typeof escaparHTML==='function'?escaparHTML(String(v??'')):String(v??'');
+  let ultimo={datos:null,ctx:null,lapso:null,programadas:[],pendientes:[],registradas:0};
+
+  const docenteId=()=>String(profesorActual?.id||profesorActual?.usuario||'docente').trim().toLowerCase().replace(/[^a-z0-9._-]+/g,'_');
+  const JUST_KEY=()=>`edugestion_asistencia_justificativos_v65__docente_${docenteId()}`;
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')||f}catch(_){return f}};
+  const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  const ctx=()=>typeof seccionSeleccionadaV62==='function'?seccionSeleccionadaV62():{
+    ano:String(selectFiltroAno?.value||''),seccion:String(selectFiltroSeccion?.value||''),turno:String(selectFiltroTurno?.value||''),materia:String(profesorActual?.materia||'')
+  };
+  const corta=iso=>typeof fechaCortaV62==='function'?fechaCortaV62(iso):String(iso||'');
+
+  function llenarSelectJustificativo(){
+    const sel=$('attendance-v65-just-student');if(!sel)return;
+    const actual=sel.value, lista=Array.isArray(alumnosSeccion)?alumnosSeccion:[];
+    sel.innerHTML='<option value="">-- Selecciona un estudiante --</option>'+lista.map((a,i)=>`<option value="${esc(String(a.id||''))}">${Number(a.numeroLista)>0?Number(a.numeroLista):i+1}. ${esc(a.nombre||'Estudiante')}</option>`).join('');
+    if(lista.some(a=>String(a.id)===String(actual)))sel.value=actual;
+    if($('attendance-v65-just-date')&&!$('attendance-v65-just-date').value)$('attendance-v65-just-date').value=fechaAsistencia?.value||'';
+  }
+
+  function riesgoItem(x){
+    const a=Number(x.ausentes||0),t=Number(x.tardanzas||0),pct=Number(x.porcentajeAsistencia||0);
+    if(a>=5||pct<70)return {nivel:'red',texto:'Riesgo alto'};
+    if(a>=3||t>=3||pct<85)return {nivel:'yellow',texto:'Atención'};
+    return {nivel:'green',texto:'Estable'};
+  }
+
+  function renderRiesgo(datos){
+    const host=$('attendance-v65-risk-list');if(!host)return;
+    const alumnos=Array.isArray(datos?.porAlumno)?datos.porAlumno:[];
+    if(!alumnos.length){host.innerHTML='<div class="attendance-progress-v62__empty">Aún no hay datos acumulados para esta sección.</div>';return;}
+    const orden=[...alumnos].sort((a,b)=>{
+      const ra=riesgoItem(a),rb=riesgoItem(b),p={red:3,yellow:2,green:1};
+      return p[rb.nivel]-p[ra.nivel]||Number(b.ausentes||0)-Number(a.ausentes||0);
+    });
+    host.innerHTML=orden.map(x=>{
+      const r=riesgoItem(x);
+      return `<div class="attendance-v65-risk-row"><span class="attendance-v65-risk-dot is-${r.nivel}"></span><div><div class="attendance-v65-risk-name">${esc(x.alumno||'Estudiante')}</div><div class="attendance-v65-risk-meta">${r.texto} · A ${Number(x.ausentes||0)} · T ${Number(x.tardanzas||0)} · ${Math.round(Number(x.porcentajeAsistencia||0))}%</div></div><button type="button" data-v65-student="${esc(String(x.idAlumno||''))}">Ver ficha</button></div>`;
+    }).join('');
+    host.querySelectorAll('[data-v65-student]').forEach(btn=>btn.addEventListener('click',()=>{
+      const id=btn.dataset.v65Student;
+      const v64=$('attendance-v64-student');
+      if(v64){v64.value=id;v64.dispatchEvent(new Event('change'));document.getElementById('attendance-smart-v64')?.scrollIntoView({behavior:'smooth',block:'start'});}
+    }));
+  }
+
+  function justificationKey(id,date){
+    const c=ctx();return [c.materia,c.ano,c.seccion,c.turno,date,id].join('|');
+  }
+
+  async function guardarJustificativo(){
+    const id=$('attendance-v65-just-student')?.value||'';
+    const date=$('attendance-v65-just-date')?.value||fechaAsistencia?.value||'';
+    const motivo=String($('attendance-v65-just-reason')?.value||'').trim();
+    if(!id){mostrarToast('Selecciona un estudiante.','warning','Falta estudiante');return;}
+    if(!date){mostrarToast('Selecciona la fecha.','warning','Falta fecha');return;}
+    if(!motivo){mostrarToast('Escribe el motivo del justificativo.','warning','Falta motivo');return;}
+    const alumno=(alumnosSeccion||[]).find(a=>String(a.id)===String(id));
+    const c=ctx();
+    try{
+      const r=await apiRequest('obtenerAsistencia',{ano:c.ano,seccion:c.seccion,turno:c.turno,fecha:date,materia:c.materia});
+      const asistencia={...(r?.asistencia||{})};
+      (alumnosSeccion||[]).forEach(a=>{if(!asistencia[a.id])asistencia[a.id]='Presente';});
+      asistencia[id]='Justificada';
+      await apiRequest('guardarAsistencia',{materia:c.materia,ano:c.ano,seccion:c.seccion,turno:c.turno,fecha:date,asistencia,origen:'Web',modificadoPor:profesorActual?.nombre||profesorActual?.usuario||'Docente'});
+      const map=readJSON(JUST_KEY(),{});
+      map[justificationKey(id,date)]={idAlumno:id,alumno:alumno?.nombre||'',fecha:date,motivo,actualizadoEn:new Date().toISOString()};
+      writeJSON(JUST_KEY(),map);
+      if(fechaAsistencia?.value===date){asistenciaTemporal={...asistencia};renderAsistencia();actualizarStatsSeccion();}
+      $('attendance-v65-just-status').textContent=`Justificativo guardado · ${alumno?.nombre||'Estudiante'} · ${corta(date)}`;
+      $('attendance-v65-just-reason').value='';
+      agendaResumenCache?.clear?.();
+      await renderAgendaAsistencia({forzar:true});
+      await actualizarProgresoAsistenciaV62();
+      mostrarToast('El justificativo fue guardado y la asistencia quedó marcada como Justificada.','success','Justificativo registrado');
+    }catch(e){
+      console.error(e);mostrarToast(e?.message||'No se pudo guardar el justificativo.','error','Error');
+    }
+  }
+
+  function estudianteActivo(){
+    const id=$('attendance-v65-just-student')?.value||$('attendance-v64-student')?.value||'';
+    return (alumnosSeccion||[]).find(a=>String(a.id)===String(id));
+  }
+
+  function abrirActa(){
+    const al=estudianteActivo();
+    if(!al){mostrarToast('Selecciona primero un estudiante.','warning','Falta estudiante');return;}
+    if(selectActaRapida){selectActaRapida.value=String(al.id);}
+    if(typeof window.generarActaInasistenciaRapida==='function')window.generarActaInasistenciaRapida();
+  }
+  function abrirOrientacion(tipo='orientacion'){
+    const al=estudianteActivo();
+    document.getElementById('tab-orientacion-convivencia')?.click();
+    setTimeout(()=>mostrarToast(al?`Seguimiento abierto para ${al.nombre}.`:'Abre el curso y registra el seguimiento correspondiente.','info',tipo==='seguimiento'?'Seguimiento':'Orientación y Convivencia'),250);
+  }
+
+  function mondayOf(date){
+    const d=new Date(date);d.setHours(12,0,0,0);const n=(d.getDay()+6)%7;d.setDate(d.getDate()-n);return d;
+  }
+  function iso(d){return typeof fechaISOAsistencia==='function'?fechaISOAsistencia(d):d.toISOString().slice(0,10);}
+
+  async function cierreSemanal(){
+    const panel=$('attendance-v65-week-panel'),host=$('attendance-v65-week-table');if(!panel||!host)return;
+    panel.classList.remove('hidden');host.innerHTML='<div class="attendance-progress-v62__empty">Calculando cierre semanal…</div>';
+    const base=fechaAsistencia?.value?fechaLocalAsistencia(fechaAsistencia.value):new Date();
+    const lunes=mondayOf(base), dias=[];
+    for(let i=0;i<5;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);dias.push(iso(d));}
+    const mapa=new Map();
+    for(const fecha of dias){
+      const clases=clasesHorarioParaFecha(fecha);
+      for(const clase of clases){
+        const key=[clase.ano,clase.seccion,turnoAsistencia(clase.turno)].join('|');
+        if(!mapa.has(key))mapa.set(key,{ano:clase.ano,seccion:clase.seccion,turno:turnoAsistencia(clase.turno),programadas:0,guardadas:0,incompletas:0});
+        const row=mapa.get(key);row.programadas++;
+        try{const r=await obtenerResumenClaseAgenda(clase,fecha,true);if(r.existe&&!r.incompleta)row.guardadas++;else if(r.incompleta)row.incompletas++;}catch(_){}
+      }
+    }
+    const rows=[...mapa.values()];
+    host.innerHTML=rows.length?`<table class="attendance-v63-table"><thead><tr><th>Sección</th><th>Turno</th><th>Programadas</th><th>Guardadas</th><th>Pendientes</th><th>Incompletas</th><th>Cumplimiento</th></tr></thead><tbody>${rows.map(r=>{const pend=Math.max(0,r.programadas-r.guardadas);const pct=r.programadas?Math.round(r.guardadas/r.programadas*100):0;return `<tr><td>${esc(r.ano)} ${esc(r.seccion)}</td><td>${esc(r.turno)}</td><td>${r.programadas}</td><td>${r.guardadas}</td><td>${pend}</td><td>${r.incompletas}</td><td><b>${pct}%</b></td></tr>`}).join('')}</tbody></table>`:'<div class="attendance-progress-v62__empty">No hay clases programadas en esta semana.</div>';
+  }
+
+  async function datosMesActual(){
+    const c=ctx();if(!c.ano||!c.seccion)return null;
+    const base=fechaAsistencia?.value?fechaLocalAsistencia(fechaAsistencia.value):new Date();
+    const y=base.getFullYear(),m=base.getMonth(),first=new Date(y,m,1),last=new Date(y,m+1,0);
+    const lapso=ultimo.lapso||attendanceLapsoV62();
+    const programadas=jornadasProgramadasV62(lapso.desde,lapso.hasta,c).filter(f=>{const d=fechaLocalAsistencia(f);return d&&d>=first&&d<=last;});
+    const registros={};
+    await Promise.all(programadas.map(async fecha=>{
+      try{const r=await apiRequest('obtenerAsistencia',{ano:c.ano,seccion:c.seccion,turno:c.turno,fecha,materia:c.materia});registros[fecha]=r?.asistencia||{};}catch(_){registros[fecha]={};}
+    }));
+    return {c,base,programadas,registros};
+  }
+
+  async function reporteMensual(){
+    if(!alumnosSeccion?.length){mostrarToast('Carga primero una sección.','warning','Sin sección');return;}
+    mostrarToast('Preparando la matriz mensual…','info','Un momento');
+    const d=await datosMesActual();if(!d)return;
+    const fechas=d.programadas;
+    const w=window.open('','_blank');if(!w)return;
+    const cab=fechas.map(f=>`<th>${fechaLocalAsistencia(f)?.getDate()||''}</th>`).join('');
+    const filas=(alumnosSeccion||[]).map((a,i)=>`<tr><td>${Number(a.numeroLista)>0?Number(a.numeroLista):i+1}</td><td style="text-align:left;min-width:180px">${esc(a.nombre||'')}</td>${fechas.map(f=>{const e=d.registros[f]?.[a.id]||'';const letra=e==='Ausente'?'A':e==='Tardanza'?'T':e==='Justificada'?'J':e==='Presente'?'P':'';return `<td>${letra}</td>`}).join('')}</tr>`).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Reporte mensual de asistencia</title><style>body{font-family:Arial;padding:20px;color:#222}h1{font-size:18px}.meta{font-size:11px;margin-bottom:14px}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #999;padding:4px;text-align:center}th{background:#f2f2f2}@media print{@page{size:landscape;margin:10mm}}</style></head><body><h1>Reporte mensual de asistencia</h1><div class="meta"><b>Docente:</b> ${esc(profesorActual?.nombre||'')} · <b>Materia:</b> ${esc(d.c.materia)} · <b>Sección:</b> ${esc(d.c.ano)} ${esc(d.c.seccion)} · <b>Mes:</b> ${esc(d.base.toLocaleDateString('es-ES',{month:'long',year:'numeric'}))}<br><b>Leyenda:</b> P Presente · A Ausente · T Tardanza · J Justificada</div><table><thead><tr><th>N°</th><th>Estudiante</th>${cab}</tr></thead><tbody>${filas}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    w.document.close();
+  }
+
+  function reporteInasistencias(){
+    const datos=ultimo.datos;if(!datos){mostrarToast('Carga primero una sección.','warning','Sin datos');return;}
+    const rows=[...(datos.porAlumno||[])].sort((a,b)=>Number(b.ausentes||0)-Number(a.ausentes||0)||Number(b.tardanzas||0)-Number(a.tardanzas||0));
+    const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Reporte de inasistencias</title><style>body{font-family:Arial;padding:28px}h1{font-size:19px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#f2f2f2}</style></head><body><h1>Alumnos con mayor número de faltas</h1><p><b>${esc(ctx().ano)} ${esc(ctx().seccion)} · ${esc(ctx().materia)} · ${esc(ultimo.lapso?.nombre||'')}</b></p><table><thead><tr><th>N°</th><th>Estudiante</th><th>Ausencias</th><th>Tardanzas</th><th>Justificadas</th><th>Asistencia</th><th>Riesgo</th></tr></thead><tbody>${rows.map((x,i)=>{const r=riesgoItem(x);return `<tr><td>${i+1}</td><td>${esc(x.alumno||'')}</td><td>${Number(x.ausentes||0)}</td><td>${Number(x.tardanzas||0)}</td><td>${Number(x.justificadas||0)}</td><td>${Math.round(Number(x.porcentajeAsistencia||0))}%</td><td>${esc(r.texto)}</td></tr>`}).join('')}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);w.document.close();
+  }
+
+  function aplicar(detail){
+    ultimo=detail||ultimo;llenarSelectJustificativo();renderRiesgo(ultimo.datos);
+  }
+
+  function init(){
+    $('attendance-v65-save-just')?.addEventListener('click',guardarJustificativo);
+    $('attendance-v65-acta')?.addEventListener('click',abrirActa);
+    $('attendance-v65-orientation')?.addEventListener('click',()=>abrirOrientacion('orientacion'));
+    $('attendance-v65-followup')?.addEventListener('click',()=>abrirOrientacion('seguimiento'));
+    $('attendance-v65-week-close')?.addEventListener('click',cierreSemanal);
+    $('attendance-v65-week-close-panel')?.addEventListener('click',()=>$('attendance-v65-week-panel')?.classList.add('hidden'));
+    $('attendance-v65-month-report')?.addEventListener('click',reporteMensual);
+    $('attendance-v65-absence-report')?.addEventListener('click',reporteInasistencias);
+    fechaAsistencia?.addEventListener('change',()=>{if($('attendance-v65-just-date'))$('attendance-v65-just-date').value=fechaAsistencia.value;});
+    window.addEventListener('edugestion:attendance-progress',e=>aplicar(e.detail));
+    llenarSelectJustificativo();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,300),{once:true});else setTimeout(init,150);
+})();

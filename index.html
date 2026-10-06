@@ -713,6 +713,57 @@
         </section>
        </div>
       </section>
+
+      <section class="attendance-management-v65" id="attendance-management-v65">
+       <div class="attendance-management-v65__head">
+        <div>
+         <span><i class="fa-solid fa-school-circle-check"></i> Gestión escolar de asistencia</span>
+         <h3>Cierre semanal, riesgo y justificativos</h3>
+         <p>Centraliza el seguimiento de cada sección y genera reportes listos para coordinación.</p>
+        </div>
+        <div class="attendance-management-v65__head-actions">
+         <button type="button" id="attendance-v65-week-close"><i class="fa-solid fa-calendar-check"></i> Ver cierre semanal</button>
+         <button type="button" id="attendance-v65-month-report"><i class="fa-solid fa-table-cells"></i> Reporte mensual</button>
+         <button type="button" id="attendance-v65-absence-report"><i class="fa-solid fa-user-clock"></i> Reporte de inasistencias</button>
+        </div>
+       </div>
+
+       <div class="attendance-management-v65__grid">
+        <section class="attendance-management-v65__panel">
+         <div class="attendance-management-v65__panel-head">
+          <div><span>Semáforo de riesgo</span><strong>Seguimiento por estudiante</strong></div>
+          <small>Verde · Amarillo · Rojo</small>
+         </div>
+         <div id="attendance-v65-risk-list" class="attendance-v65-risk-list">
+          <div class="attendance-progress-v62__empty">Carga una sección para calcular el riesgo.</div>
+         </div>
+        </section>
+
+        <section class="attendance-management-v65__panel">
+         <div class="attendance-management-v65__panel-head">
+          <div><span>Justificativo rápido</span><strong>Motivo y actualización de estado</strong></div>
+         </div>
+         <div class="attendance-v65-form">
+          <label>Estudiante<select id="attendance-v65-just-student"><option value="">Selecciona una sección primero</option></select></label>
+          <label>Fecha<input id="attendance-v65-just-date" type="date"></label>
+          <label class="is-wide">Motivo<textarea id="attendance-v65-just-reason" rows="3" placeholder="Ej.: reposo médico, diligencia familiar, representación institucional..."></textarea></label>
+          <button type="button" id="attendance-v65-save-just"><i class="fa-solid fa-file-circle-check"></i> Guardar y marcar Justificada</button>
+         </div>
+         <div id="attendance-v65-just-status" class="attendance-v65-status">Sin justificativo pendiente.</div>
+        </section>
+       </div>
+
+       <div class="attendance-management-v65__quick">
+        <button type="button" id="attendance-v65-acta"><i class="fa-solid fa-file-signature"></i><span>Generar acta por inasistencia</span></button>
+        <button type="button" id="attendance-v65-orientation"><i class="fa-solid fa-compass"></i><span>Enviar a Orientación y Convivencia</span></button>
+        <button type="button" id="attendance-v65-followup"><i class="fa-solid fa-clipboard-check"></i><span>Agregar seguimiento</span></button>
+       </div>
+
+       <div id="attendance-v65-week-panel" class="attendance-v65-expand hidden">
+        <div class="attendance-v65-expand__head"><div><span>Cierre semanal</span><strong>Estado de todas las secciones</strong></div><button type="button" id="attendance-v65-week-close-panel"><i class="fa-solid fa-xmark"></i></button></div>
+        <div id="attendance-v65-week-table" class="attendance-v63-table-wrap"></div>
+       </div>
+      </section>
 </section>
      <section class="hidden max-w-[1480px] mx-auto space-y-6" id="section-planificacion">
       <div class="planning-hero">
