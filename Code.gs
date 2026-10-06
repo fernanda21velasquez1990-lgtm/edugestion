@@ -36,7 +36,8 @@ var EG = Object.freeze({
     RECUPERACIONES_EVALUACION: 'RecuperacionesEvaluacion',
     AUDITORIA_CALIFICACIONES: 'AuditoriaCalificaciones',
     ESTADO_ACTIVIDADES_EVALUACION: 'EstadoActividadesEvaluacion',
-    CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico'
+    CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico',
+    COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos'
   }),
   HEADERS: Object.freeze({
     Docentes: [
@@ -126,6 +127,12 @@ var EG = Object.freeze({
       'id', 'idProfesor', 'materia', 'ano', 'seccion', 'turno', 'lapso',
       'estado', 'puntosPlanificados', 'promedioSeccion', 'alertas',
       'cerradoEn', 'reabiertoEn', 'observacion', 'actualizadoEn'
+    ],
+    CompromisosAcademicos: [
+      'id', 'idProfesor', 'materia', 'ano', 'seccion', 'turno', 'lapso',
+      'idAlumno', 'alumno', 'fechaRegistro', 'fechaCompromiso', 'tipo',
+      'representante', 'medio', 'compromiso', 'estado', 'resueltoEn',
+      'resultado', 'creadoEn', 'actualizadoEn'
     ]
   })
 });
@@ -677,6 +684,15 @@ function doPost(e) {
         break;
       case 'obtenerSeguimientoAcademico':
         respuesta = obtenerSeguimientoAcademico_(sesion.docente, payload);
+        break;
+      case 'guardarCompromisoAcademico':
+        respuesta = guardarCompromisoAcademico_(sesion.docente, payload);
+        break;
+      case 'obtenerCompromisosAcademicos':
+        respuesta = obtenerCompromisosAcademicos_(sesion.docente, payload);
+        break;
+      case 'actualizarEstadoCompromisoAcademico':
+        respuesta = actualizarEstadoCompromisoAcademico_(sesion.docente, payload);
         break;
       case 'guardarPlanificacion':
         respuesta = guardarPlanificacion_(sesion.docente, payload);
@@ -5991,3 +6007,118 @@ function obtenerFichaAcademicaAlumnoV68_(docente, payload) {
   };
 }
 /* EDUGESTION_LIBRO_CALIFICACIONES_V68_END */
+
+
+/* =========================================================
+ * EduGestión · V6.9
+ * CENTRO DE SEGUIMIENTO Y COMPROMISOS ACADÉMICOS
+ * ========================================================= */
+
+function asegurarCompromisosAcademicos_() {
+  asegurarHoja_(getDb_(), EG.SHEETS.COMPROMISOS_ACADEMICOS, EG.HEADERS.CompromisosAcademicos);
+}
+
+function guardarCompromisoAcademico_(docente, payload) {
+  asegurarCompromisosAcademicos_();
+
+  var idAlumno = limpiarRequerido_(payload.idAlumno, 'estudiante');
+  var alumno = filtrarPorProfesor_(EG.SHEETS.ALUMNOS, docente.id).filter(function(a) {
+    return String(a.id || '') === idAlumno;
+  })[0];
+  if (!alumno) lanzar_('El estudiante no pertenece al docente.', 'UNAUTHORIZED');
+
+  var registro = {
+    id: Utilities.getUuid(),
+    idProfesor: String(docente.id),
+    materia: String(docente.materia || ''),
+    ano: String(payload.ano || alumno.ano || ''),
+    seccion: String(payload.seccion || alumno.seccion || '').toUpperCase(),
+    turno: normalizarTurno_(payload.turno || alumno.turno || ''),
+    lapso: String(payload.lapso || '1er Lapso'),
+    idAlumno: idAlumno,
+    alumno: String(alumno.nombre || ''),
+    fechaRegistro: String(payload.fechaRegistro || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')),
+    fechaCompromiso: String(payload.fechaCompromiso || '').slice(0, 10),
+    tipo: String(payload.tipo || 'SEGUIMIENTO').slice(0, 80),
+    representante: String(payload.representante || alumno.representante || '').slice(0, 180),
+    medio: String(payload.medio || '').slice(0, 80),
+    compromiso: String(payload.compromiso || '').slice(0, 1000),
+    estado: 'PENDIENTE',
+    resueltoEn: '',
+    resultado: '',
+    creadoEn: ahora_(),
+    actualizadoEn: ahora_()
+  };
+
+  anexarObjeto_(EG.SHEETS.COMPROMISOS_ACADEMICOS, registro);
+  return { status: 'success', compromiso: limpiarMeta_(registro), message: 'Compromiso académico registrado.' };
+}
+
+function obtenerCompromisosAcademicos_(docente, payload) {
+  asegurarCompromisosAcademicos_();
+
+  var ano = normalizarTexto_(payload.ano || '');
+  var seccion = normalizarTexto_(payload.seccion || '').toUpperCase();
+  var turno = normalizarTurno_(payload.turno || '');
+  var lapso = normalizarTexto_(payload.lapso || '');
+  var idAlumno = String(payload.idAlumno || '');
+  var estado = normalizarTexto_(payload.estado || '').toUpperCase();
+
+  var hoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  var items = filtrarPorProfesor_(EG.SHEETS.COMPROMISOS_ACADEMICOS, docente.id).filter(function(r) {
+    if (ano && normalizarTexto_(r.ano || '').toUpperCase() !== ano.toUpperCase()) return false;
+    if (seccion && normalizarTexto_(r.seccion || '').toUpperCase() !== seccion) return false;
+    if (turno && normalizarTurno_(r.turno || '') !== turno) return false;
+    if (lapso && normalizarTexto_(r.lapso || '') !== lapso) return false;
+    if (idAlumno && String(r.idAlumno || '') !== idAlumno) return false;
+    if (estado && normalizarTexto_(r.estado || '').toUpperCase() !== estado) return false;
+    return true;
+  }).map(function(r) {
+    var item = limpiarMeta_(r);
+    var fecha = String(serializarValor_(r.fechaCompromiso, 'fecha') || '');
+    item.vencido = String(r.estado || '').toUpperCase() === 'PENDIENTE' && fecha && fecha < hoy;
+    return item;
+  }).sort(function(a, b) {
+    var ea = String(a.estado || '') === 'PENDIENTE' ? 0 : 1;
+    var eb = String(b.estado || '') === 'PENDIENTE' ? 0 : 1;
+    if (ea !== eb) return ea - eb;
+    return String(a.fechaCompromiso || a.fechaRegistro || '').localeCompare(String(b.fechaCompromiso || b.fechaRegistro || ''));
+  });
+
+  return {
+    status: 'success',
+    compromisos: items,
+    pendientes: items.filter(function(x) { return String(x.estado || '').toUpperCase() === 'PENDIENTE'; }).length,
+    vencidos: items.filter(function(x) { return x.vencido; }).length,
+    resueltos: items.filter(function(x) { return String(x.estado || '').toUpperCase() === 'RESUELTO'; }).length
+  };
+}
+
+function actualizarEstadoCompromisoAcademico_(docente, payload) {
+  asegurarCompromisosAcademicos_();
+
+  var id = limpiarRequerido_(payload.id, 'compromiso');
+  var tabla = leerObjetos_(EG.SHEETS.COMPROMISOS_ACADEMICOS);
+  var item = tabla.objetos.filter(function(r) {
+    return String(r.id || '') === id && String(r.idProfesor || '') === String(docente.id);
+  })[0];
+
+  if (!item) lanzar_('No se encontró el compromiso académico.', 'NOT_FOUND');
+
+  var estado = normalizarTexto_(payload.estado || '').toUpperCase();
+  if (['PENDIENTE', 'RESUELTO', 'CANCELADO'].indexOf(estado) === -1) {
+    lanzar_('Estado de compromiso no válido.', 'VALIDATION_ERROR');
+  }
+
+  var datos = limpiarMeta_(item);
+  datos.estado = estado;
+  datos.resultado = String(payload.resultado || '').slice(0, 1000);
+  datos.resueltoEn = estado === 'RESUELTO' ? ahora_() : '';
+  datos.actualizadoEn = ahora_();
+
+  actualizarFilaObjeto_(EG.SHEETS.COMPROMISOS_ACADEMICOS, item.__row, datos);
+
+  return { status: 'success', compromiso: datos, message: 'Compromiso actualizado.' };
+}
+/* EDUGESTION_COMPROMISOS_ACADEMICOS_V69_END */

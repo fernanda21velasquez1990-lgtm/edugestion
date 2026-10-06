@@ -19249,6 +19249,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 
   let data=null;
   let complemento68=null;
+  let compromisos69=[];
   let actividadActual='';
   let vista='actividad';
   let cursos=[];
@@ -19328,6 +19329,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <article><i class="fa-solid fa-gauge-high"></i><div><strong id="eval-v67-points-total">0/20</strong><small>Plan del lapso</small></div></article>
           <article><i class="fa-solid fa-chart-line"></i><div><strong id="eval-v68-section-average">0%</strong><small>Promedio de la sección</small></div></article>
           <article><i class="fa-solid fa-kit-medical"></i><div><strong id="eval-v68-recovery-pending">0</strong><small>Recuperación pendiente</small></div></article>
+          <article><i class="fa-solid fa-handshake-angle"></i><div><strong id="eval-v69-commitments">0</strong><small>Compromisos pendientes</small></div></article>
         </section>
 
         <section class="eval-v66-work">
@@ -19341,6 +19343,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
               <button type="button" data-eval-v66-view="alumno"><i class="fa-solid fa-user-graduate"></i> Por alumno</button>
               <button type="button" data-eval-v66-view="seccion"><i class="fa-solid fa-table"></i> Resumen de sección</button>
               <button type="button" data-eval-v66-view="alertas"><i class="fa-solid fa-triangle-exclamation"></i> Alertas</button>
+              <button type="button" data-eval-v66-view="seguimiento"><i class="fa-solid fa-handshake-angle"></i> Seguimiento</button>
               <button type="button" data-eval-v66-view="recuperacion"><i class="fa-solid fa-arrow-rotate-left"></i> Recuperación</button>
               <button type="button" data-eval-v66-view="cierre"><i class="fa-solid fa-lock"></i> Cierre de lapso</button>
             </div>
@@ -19358,6 +19361,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
             <label><span>Medio</span><select id="eval-v66-followup-medium"><option>Teléfono</option><option>WhatsApp</option><option>Presencial</option><option>Correo</option><option>Otro</option></select></label>
             <label><span>Representante</span><input id="eval-v66-followup-rep"></label>
             <label><span>Fecha</span><input id="eval-v66-followup-date" type="date"></label>
+            <label><span>Próxima fecha / compromiso</span><input id="eval-v69-followup-due" type="date"></label>
             <label class="is-wide"><span>Motivo</span><textarea id="eval-v66-followup-reason" rows="2"></textarea></label>
             <label class="is-wide"><span>Compromiso acordado</span><textarea id="eval-v66-followup-commitment" rows="2" placeholder="Ej.: entregar actividades pendientes antes del viernes"></textarea></label>
             <label class="is-wide"><span>Observación</span><textarea id="eval-v66-followup-note" rows="2"></textarea></label>
@@ -19434,6 +19438,10 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     try{
       data=await api('obtenerGestionEvaluaciones',c);
       complemento68=await api('obtenerComplementoEvaluacionesV68',c);
+      try{
+        const cr=await api('obtenerCompromisosAcademicos',c);
+        compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
+      }catch(_){compromisos69=[];}
       actividadActual=(data.actividades||[]).some(a=>a.id===actividadActual)?actividadActual:(data.actividades?.[0]?.id||'');
       renderTodo();
     }catch(e){
@@ -19462,6 +19470,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if($('eval-v68-section-average')) $('eval-v68-section-average').textContent=`${Math.round(Number(complemento68?.promedioSeccion||0))}%`;
     const recoveryPending=(complemento68?.alumnosResumen||[]).filter(x=>Number(x.porcentajeAcademico||0)<50 || Number(x.noEntregadas||0)>=2).length;
     if($('eval-v68-recovery-pending')) $('eval-v68-recovery-pending').textContent=String(recoveryPending);
+    const pendingCommitments=(compromisos69||[]).filter(x=>String(x.estado||'').toUpperCase()==='PENDIENTE').length;
+    if($('eval-v69-commitments')) $('eval-v69-commitments').textContent=String(pendingCommitments);
   }
 
   function actualizarNavAlert(){
@@ -19624,11 +19634,122 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     host.querySelectorAll('[data-v66-orient]').forEach(b=>b.addEventListener('click',()=>abrirOrientacionAlumno(b.dataset.v66Orient)));
   }
 
+
+  function estadoCompromisoClaseV69(item){
+    if(String(item?.estado||'').toUpperCase()==='RESUELTO') return 'is-resolved';
+    if(item?.vencido) return 'is-overdue';
+    return 'is-pending';
+  }
+
+  function textoFechaV69(v){
+    if(!v)return 'Sin fecha';
+    try{return new Date(`${v}T12:00:00`).toLocaleDateString('es-VE',{day:'2-digit',month:'2-digit',year:'numeric'});}catch(_){return String(v);}
+  }
+
+  function renderSeguimientoV69(){
+    const host=$('eval-v66-content');if(!host)return;
+    const alerts=data?.alertas||[];
+    const pendientes=(compromisos69||[]).filter(x=>String(x.estado||'').toUpperCase()==='PENDIENTE');
+    const vencidos=pendientes.filter(x=>x.vencido);
+    const resueltos=(compromisos69||[]).filter(x=>String(x.estado||'').toUpperCase()==='RESUELTO');
+    const hoy=new Date().toISOString().slice(0,10);
+
+    host.innerHTML=`
+      <div class="eval-v69-head">
+        <div>
+          <span>Centro de seguimiento académico</span>
+          <h3>Alertas, compromisos y contacto con representantes</h3>
+          <p>Convierte cada alerta en una acción concreta y deja evidencia del seguimiento realizado.</p>
+        </div>
+        <button type="button" id="eval-v69-print-follow"><i class="fa-solid fa-print"></i> Imprimir seguimiento</button>
+      </div>
+
+      <div class="eval-v69-kpis">
+        <article><b>${alerts.length}</b><small>Alertas académicas</small></article>
+        <article><b>${pendientes.length}</b><small>Compromisos pendientes</small></article>
+        <article class="${vencidos.length?'is-danger':''}"><b>${vencidos.length}</b><small>Compromisos vencidos</small></article>
+        <article><b>${resueltos.length}</b><small>Seguimientos resueltos</small></article>
+      </div>
+
+      <div class="eval-v69-follow-grid">
+        <section class="eval-v69-panel">
+          <div class="eval-v69-panel-head"><div><span>Prioridad</span><strong>Estudiantes que requieren contacto</strong></div></div>
+          <div class="eval-v69-list">
+            ${alerts.length?alerts.map(a=>{
+              const existing=pendientes.find(c=>String(c.idAlumno)===String(a.idAlumno));
+              return `<article class="eval-v69-student ${a.noEntregadas>=3?'is-red':'is-yellow'}">
+                <div class="eval-v69-student-main">
+                  <strong>${esc(a.alumno)}</strong>
+                  <span>${Number(a.noEntregadas||0)} actividades sin entregar · ${Number(a.puntosAcumulados||0)}/${Number(a.puntosPlanificados||0)} pts · Asistencia ${Number(a.porcentajeAsistencia||0)}%</span>
+                  <small>Representante: ${esc(a.representante||'No registrado')}</small>
+                </div>
+                <div class="eval-v69-student-actions">
+                  ${existing?`<span class="eval-v69-current"><i class="fa-solid fa-clock"></i> Compromiso para ${esc(textoFechaV69(existing.fechaCompromiso))}</span>`:''}
+                  <button type="button" data-v69-contact="${esc(a.idAlumno)}"><i class="fa-solid fa-phone"></i> Registrar contacto</button>
+                </div>
+              </article>`;
+            }).join(''):'<div class="eval-v66-empty is-success"><i class="fa-solid fa-circle-check"></i><strong>No hay alertas pendientes en esta sección.</strong></div>'}
+          </div>
+        </section>
+
+        <section class="eval-v69-panel">
+          <div class="eval-v69-panel-head"><div><span>Agenda</span><strong>Compromisos pendientes</strong></div></div>
+          <div class="eval-v69-list">
+            ${pendientes.length?pendientes.map(c=>`<article class="eval-v69-commitment ${estadoCompromisoClaseV69(c)}">
+              <div>
+                <strong>${esc(c.alumno||'Estudiante')}</strong>
+                <span>${esc(c.compromiso||'Sin descripción')}</span>
+                <small>${c.vencido?'<b>VENCIDO</b> · ':''}${esc(textoFechaV69(c.fechaCompromiso))} · ${esc(c.medio||'Sin medio')}</small>
+              </div>
+              <div class="eval-v69-commitment-actions">
+                <button type="button" data-v69-resolve="${esc(c.id)}"><i class="fa-solid fa-check"></i> Resolver</button>
+                <button type="button" data-v69-recontact="${esc(c.idAlumno)}"><i class="fa-solid fa-rotate"></i> Recontactar</button>
+              </div>
+            </article>`).join(''):'<div class="eval-v66-empty"><i class="fa-solid fa-calendar-check"></i><strong>No hay compromisos pendientes.</strong></div>'}
+          </div>
+        </section>
+      </div>
+
+      <section class="eval-v69-panel eval-v69-resolved">
+        <div class="eval-v69-panel-head"><div><span>Historial</span><strong>Seguimientos resueltos recientemente</strong></div></div>
+        <div class="eval-v69-history">
+          ${resueltos.length?resueltos.slice(0,20).map(c=>`<div class="eval-v69-history-row"><span><strong>${esc(c.alumno||'Estudiante')}</strong><small>${esc(c.compromiso||'')}</small></span><span>${esc(textoFechaV69(c.fechaCompromiso))}</span><span>${esc(c.resultado||'Resuelto')}</span></div>`).join(''):'<div class="eval-v66-empty">Todavía no hay compromisos resueltos.</div>'}
+        </div>
+      </section>`;
+
+    host.querySelectorAll('[data-v69-contact]').forEach(b=>b.addEventListener('click',()=>abrirSeguimiento(b.dataset.v69Contact)));
+    host.querySelectorAll('[data-v69-recontact]').forEach(b=>b.addEventListener('click',()=>abrirSeguimiento(b.dataset.v69Recontact)));
+    host.querySelectorAll('[data-v69-resolve]').forEach(b=>b.addEventListener('click',()=>resolverCompromisoV69(b.dataset.v69Resolve)));
+    $('eval-v69-print-follow')?.addEventListener('click',imprimirSeguimientoV69);
+  }
+
+  async function resolverCompromisoV69(id){
+    const item=(compromisos69||[]).find(x=>String(x.id)===String(id));if(!item)return;
+    const resultado=window.prompt(`Resultado del seguimiento de ${item.alumno}:`,'Compromiso cumplido');
+    if(resultado===null)return;
+    try{
+      await api('actualizarEstadoCompromisoAcademico',{id,estado:'RESUELTO',resultado});
+      const cr=await api('obtenerCompromisosAcademicos',contexto());
+      compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
+      renderSummary();renderSeguimientoV69();
+      mostrarToast?.('El compromiso fue marcado como resuelto.','success','Seguimiento actualizado');
+    }catch(e){mostrarToast?.(e?.message||'No se pudo actualizar el compromiso.','error','Error');}
+  }
+
+  function imprimirSeguimientoV69(){
+    const alerts=data?.alertas||[];
+    const items=compromisos69||[];
+    const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Seguimiento académico</title><style>body{font-family:Arial;padding:28px;color:#222}h1{font-size:19px;margin:0 0 4px}p{font-size:11px}table{width:100%;border-collapse:collapse;font-size:10px;margin-top:16px}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#f2f2f2}.warn{color:#a05b00}.red{color:#a82e2e}</style></head><body><h1>Seguimiento académico y contacto con representantes</h1><p><b>${esc(data?.ano||'')} ${esc(data?.seccion||'')} · ${esc(data?.materia||'')} · ${esc(contexto().lapso)}</b></p><h2 style="font-size:14px">Alertas actuales</h2><table><thead><tr><th>Estudiante</th><th>No entregadas</th><th>Puntos</th><th>Asistencia</th><th>Representante</th></tr></thead><tbody>${alerts.map(a=>`<tr><td>${esc(a.alumno)}</td><td>${Number(a.noEntregadas||0)}</td><td>${Number(a.puntosAcumulados||0)}/${Number(a.puntosPlanificados||0)}</td><td>${Number(a.porcentajeAsistencia||0)}%</td><td>${esc(a.representante||'')}</td></tr>`).join('')}</tbody></table><h2 style="font-size:14px">Compromisos</h2><table><thead><tr><th>Estudiante</th><th>Compromiso</th><th>Fecha</th><th>Estado</th><th>Resultado</th></tr></thead><tbody>${items.map(c=>`<tr><td>${esc(c.alumno||'')}</td><td>${esc(c.compromiso||'')}</td><td>${esc(textoFechaV69(c.fechaCompromiso))}</td><td>${esc(c.estado||'')}</td><td>${esc(c.resultado||'')}</td></tr>`).join('')}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    w.document.close();
+  }
+
   function renderVista(){
     if(!data)return;
     if(vista==='alumno')renderAlumno();
     else if(vista==='seccion')renderSeccion();
     else if(vista==='alertas')renderAlertas();
+    else if(vista==='seguimiento')renderSeguimientoV69();
     else if(vista==='recuperacion')renderRecuperacionV68();
     else if(vista==='cierre')renderCierreV68();
     else renderActividad();
@@ -19641,6 +19762,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     $('eval-v66-followup-student').textContent=r.alumno;
     $('eval-v66-followup-rep').value=r.representante||'';
     $('eval-v66-followup-date').value=new Date().toISOString().slice(0,10);
+    const proxima=new Date();proxima.setDate(proxima.getDate()+7);
+    if($('eval-v69-followup-due')) $('eval-v69-followup-due').value=proxima.toISOString().slice(0,10);
     $('eval-v66-followup-reason').value=`Seguimiento por ${r.noEntregadas} actividades sin entregar.`;
     $('eval-v66-followup-commitment').value='';
     $('eval-v66-followup-note').value=`Puntos acumulados: ${r.puntosAcumulados}/${r.puntosPlanificados}. Asistencia: ${r.porcentajeAsistencia}%.`;
@@ -19662,7 +19785,16 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const payload={...contexto(),idAlumno:studentActual,tipo:$('eval-v66-followup-type').value,fecha:$('eval-v66-followup-date').value,motivo:$('eval-v66-followup-reason').value,medio:$('eval-v66-followup-medium').value,representante:$('eval-v66-followup-rep').value,compromiso:$('eval-v66-followup-commitment').value,observacion:$('eval-v66-followup-note').value};
     try{
       await api('registrarSeguimientoAcademico',payload);
+      const fechaCompromiso=$('eval-v69-followup-due')?.value||'';
+      if(fechaCompromiso && String(payload.compromiso||'').trim()){
+        await api('guardarCompromisoAcademico',{...contexto(),idAlumno:studentActual,fechaRegistro:payload.fecha,fechaCompromiso,tipo:payload.tipo,representante:payload.representante,medio:payload.medio,compromiso:payload.compromiso});
+        try{
+          const cr=await api('obtenerCompromisosAcademicos',contexto());
+          compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
+        }catch(_){}
+      }
       if(typeof mostrarToast==='function')mostrarToast('El contacto y compromiso quedaron registrados.','success','Seguimiento guardado');
+      renderSummary();
       await cargarHistorialSeguimiento(studentActual);
     }catch(e){if(typeof mostrarToast==='function')mostrarToast(e?.message||'No se pudo guardar.','error','Error');}
   }
