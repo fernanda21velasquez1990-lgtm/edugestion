@@ -668,6 +668,51 @@
         <div id="attendance-v63-audit-list" class="attendance-v63-audit-list"><div class="attendance-progress-v62__empty">Aún no hay cambios para mostrar.</div></div>
        </div>
       </section>
+
+      <section class="attendance-smart-v64" id="attendance-smart-v64">
+       <div class="attendance-smart-v64__head">
+        <div>
+         <span><i class="fa-solid fa-brain"></i> Seguimiento inteligente</span>
+         <h3>Alumno, semana y observaciones</h3>
+         <p>Detecta ausencias consecutivas, consulta fichas individuales y agiliza el registro diario.</p>
+        </div>
+        <div class="attendance-smart-v64__week">
+         <small>Resumen de esta semana</small>
+         <strong id="attendance-v64-week-summary">0/0 jornadas registradas</strong>
+         <span id="attendance-v64-week-pending">0 pendientes</span>
+        </div>
+       </div>
+
+       <div class="attendance-smart-v64__actions">
+        <button type="button" id="attendance-v64-copy-previous"><i class="fa-solid fa-copy"></i> Copiar asistencia de la clase anterior</button>
+        <button type="button" id="attendance-v64-refresh-week"><i class="fa-solid fa-arrows-rotate"></i> Actualizar semana</button>
+       </div>
+
+       <div class="attendance-smart-v64__grid">
+        <section class="attendance-smart-v64__panel">
+         <div class="attendance-smart-v64__panel-head">
+          <div><span>Ficha del alumno</span><strong>Historial individual y riesgo</strong></div>
+         </div>
+         <div class="attendance-smart-v64__field">
+          <label for="attendance-v64-student">Estudiante</label>
+          <select id="attendance-v64-student"><option value="">Selecciona una sección primero</option></select>
+         </div>
+         <div id="attendance-v64-student-card" class="attendance-smart-v64__student-card">
+          <div class="attendance-progress-v62__empty">Selecciona un estudiante para ver su ficha.</div>
+         </div>
+        </section>
+
+        <section class="attendance-smart-v64__panel">
+         <div class="attendance-smart-v64__panel-head">
+          <div><span>Observación rápida</span><strong>Registro asociado al alumno y fecha</strong></div>
+         </div>
+         <div class="attendance-smart-v64__field"><label for="attendance-v64-note">Observación</label><textarea id="attendance-v64-note" rows="4" placeholder="Ej.: presentó justificativo, llegó tarde por transporte, requiere seguimiento..."></textarea></div>
+         <div class="attendance-smart-v64__field"><label for="attendance-v64-justification">Motivo de justificación</label><input id="attendance-v64-justification" placeholder="Completar cuando corresponda"></div>
+         <button type="button" id="attendance-v64-save-note" class="attendance-smart-v64__primary"><i class="fa-solid fa-floppy-disk"></i> Guardar observación</button>
+         <div id="attendance-v64-note-status" class="attendance-smart-v64__note-status">Sin cambios pendientes.</div>
+        </section>
+       </div>
+      </section>
 </section>
      <section class="hidden max-w-[1480px] mx-auto space-y-6" id="section-planificacion">
       <div class="planning-hero">

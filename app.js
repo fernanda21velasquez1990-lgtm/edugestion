@@ -18758,3 +18758,152 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.EDUGESTION_ASISTENCIA_V63={estaCerradaActual,actualizarBotonCierre,imprimirInforme,exportarCSV};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,200),{once:true});else setTimeout(init,100);
 })();
+
+
+/* ================================================================
+   EduGestión · SEGUIMIENTO INTELIGENTE DE ASISTENCIA · V6.4
+   ================================================================ */
+(() => {
+  const MARK='EDUGESTION_ASISTENCIA_INTELIGENTE_V64';
+  if(window[MARK]) return;
+  window[MARK]=true;
+
+  const $=id=>document.getElementById(id);
+  const esc=v=>typeof escaparHTML==='function'?escaparHTML(String(v??'')):String(v??'');
+  let ultimo={datos:null,ctx:null,lapso:null,programadas:[],pendientes:[]};
+
+  const docenteId=()=>String(profesorActual?.id||profesorActual?.usuario||'docente').trim().toLowerCase().replace(/[^a-z0-9._-]+/g,'_');
+  const NOTES_KEY=()=>`edugestion_asistencia_observaciones_v64__docente_${docenteId()}`;
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')||f}catch(_){return f}};
+  const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  const currentCtx=()=>typeof seccionSeleccionadaV62==='function'?seccionSeleccionadaV62():{
+    ano:String(selectFiltroAno?.value||''),seccion:String(selectFiltroSeccion?.value||''),turno:String(selectFiltroTurno?.value||''),materia:String(profesorActual?.materia||'')
+  };
+  const obsKey=(studentId,fecha)=>{
+    const c=currentCtx();
+    return [c.materia,c.ano,c.seccion,c.turno,fecha||fechaAsistencia?.value||'',studentId||''].join('|');
+  };
+
+  function llenarAlumnos(){
+    const sel=$('attendance-v64-student'); if(!sel)return;
+    const actual=sel.value;
+    const lista=Array.isArray(alumnosSeccion)?alumnosSeccion:[];
+    sel.innerHTML='<option value="">-- Selecciona un estudiante --</option>'+lista.map((a,i)=>`<option value="${esc(String(a.id||''))}">${Number(a.numeroLista)>0?Number(a.numeroLista):i+1}. ${esc(a.nombre||'Estudiante')}</option>`).join('');
+    if(lista.some(a=>String(a.id)===String(actual)))sel.value=actual;
+    cargarObservacionActual();
+  }
+
+  async function detalleAlumno(id){
+    const card=$('attendance-v64-student-card'); if(!card)return;
+    if(!id){card.innerHTML='<div class="attendance-progress-v62__empty">Selecciona un estudiante para ver su ficha.</div>';return;}
+    const alumno=(alumnosSeccion||[]).find(a=>String(a.id)===String(id));
+    if(!alumno){card.innerHTML='<div class="attendance-progress-v62__empty">No se encontró el estudiante.</div>';return;}
+    card.innerHTML='<div class="attendance-progress-v62__empty">Consultando historial individual…</div>';
+    try{
+      const lapso=ultimo.lapso||attendanceLapsoV62();
+      const programadas=Array.isArray(ultimo.programadas)&&ultimo.programadas.length?ultimo.programadas:jornadasProgramadasV62(lapso.desde,lapso.hasta,currentCtx());
+      const fechas=[...programadas].sort();
+      const regs=await Promise.all(fechas.map(async fecha=>{
+        try{
+          const r=await apiRequest('obtenerAsistencia',{ano:currentCtx().ano,seccion:currentCtx().seccion,turno:currentCtx().turno,fecha,materia:currentCtx().materia});
+          return {fecha,estado:r?.asistencia?.[id]||'',existe:Boolean(r?.existe)};
+        }catch(_){return {fecha,estado:'',existe:false};}
+      }));
+      const historial=regs.filter(r=>r.existe&&r.estado);
+      const stats={P:0,A:0,T:0,J:0};
+      historial.forEach(r=>{if(r.estado==='Ausente')stats.A++;else if(r.estado==='Tardanza')stats.T++;else if(r.estado==='Justificada')stats.J++;else stats.P++;});
+      let consecutivas=0,maxConsecutivas=0;
+      historial.sort((a,b)=>a.fecha.localeCompare(b.fecha)).forEach(r=>{if(r.estado==='Ausente'){consecutivas++;maxConsecutivas=Math.max(maxConsecutivas,consecutivas)}else consecutivas=0;});
+      const total=historial.length,pct=total?Math.round(((stats.P+stats.T)/total)*100):0;
+      const riesgo=maxConsecutivas>=3||stats.A>=5?'danger':maxConsecutivas>=2||stats.A>=3||stats.T>=3?'warning':'ok';
+      const riesgoTexto=riesgo==='danger'?`Requiere seguimiento: hasta ${maxConsecutivas} ausencias consecutivas y ${stats.A} ausencias acumuladas.`:riesgo==='warning'?`Atención preventiva: ${stats.A} ausencias, ${stats.T} tardanzas y máximo ${maxConsecutivas} ausencias consecutivas.`:'Sin alerta de riesgo según los registros actuales.';
+      card.innerHTML=`<div><strong style="font-size:14px;color:#203d5e">${esc(alumno.nombre||'Estudiante')}</strong><small style="display:block;color:#8290a2;font-weight:800;margin-top:3px">N.º ${Number(alumno.numeroLista)||((alumnosSeccion||[]).findIndex(a=>String(a.id)===String(id))+1)} · ${esc(currentCtx().ano)} ${esc(currentCtx().seccion)}</small></div>
+      <div class="attendance-v64-student-summary"><div><b>${stats.P}</b><small>Presentes</small></div><div><b>${stats.A}</b><small>Ausentes</small></div><div><b>${stats.T}</b><small>Tardanzas</small></div><div><b>${stats.J}</b><small>Justificadas</small></div><div><b>${pct}%</b><small>Asistencia</small></div></div>
+      <div class="attendance-v64-risk is-${riesgo}">${esc(riesgoTexto)} ${riesgo!=='ok'?'<button type="button" id="attendance-v64-open-orientation" class="attendance-v63-student-report"><i class="fa-solid fa-compass"></i> Ir a Orientación y Convivencia</button>':''}</div>
+      <div class="attendance-v64-history">${historial.slice().reverse().map(r=>`<div class="attendance-v64-history-row"><span>${esc(typeof fechaCortaV62==='function'?fechaCortaV62(r.fecha):r.fecha)}</span><strong>${esc(r.estado)}</strong></div>`).join('')||'<div class="attendance-progress-v62__empty">Sin historial todavía.</div>'}</div>`;
+      $('attendance-v64-open-orientation')?.addEventListener('click',()=>document.getElementById('tab-orientacion-convivencia')?.click());
+    }catch(e){card.innerHTML='<div class="attendance-progress-v62__empty">No fue posible consultar la ficha individual.</div>';}
+  }
+
+  function cargarObservacionActual(){
+    const id=$('attendance-v64-student')?.value||'';
+    const note=$('attendance-v64-note'),just=$('attendance-v64-justification'),status=$('attendance-v64-note-status');
+    if(!note||!just)return;
+    const reg=readJSON(NOTES_KEY(),{})[obsKey(id)]||{};
+    note.value=reg.observacion||'';just.value=reg.justificacion||'';
+    if(status)status.textContent=reg.actualizadoEn?`Última actualización: ${new Date(reg.actualizadoEn).toLocaleString('es-ES')}`:'Sin observación guardada para esta fecha.';
+  }
+
+  function guardarObservacion(){
+    const id=$('attendance-v64-student')?.value||'';
+    if(!id){mostrarToast('Selecciona un estudiante.','warning','Falta estudiante');return;}
+    if(!fechaAsistencia?.value){mostrarToast('Selecciona la fecha de asistencia.','warning','Falta fecha');return;}
+    const map=readJSON(NOTES_KEY(),{}),key=obsKey(id);
+    map[key]={observacion:$('attendance-v64-note')?.value||'',justificacion:$('attendance-v64-justification')?.value||'',actualizadoEn:new Date().toISOString()};
+    writeJSON(NOTES_KEY(),map);
+    cargarObservacionActual();
+    mostrarToast('La observación quedó guardada para este alumno y fecha.','success','Observación guardada');
+  }
+
+  async function copiarAnterior(){
+    const ctx=currentCtx();
+    if(!ctx.ano||!ctx.seccion||!ctx.turno||!fechaAsistencia?.value){mostrarToast('Carga primero la sección y la fecha actual.','warning','Falta información');return;}
+    const lapso=ultimo.lapso||attendanceLapsoV62();
+    const fechas=jornadasProgramadasV62(lapso.desde,lapso.hasta,ctx).filter(f=>f<fechaAsistencia.value).sort().reverse();
+    if(!fechas.length){mostrarToast('No existe una clase anterior dentro del lapso.','info','Sin clase anterior');return;}
+    for(const fecha of fechas){
+      try{
+        const r=await apiRequest('obtenerAsistencia',{ano:ctx.ano,seccion:ctx.seccion,turno:ctx.turno,fecha,materia:ctx.materia});
+        if(r?.existe&&r.asistencia&&Object.keys(r.asistencia).length){
+          if(!window.confirm(`Se copiarán los estados guardados del ${typeof fechaCortaV62==='function'?fechaCortaV62(fecha):fecha}. Podrás modificar los alumnos que cambiaron antes de guardar. ¿Continuar?`))return;
+          asistenciaTemporal={...r.asistencia};
+          (alumnosSeccion||[]).forEach(a=>asistenciaTemporal[a.id]=normalizarEstadoAsistencia(asistenciaTemporal[a.id]));
+          renderAsistencia();actualizarStatsSeccion();
+          mostrarToast('Se copió la asistencia anterior. Revisa los cambios y luego guarda la fecha actual.','success','Asistencia copiada');
+          return;
+        }
+      }catch(_){}
+    }
+    mostrarToast('No se encontró una asistencia anterior guardada para copiar.','info','Sin registro anterior');
+  }
+
+  async function resumenSemana(){
+    const label=$('attendance-v64-week-summary'),pend=$('attendance-v64-week-pending');
+    if(!label||!pend||!profesorActual)return;
+    label.textContent='Calculando…';pend.textContent='';
+    const base=fechaAsistencia?.value?fechaLocalAsistencia(fechaAsistencia.value):new Date();
+    const day=(base.getDay()+6)%7,start=new Date(base);start.setDate(base.getDate()-day);start.setHours(12,0,0,0);
+    const dias=[];
+    for(let i=0;i<5;i++){const d=new Date(start);d.setDate(start.getDate()+i);dias.push(typeof fechaISOAsistencia==='function'?fechaISOAsistencia(d):d.toISOString().slice(0,10));}
+    const checks=[];
+    dias.forEach(fecha=>{
+      const clases=clasesHorarioParaFecha(fecha);
+      clases.forEach(clase=>checks.push({fecha,clase}));
+    });
+    const results=await Promise.all(checks.map(async x=>{
+      try{return await obtenerResumenClaseAgenda(x.clase,x.fecha,true)}catch(_){return {existe:false};}
+    }));
+    const done=results.filter(r=>r.existe&&!r.incompleta).length, incomplete=results.filter(r=>r.incompleta).length,total=checks.length;
+    label.textContent=`${done}/${total} jornadas registradas`;
+    pend.textContent=`${Math.max(0,total-done)} pendientes${incomplete?` · ${incomplete} incompletas`:''}`;
+  }
+
+  function aplicar(detail){
+    ultimo=detail||ultimo;
+    llenarAlumnos();
+    const id=$('attendance-v64-student')?.value||'';
+    if(id)detalleAlumno(id);
+    resumenSemana();
+  }
+
+  function init(){
+    $('attendance-v64-student')?.addEventListener('change',e=>{cargarObservacionActual();detalleAlumno(e.target.value)});
+    $('attendance-v64-save-note')?.addEventListener('click',guardarObservacion);
+    $('attendance-v64-copy-previous')?.addEventListener('click',copiarAnterior);
+    $('attendance-v64-refresh-week')?.addEventListener('click',resumenSemana);
+    fechaAsistencia?.addEventListener('change',cargarObservacionActual);
+    window.addEventListener('edugestion:attendance-progress',e=>aplicar(e.detail));
+    resumenSemana();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,250),{once:true});else setTimeout(init,150);
+})();
