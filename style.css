@@ -8553,3 +8553,47 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
     font-size:14px;
   }
 }
+
+/* V6.2 · Asistencia completa */
+.attendance-progress-v62{margin-top:24px;background:#fff;border:1px solid #dbe7f2;border-radius:28px;padding:24px;box-shadow:0 16px 42px rgba(26,65,111,.08)}
+.attendance-progress-v62__head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;border-bottom:1px solid #e8eef5;padding-bottom:18px}
+.attendance-progress-v62__eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#1c6aa9}
+.attendance-progress-v62__head h3{margin:6px 0 2px;font-size:24px;line-height:1.2;font-weight:900;color:#172b4d}
+.attendance-progress-v62__head p{margin:0;color:#718096;font-size:14px;font-weight:700}
+.attendance-progress-v62__lapso{min-width:170px;display:flex;flex-direction:column;gap:6px}
+.attendance-progress-v62__lapso span{font-size:11px;font-weight:900;color:#6b7b91;text-transform:uppercase;letter-spacing:.08em}
+.attendance-progress-v62__lapso select{width:100%;min-height:46px;border:1px solid #d6e2ee;border-radius:14px;background:#f8fbff;padding:0 12px;color:#1f3554;font-size:15px;font-weight:800}
+.attendance-progress-v62__cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:18px}
+.attendance-progress-v62__cards article,.attendance-progress-v62__history-button{min-height:94px;display:flex;align-items:center;gap:13px;padding:16px;border:1px solid #e2eaf3;border-radius:20px;background:#fbfdff;text-align:left}
+.attendance-progress-v62__history-button{cursor:pointer;transition:.18s ease;color:inherit}
+.attendance-progress-v62__history-button:hover{border-color:#b9c9ff;background:#f6f7ff;transform:translateY(-1px)}
+.attendance-progress-v62__cards strong{display:block;color:#173760;font-size:24px;line-height:1;font-weight:900}
+.attendance-progress-v62__cards small{display:block;margin-top:6px;color:#708198;font-size:11px;line-height:1.25;font-weight:800}
+.attendance-progress-v62__history-button strong{font-size:16px}.attendance-progress-v62__chevron{margin-left:auto;color:#7486a0}
+.attendance-progress-v62__icon{width:46px;height:46px;border-radius:15px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 46px;font-size:18px}
+.attendance-progress-v62__icon.is-green{background:#e8fbf0;color:#169658}.attendance-progress-v62__icon.is-amber{background:#fff6dd;color:#b77900}.attendance-progress-v62__icon.is-blue{background:#e9f4ff;color:#1e6bc0}.attendance-progress-v62__icon.is-violet{background:#f0eaff;color:#7146ce}
+.attendance-progress-v62__bar{margin-top:16px;border:1px solid #e3ebf4;background:#f8fbff;border-radius:18px;padding:14px 16px}
+.attendance-progress-v62__bar-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px;font-size:13px;font-weight:800;color:#50647e}
+.attendance-progress-v62__status{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:900}
+.attendance-progress-v62__status.is-complete{background:#ddf8e9;color:#0d7c46}.attendance-progress-v62__status.is-pending{background:#fff0c9;color:#9a6700}.attendance-progress-v62__status.is-empty{background:#edf1f6;color:#6b7788}
+.attendance-progress-v62__track{height:10px;background:#e6edf5;border-radius:999px;overflow:hidden}.attendance-progress-v62__track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#2d78d5,#2ab979);transition:width .25s ease}
+.attendance-progress-v62__details{margin-top:18px}.attendance-progress-v62__detail-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:16px}
+.attendance-progress-v62__panel,.attendance-progress-v62__pending-panel{border:1px solid #e1e9f2;border-radius:20px;background:#fff;overflow:hidden}.attendance-progress-v62__pending-panel{margin-top:16px}
+.attendance-progress-v62__panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 17px;background:#f8fbff;border-bottom:1px solid #e8eef5}
+.attendance-progress-v62__panel-head span{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:900;color:#8492a6}.attendance-progress-v62__panel-head strong{display:block;margin-top:3px;font-size:14px;font-weight:900;color:#213a5d}
+.attendance-progress-v62__panel-head button{border:1px solid #d7e2ee;background:#fff;color:#2a5d91;border-radius:11px;padding:8px 10px;font-size:11px;font-weight:900;cursor:pointer}
+.attendance-history-list,.attendance-student-summary{max-height:420px;overflow:auto}
+.attendance-history-row{display:grid;grid-template-columns:115px minmax(0,1fr) auto;gap:12px;align-items:center;padding:13px 16px;border-bottom:1px solid #edf1f5}.attendance-history-row:last-child{border-bottom:0}
+.attendance-history-row__date strong{display:block;font-size:13px;color:#203b5f}.attendance-history-row__date small{display:block;margin-top:3px;font-size:10px;color:#8290a3;font-weight:800}
+.attendance-history-row__counts{display:flex;flex-wrap:wrap;gap:7px}.attendance-history-pill{padding:5px 7px;border-radius:999px;background:#f1f5f9;color:#526579;font-size:10px;font-weight:900}
+.attendance-history-pill.is-present{background:#e3f9ec;color:#12814a}.attendance-history-pill.is-absent{background:#ffe9e9;color:#b62b2b}.attendance-history-pill.is-late{background:#fff4d8;color:#a06a00}.attendance-history-pill.is-justified{background:#eee9ff;color:#6841be}
+.attendance-history-open{border:1px solid #cfe0ef;background:#f8fbff;color:#1f5c91;border-radius:10px;padding:8px 10px;font-size:11px;font-weight:900;cursor:pointer;white-space:nowrap}
+.attendance-student-row-summary{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 15px;border-bottom:1px solid #edf1f5}.attendance-student-row-summary:last-child{border-bottom:0}
+.attendance-student-row-summary__num{width:34px;height:34px;border-radius:11px;background:#143f72;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900}
+.attendance-student-row-summary__name{font-size:12px;font-weight:900;color:#253a56}.attendance-student-row-summary__meta{margin-top:4px;font-size:10px;font-weight:800;color:#7d8a9b}.attendance-student-row-summary__pct{font-size:14px;font-weight:900;color:#167a51}
+.attendance-pending-dates{display:flex;flex-wrap:wrap;gap:8px;padding:15px 17px}.attendance-pending-date{border:1px solid #f0d48d;background:#fff9e9;color:#936300;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:900;cursor:pointer}
+.attendance-progress-v62__empty{padding:26px 18px;text-align:center;color:#8a98aa;font-size:12px;font-weight:700}
+.attendance-saved-confirmation-v62{margin-top:12px;padding:12px 14px;border-radius:14px;border:1px solid #bcebcf;background:#edfbf3;color:#11693e;font-size:13px;font-weight:900}
+.attendance-class-card.is-incomplete .attendance-class-card__status{background:#fff1d6!important;color:#9a6400!important}
+@media(max-width:1100px){.attendance-progress-v62__cards{grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-progress-v62__detail-grid{grid-template-columns:1fr}}
+@media(max-width:680px){.attendance-progress-v62{padding:16px;border-radius:20px}.attendance-progress-v62__head{align-items:stretch;flex-direction:column}.attendance-progress-v62__lapso{width:100%}.attendance-progress-v62__cards{grid-template-columns:1fr}.attendance-history-row{grid-template-columns:1fr}.attendance-history-open{width:100%}}

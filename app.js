@@ -1036,19 +1036,29 @@ const SESSION_KEY = 'edugestion_session_v2';
           : {};
         let presentes = 0;
         let ausentes = 0;
+        let tardanzas = 0;
+        let justificadas = 0;
 
         alumnos.forEach(alumno => {
           const estado = asistencia[alumno.id];
           if (estado === 'Ausente') ausentes += 1;
+          else if (estado === 'Tardanza') tardanzas += 1;
+          else if (estado === 'Justificada') justificadas += 1;
           else if (estado === 'Presente') presentes += 1;
         });
 
+        const registrados = Object.keys(asistencia).length;
         const existe = Boolean(registro.existe);
+        const incompleta = existe && alumnos.length > 0 && registrados < alumnos.length;
         const resumen = {
           existe,
+          incompleta,
+          registrados,
           total: alumnos.length,
           presentes: existe ? presentes : 0,
           ausentes: existe ? ausentes : 0,
+          tardanzas: existe ? tardanzas : 0,
+          justificadas: existe ? justificadas : 0,
           error: false
         };
         agendaResumenCache.set(clave, resumen);
@@ -1061,7 +1071,8 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     function estadoTextoAgenda(resumen) {
       if (resumen.error) return { clase: 'is-error', texto: 'Sin conexión' };
-      if (resumen.existe) return { clase: 'is-complete', texto: 'Registrada' };
+      if (resumen.incompleta) return { clase: 'is-incomplete', texto: 'Incompleta' };
+      if (resumen.existe) return { clase: 'is-complete', texto: 'Guardada' };
       return { clase: 'is-pending', texto: 'Pendiente' };
     }
 
@@ -1125,11 +1136,11 @@ const SESSION_KEY = 'edugestion_session_v2';
               <strong class="block truncate text-xs font-black text-slate-700">${escaparHTML(clase.ano)} · Sección ${escaparHTML(clase.seccion)}</strong>
               <small class="mt-1 block text-[10px] font-bold text-slate-400">${escaparHTML(formatearHoraLimpia(clase.horaInicio))}–${escaparHTML(formatearHoraLimpia(clase.horaFin))} · ${escaparHTML(turnoAsistencia(clase.turno) === 'Manana' ? 'Mañana' : clase.turno)}</small>
             </span>
-            <span class="rounded-full px-2 py-1 text-[9px] font-black ${resumen.existe ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${escaparHTML(estado.texto)}</span>
+            <span class="rounded-full px-2 py-1 text-[9px] font-black ${resumen.incompleta ? 'bg-orange-100 text-orange-700' : resumen.existe ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${escaparHTML(estado.texto)}</span>
           </span>
           <span class="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
             <span>${resumen.total} estudiantes</span>
-            <span>${resumen.existe ? `${resumen.presentes} P · ${resumen.ausentes} A` : 'Abrir lista →'}</span>
+            <span>${resumen.existe ? `${resumen.presentes} P · ${resumen.ausentes} A · ${resumen.tardanzas||0} T · ${resumen.justificadas||0} J` : 'Abrir lista →'}</span>
           </span>`;
         boton.addEventListener('click', () => abrirClaseDesdeAgenda(clase, fechaISO));
         lista.appendChild(boton);
@@ -1169,7 +1180,7 @@ const SESSION_KEY = 'edugestion_session_v2';
             <span><b>${resumen.ausentes}</b><small>Ausentes</small></span>
             <span><b>${resumen.total}</b><small>Estudiantes</small></span>
           </span>
-          <span class="attendance-class-card__action"><span>${resumen.existe ? 'Consultar o editar' : 'Registrar asistencia'}</span><i class="fa-solid fa-arrow-right"></i></span>`;
+          <span class="attendance-class-card__action"><span>${resumen.incompleta ? 'Completar asistencia' : resumen.existe ? 'Consultar o editar' : 'Registrar asistencia'}</span><i class="fa-solid fa-arrow-right"></i></span>`;
         tarjeta.addEventListener('click', () => abrirClaseDesdeAgenda(clase, fechaISO));
         agendaClasesDia.appendChild(tarjeta);
       });
@@ -1360,6 +1371,7 @@ const SESSION_KEY = 'edugestion_session_v2';
           mostrarToast(`Se incorporaron ${Number(d.nombresCompartidosAgregados)} alumno(s) ya registrados en esta misma sección por otro docente. Solo se compartieron los nombres.`, 'success', 'Lista institucional sincronizada');
         }
         if (registro.existe) mostrarToast('Se cargó la asistencia que ya estaba guardada para esta fecha.', 'info', 'Registro recuperado');
+        await actualizarProgresoAsistenciaV62();
       } catch (e) {
         console.error('Error al cargar estudiantes o asistencia:', e);
         listaAlumnosAsistencia.innerHTML = '<p class="text-center text-red-500 py-6">No fue posible cargar la lista.</p>';
@@ -1548,6 +1560,141 @@ const SESSION_KEY = 'edugestion_session_v2';
       else porcentajeAsistencia.className = 'text-xl font-black text-red-500';
     }
 
+    // V6.2 · Historial y progreso completo de asistencia
+    const ATTENDANCE_LAPSO_RANGES_V62 = Object.freeze({
+      '1': { nombre: '1.er Lapso', desde: '2026-09-21', hasta: '2026-12-15' },
+      '2': { nombre: '2.º Lapso', desde: '2027-01-11', hasta: '2027-04-30' },
+      '3': { nombre: '3.er Lapso', desde: '2027-05-03', hasta: '2027-07-16' }
+    });
+    let attendanceProgressLoadingV62 = false;
+
+    function attendanceLapsoV62() {
+      const key = String(document.getElementById('attendance-progress-lapso')?.value || '1');
+      return { key, ...(ATTENDANCE_LAPSO_RANGES_V62[key] || ATTENDANCE_LAPSO_RANGES_V62['1']) };
+    }
+    function fechaCortaV62(iso) {
+      const f=fechaLocalAsistencia(iso);
+      return f ? f.toLocaleDateString('es-ES',{day:'2-digit',month:'2-digit',year:'numeric'}) : String(iso||'—');
+    }
+    function fechaLargaV62(iso) {
+      const f=fechaLocalAsistencia(iso); if(!f) return String(iso||'—');
+      const t=f.toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'short'});
+      return t.charAt(0).toUpperCase()+t.slice(1);
+    }
+    function seccionSeleccionadaV62() {
+      return {
+        ano:String(selectFiltroAno?.value||'').trim(),
+        seccion:String(selectFiltroSeccion?.value||'').trim().toUpperCase(),
+        turno:turnoAsistencia(selectFiltroTurno?.value||''),
+        materia:String(profesorActual?.materia||'Materia').trim()
+      };
+    }
+    function fechaToISOv62(f){return `${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}`;}
+    function jornadasProgramadasV62(desde,hasta,ctx){
+      const inicio=fechaLocalAsistencia(desde),finLapso=fechaLocalAsistencia(hasta);
+      if(!inicio||!finLapso||!ctx.ano||!ctx.seccion) return [];
+      const hoy=new Date();hoy.setHours(12,0,0,0);const fin=finLapso<hoy?finLapso:hoy;if(fin<inicio)return[];
+      const dias=['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+      const bloques=(Array.isArray(horariosProfesor)?horariosProfesor:[]).filter(h=>
+        String(h.ano||'').trim()===ctx.ano &&
+        String(h.seccion||'').trim().toUpperCase()===ctx.seccion &&
+        turnoAsistencia(h.turno||'')===ctx.turno
+      );
+      const validos=new Set(bloques.map(h=>normalizarTextoAsistencia(h.dia)));
+      const fechas=[];
+      for(let f=new Date(inicio);f<=fin;f.setDate(f.getDate()+1)){
+        if(validos.has(normalizarTextoAsistencia(dias[f.getDay()])))fechas.push(fechaToISOv62(f));
+      }
+      return [...new Set(fechas)];
+    }
+    function setTextV62(id,v){const el=document.getElementById(id);if(el)el.textContent=String(v??'');}
+    function estadoProgresoV62(r,p){if(!p)return{clase:'is-empty',texto:'Sin jornadas'};if(r>=p)return{clase:'is-complete',texto:'Al día'};return{clase:'is-pending',texto:'Pendiente'};}
+
+    function renderHistorialV62(datos){
+      const lista=document.getElementById('attendance-history-list');
+      const alumnosBox=document.getElementById('attendance-student-summary');
+      if(!lista||!alumnosBox)return;
+      const porFecha=Array.isArray(datos?.porFecha)?[...datos.porFecha].sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))):[];
+      const porAlumno=Array.isArray(datos?.porAlumno)?datos.porAlumno:[];
+      if(!porFecha.length) lista.innerHTML='<div class="attendance-progress-v62__empty">No hay asistencias guardadas para este lapso.</div>';
+      else {
+        lista.innerHTML=porFecha.map(x=>`<div class="attendance-history-row">
+          <div class="attendance-history-row__date"><strong>${escaparHTML(fechaCortaV62(x.fecha))}</strong><small>${escaparHTML(fechaLargaV62(x.fecha))}</small></div>
+          <div class="attendance-history-row__counts">
+            <span class="attendance-history-pill is-present">${Number(x.presentes||0)} presentes</span>
+            <span class="attendance-history-pill is-absent">${Number(x.ausentes||0)} ausentes</span>
+            <span class="attendance-history-pill is-late">${Number(x.tardanzas||0)} tardanzas</span>
+            <span class="attendance-history-pill is-justified">${Number(x.justificadas||0)} justificadas</span>
+          </div>
+          <button class="attendance-history-open" type="button" data-open-attendance-date="${escaparHTML(String(x.fecha||''))}"><i class="fa-solid fa-pen-to-square"></i> Abrir / editar</button>
+        </div>`).join('');
+        lista.querySelectorAll('[data-open-attendance-date]').forEach(btn=>btn.addEventListener('click',async()=>{
+          const fecha=btn.dataset.openAttendanceDate;if(!fecha)return;
+          fechaAsistencia.value=fecha;if(fechaAgendaClases)fechaAgendaClases.value=fecha;
+          await renderAgendaAsistencia();await cargarAlumnosDeSeccion();
+          document.querySelector('.attendance-workspace')?.scrollIntoView({behavior:'smooth',block:'start'});
+        }));
+      }
+      const numMap=new Map((Array.isArray(alumnosSeccion)?alumnosSeccion:[]).map((a,i)=>[String(a.id||''),Number(a.numeroLista)>0?Number(a.numeroLista):i+1]));
+      if(!porAlumno.length) alumnosBox.innerHTML='<div class="attendance-progress-v62__empty">Aún no hay acumulado individual para este lapso.</div>';
+      else alumnosBox.innerHTML=porAlumno.map((x,i)=>{
+        const n=numMap.get(String(x.idAlumno||''))||i+1;
+        return `<div class="attendance-student-row-summary"><span class="attendance-student-row-summary__num">${n}</span><div><div class="attendance-student-row-summary__name">${escaparHTML(x.alumno||'Estudiante')}</div><div class="attendance-student-row-summary__meta">P ${Number(x.presentes||0)} · A ${Number(x.ausentes||0)} · T ${Number(x.tardanzas||0)} · J ${Number(x.justificadas||0)}</div></div><span class="attendance-student-row-summary__pct">${Math.round(Number(x.porcentajeAsistencia||0))}%</span></div>`;
+      }).join('');
+    }
+
+    function renderPendientesV62(fechas){
+      const box=document.getElementById('attendance-pending-dates');if(!box)return;
+      if(!fechas.length){box.innerHTML='<span class="attendance-progress-v62__empty" style="width:100%">No tienes jornadas pendientes hasta hoy para esta sección.</span>';return;}
+      box.innerHTML=fechas.map(f=>`<button type="button" class="attendance-pending-date" data-pending-date="${escaparHTML(f)}"><i class="fa-regular fa-calendar"></i> ${escaparHTML(fechaCortaV62(f))}</button>`).join('');
+      box.querySelectorAll('[data-pending-date]').forEach(btn=>btn.addEventListener('click',async()=>{
+        const fecha=btn.dataset.pendingDate;fechaAsistencia.value=fecha;if(fechaAgendaClases)fechaAgendaClases.value=fecha;
+        await renderAgendaAsistencia();await cargarAlumnosDeSeccion();document.querySelector('.attendance-workspace')?.scrollIntoView({behavior:'smooth',block:'start'});
+      }));
+    }
+
+    async function actualizarProgresoAsistenciaV62({abrirHistorial=false}={}){
+      if(attendanceProgressLoadingV62||!profesorActual)return;
+      const ctx=seccionSeleccionadaV62();if(!ctx.ano||!ctx.seccion||!ctx.turno)return;
+      const lapso=attendanceLapsoV62();attendanceProgressLoadingV62=true;
+      try{
+        setTextV62('attendance-progress-title',`${ctx.ano} · Sección ${ctx.seccion} · ${ctx.materia} · ${lapso.nombre}`);
+        const datos=await apiRequest('obtenerEstadisticasAsistencia',{fechaDesde:lapso.desde,fechaHasta:lapso.hasta,ano:ctx.ano,seccion:ctx.seccion,turno:ctx.turno,materia:ctx.materia});
+        const porFecha=Array.isArray(datos?.porFecha)?datos.porFecha:[];
+        const guardadas=new Set(porFecha.map(x=>String(x.fecha||'')).filter(Boolean));
+        const programadas=jornadasProgramadasV62(lapso.desde,lapso.hasta,ctx);
+        const registradas=programadas.filter(f=>guardadas.has(f)).length;
+        const pendientes=programadas.filter(f=>!guardadas.has(f));
+        const pct=programadas.length?Math.round(registradas/programadas.length*100):0;
+        const promedio=Math.round(Number(datos?.resumen?.porcentajeAsistencia||0));
+        const ultima=[...guardadas].sort().pop()||'';
+        setTextV62('attendance-progress-registered',registradas);setTextV62('attendance-progress-pending',pendientes.length);
+        setTextV62('attendance-progress-average',`${promedio}%`);setTextV62('attendance-progress-count-label',`${porFecha.length} fecha${porFecha.length===1?'':'s'} guardada${porFecha.length===1?'':'s'}`);
+        setTextV62('attendance-progress-caption',`${registradas} de ${programadas.length} jornadas registradas · ${pct}%`);
+        setTextV62('attendance-progress-last',ultima?`Última asistencia: ${fechaCortaV62(ultima)} ✅`:'Última asistencia: aún no registrada');
+        const fill=document.getElementById('attendance-progress-fill');if(fill)fill.style.width=`${Math.min(100,pct)}%`;
+        const st=estadoProgresoV62(registradas,programadas.length),badge=document.getElementById('attendance-progress-status');
+        if(badge){badge.textContent=st.texto;badge.className=`attendance-progress-v62__status ${st.clase}`;}
+        renderHistorialV62(datos);renderPendientesV62(pendientes);
+        if(abrirHistorial)document.getElementById('attendance-progress-details')?.classList.remove('hidden');
+      }catch(e){console.error('No se pudo actualizar el progreso de asistencia:',e);setTextV62('attendance-progress-last','No se pudo consultar el historial en este momento.');}
+      finally{attendanceProgressLoadingV62=false;}
+    }
+
+    function mostrarConfirmacionGuardadoV62(){
+      let box=document.getElementById('attendance-saved-confirmation-v62');
+      if(!box){box=document.createElement('div');box.id='attendance-saved-confirmation-v62';box.className='attendance-saved-confirmation-v62';btnGuardarAsistencia?.parentElement?.appendChild(box);}
+      const c=seccionSeleccionadaV62(),f=fechaAsistencia?.value||'';
+      box.innerHTML=`<i class="fa-solid fa-circle-check"></i> Asistencia guardada · ${escaparHTML(c.ano)} ${escaparHTML(c.seccion)} · ${escaparHTML(fechaCortaV62(f))} · ${alumnosSeccion.length} alumnos`;
+    }
+
+    function inicializarAsistenciaCompletaV62(){
+      document.getElementById('attendance-progress-history-btn')?.addEventListener('click',()=>document.getElementById('attendance-progress-details')?.classList.toggle('hidden'));
+      document.getElementById('attendance-progress-refresh')?.addEventListener('click',()=>actualizarProgresoAsistenciaV62({abrirHistorial:true}));
+      document.getElementById('attendance-progress-lapso')?.addEventListener('change',()=>actualizarProgresoAsistenciaV62({abrirHistorial:true}));
+    }
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inicializarAsistenciaCompletaV62,{once:true});else inicializarAsistenciaCompletaV62();
+
     function llenarSelectActaRapida() {
       selectActaRapida.innerHTML = '<option value="">-- Selecciona el estudiante --</option>';
       const ordenados = [...alumnosSeccion].sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
@@ -1599,9 +1746,11 @@ const SESSION_KEY = 'edugestion_session_v2';
             seccion: selectFiltroSeccion.value,
             turno: selectFiltroTurno.value
           }, fechaAsistencia.value));
-          if (asistenciaSubtitulo) asistenciaSubtitulo.textContent = `Asistencia guardada · ${fechaLocalAsistencia(fechaAsistencia.value)?.toLocaleDateString('es-ES') || fechaAsistencia.value}`;
+          if (asistenciaSubtitulo) asistenciaSubtitulo.textContent = `Asistencia guardada · ${selectFiltroAno.value} ${selectFiltroSeccion.value} · ${fechaLocalAsistencia(fechaAsistencia.value)?.toLocaleDateString('es-ES') || fechaAsistencia.value} · ${alumnosSeccion.length} alumnos`;
+          mostrarConfirmacionGuardadoV62();
           await renderAgendaAsistencia({ forzar: true });
-          mostrarToast('La asistencia del día quedó registrada correctamente.', 'success', 'Asistencia guardada');
+          await actualizarProgresoAsistenciaV62();
+          mostrarToast('La asistencia del día quedó registrada correctamente y ya aparece en el historial de la sección.', 'success', 'Asistencia guardada');
         } catch(e) {
           console.error('Error al guardar asistencia:', e);
           mostrarToast('Verifica tu conexión e inténtalo nuevamente.', 'error', 'No se guardó la asistencia');
@@ -18166,3 +18315,249 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('beforeunload',()=>{try{if(timer)clearTimeout(timer)}catch(_){}});
 })();
 /* EDUGESTION_CLOUD_STATE_V53_END */
+
+/* ================================================================
+   EduGestión · ORIENTACIÓN Y CONVIVENCIA · V6.1
+   Módulo independiente para el usuario de Educación Física.
+   No modifica ni mezcla datos de Educación Física.
+   ================================================================ */
+(() => {
+  const MARK = 'EDUGESTION_ORIENTACION_CONVIVENCIA_V61';
+  if (window[MARK]) return;
+  window[MARK] = true;
+
+  const TAB_ID = 'tab-orientacion-convivencia';
+  const SECTION_ID = 'section-orientacion-convivencia';
+  const AREA = 'Orientación y Convivencia';
+  const $ = id => document.getElementById(id);
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+  const uid = () => String(window.profesorActual?.id || window.profesorActual?.usuario || window.profesorActual?.email || window.profesorActual?.nombre || 'docente')
+    .trim().toLowerCase().replace(/[^a-z0-9._-]+/g,'_');
+  const STORE_KEY = () => `edugestion_orientacion_convivencia_v1__docente_${uid()}`;
+
+  let currentView = 'cursos';
+  let state = null;
+  let attendanceStudents = [];
+
+  function eligible(){
+    const materia = norm(window.profesorActual?.materia || window.EDUGESTION_DOCENTE_PERFIL?.materiaEfectiva || '');
+    return materia.includes('educacion fisica');
+  }
+
+  function emptyState(){
+    return {
+      version: 1,
+      cursos: [
+        {id:'oc-2a-manana', ano:'2do Año', seccion:'A', turno:'Mañana', activo:true},
+        {id:'oc-4a-manana', ano:'4to Año', seccion:'A', turno:'Mañana', activo:true}
+      ],
+      planificaciones: [],
+      evaluaciones: [],
+      asistencias: {},
+      seguimientos: [],
+      updatedAt: new Date().toISOString()
+    };
+  }
+  function load(){
+    if(!state){
+      try{ state = JSON.parse(localStorage.getItem(STORE_KEY()) || 'null'); }catch(_){ state = null; }
+      if(!state || typeof state !== 'object') state = emptyState();
+      state.cursos = Array.isArray(state.cursos) ? state.cursos : [];
+      state.planificaciones = Array.isArray(state.planificaciones) ? state.planificaciones : [];
+      state.evaluaciones = Array.isArray(state.evaluaciones) ? state.evaluaciones : [];
+      state.asistencias = state.asistencias && typeof state.asistencias === 'object' ? state.asistencias : {};
+      state.seguimientos = Array.isArray(state.seguimientos) ? state.seguimientos : [];
+      if(!state.cursos.length) state.cursos = emptyState().cursos;
+    }
+    return state;
+  }
+  function save(message){
+    load().updatedAt = new Date().toISOString();
+    try{ localStorage.setItem(STORE_KEY(), JSON.stringify(state)); }catch(e){ console.warn('Orientación y Convivencia: no se pudo guardar',e); }
+    if(message) toast(message,'success');
+  }
+  function toast(msg,type='info'){
+    if(typeof window.mostrarToast === 'function') window.mostrarToast(msg,type,AREA);
+    else alert(msg);
+  }
+  function courseLabel(c){ return `${c.ano} · Sección ${c.seccion} · ${c.turno}`; }
+  function courseById(id){ return load().cursos.find(c=>String(c.id)===String(id)); }
+  function courseOptions(selected=''){
+    return load().cursos.filter(c=>c.activo!==false).map(c=>`<option value="${esc(c.id)}" ${String(c.id)===String(selected)?'selected':''}>${esc(courseLabel(c))}</option>`).join('');
+  }
+  function today(){ return new Date().toISOString().slice(0,10); }
+  function prettyDate(v){ if(!v) return '—'; const d=new Date(v+'T12:00:00'); return Number.isNaN(d.getTime())?v:d.toLocaleDateString('es-VE'); }
+  function uniqueId(prefix){ return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,8)}`; }
+
+  function injectStyles(){
+    if($('oc-v61-styles')) return;
+    const s=document.createElement('style'); s.id='oc-v61-styles'; s.textContent=`
+      .oc-page{display:grid;gap:16px}.oc-hero{padding:24px;border-radius:24px;background:linear-gradient(135deg,#0f766e,#0f4c81);color:#fff;box-shadow:0 15px 34px rgba(15,76,129,.16)}
+      .oc-hero small{font-weight:900;text-transform:uppercase;letter-spacing:.08em;opacity:.9}.oc-hero h2{font-size:1.75rem;margin:7px 0 8px}.oc-hero p{margin:0;max-width:920px;line-height:1.5;opacity:.96}.oc-badge{display:inline-flex;align-items:center;gap:7px;margin-top:14px;padding:7px 11px;border-radius:999px;background:rgba(255,255,255,.14);font-weight:800;font-size:.78rem}
+      .oc-tabs{display:flex;flex-wrap:wrap;gap:8px;padding:8px;border:1px solid #dce6ef;background:#fff;border-radius:18px}.oc-tab{border:0;background:#f2f6fa;color:#40536b;padding:11px 14px;border-radius:12px;font-weight:900;cursor:pointer}.oc-tab.active{background:#0f6f72;color:#fff;box-shadow:0 7px 15px rgba(15,111,114,.17)}
+      .oc-card{background:#fff;border:1px solid #dce6ef;border-radius:20px;padding:18px;box-shadow:0 7px 22px rgba(30,64,100,.045)}.oc-card h3{margin:0 0 5px;font-size:1.12rem;color:#20324a}.oc-card .oc-help{margin:0 0 15px;color:#6a7a8e;font-size:.88rem;line-height:1.45}
+      .oc-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}.oc-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.oc-field{display:flex;flex-direction:column;gap:6px}.oc-field.full{grid-column:1/-1}.oc-field label{font-size:.77rem;font-weight:900;color:#5a6b80;text-transform:uppercase;letter-spacing:.035em}.oc-field input,.oc-field select,.oc-field textarea{width:100%;border:1px solid #cfdbe7;border-radius:12px;padding:11px 12px;background:#fff;color:#1f2d41;font:inherit;box-sizing:border-box}.oc-field textarea{min-height:92px;resize:vertical}.oc-field input:focus,.oc-field select:focus,.oc-field textarea:focus{outline:3px solid rgba(14,116,144,.1);border-color:#2d92a2}
+      .oc-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:13px}.oc-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:900;cursor:pointer}.oc-btn.primary{background:#126b9b;color:#fff}.oc-btn.green{background:#0f8a67;color:#fff}.oc-btn.soft{background:#edf5f8;color:#24566a}.oc-btn.danger{background:#fff0f0;color:#b42318}.oc-btn.amber{background:#fff7e6;color:#8d5a00}.oc-btn:disabled{opacity:.5;cursor:not-allowed}
+      .oc-course-list,.oc-list{display:grid;gap:9px;margin-top:14px}.oc-course,.oc-item{border:1px solid #dce6ef;border-radius:15px;padding:12px 13px;background:#fbfdff;display:flex;gap:12px;align-items:center;justify-content:space-between}.oc-course strong,.oc-item strong{display:block;color:#213248}.oc-course small,.oc-item small{color:#718095}.oc-item-body{min-width:0;flex:1}.oc-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.oc-meta span{font-size:.72rem;font-weight:850;padding:5px 8px;border-radius:999px;background:#eaf3f6;color:#315669}.oc-empty{padding:24px;text-align:center;border:1px dashed #cbd8e5;border-radius:15px;color:#718095;background:#fbfdff}.oc-total{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 14px;border-radius:14px;background:#eef8f6;border:1px solid #c9ebe2;margin:14px 0}.oc-total strong{font-size:1.3rem;color:#0c7258}.oc-total.warn{background:#fff7e8;border-color:#f5ddb0}.oc-total.warn strong{color:#a35c00}
+      .oc-table-wrap{overflow:auto;border:1px solid #dce6ef;border-radius:15px}.oc-table{border-collapse:collapse;width:100%;min-width:720px}.oc-table th,.oc-table td{border-bottom:1px solid #e6edf3;padding:10px 9px;text-align:left;font-size:.84rem;vertical-align:top}.oc-table th{background:#f4f8fb;font-size:.72rem;text-transform:uppercase;color:#5d6d80;letter-spacing:.04em}.oc-status{display:flex;flex-wrap:wrap;gap:6px}.oc-status button{border:1px solid #cfdae5;background:#fff;border-radius:999px;padding:7px 9px;font-weight:850;color:#52647a;cursor:pointer}.oc-status button.active[data-status="Presente"]{background:#22c55e;border-color:#22c55e;color:#fff}.oc-status button.active[data-status="Ausente"]{background:#ef4444;border-color:#ef4444;color:#fff}.oc-status button.active[data-status="Tarde"]{background:#f59e0b;border-color:#f59e0b;color:#fff}.oc-status button.active[data-status="Justificado"]{background:#6366f1;border-color:#6366f1;color:#fff}.oc-note{padding:11px 12px;border-radius:12px;background:#eef6ff;color:#315d86;font-size:.82rem;font-weight:750;margin-top:12px}
+      .edugestion-dark .oc-card,.edugestion-dark .oc-tabs,.edugestion-dark .oc-field input,.edugestion-dark .oc-field select,.edugestion-dark .oc-field textarea{background:rgba(15,23,42,.78);color:#e5edf7;border-color:rgba(148,163,184,.32)}.edugestion-dark .oc-card h3,.edugestion-dark .oc-course strong,.edugestion-dark .oc-item strong{color:#f1f5f9}.edugestion-dark .oc-course,.edugestion-dark .oc-item,.edugestion-dark .oc-empty{background:rgba(15,23,42,.42);border-color:rgba(148,163,184,.3)}
+      @media(max-width:980px){.oc-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      @media(max-width:620px){.oc-grid,.oc-grid.two{grid-template-columns:1fr}.oc-course,.oc-item{align-items:flex-start;flex-direction:column}.oc-tabs{display:grid;grid-template-columns:1fr 1fr}.oc-tab{width:100%}}
+    `; document.head.appendChild(s);
+  }
+
+  function createUI(){
+    injectStyles();
+    const nav=$('app-nav'), main=$('app-main'); if(!nav||!main) return false;
+    let tab=$(TAB_ID);
+    if(!eligible()){
+      if(tab) tab.classList.add('hidden');
+      const sec=$(SECTION_ID); if(sec) sec.classList.add('hidden');
+      return false;
+    }
+    if(!tab){
+      tab=document.createElement('button'); tab.id=TAB_ID; tab.type='button'; tab.className='nav-item'; tab.setAttribute('aria-selected','false');
+      tab.dataset.title=AREA; tab.dataset.description='Gestiona cursos, planificación, evaluaciones, asistencia y seguimiento de Orientación y Convivencia de forma independiente.';
+      tab.innerHTML='<i class="fa-solid fa-people-arrows-left-right"></i><span>Orientación y Convivencia</span>';
+      const ref=$('tab-actas') || $('tab-registro'); nav.insertBefore(tab,ref||null);
+      tab.addEventListener('click',()=>openModule(tab));
+    }else tab.classList.remove('hidden');
+
+    let sec=$(SECTION_ID);
+    if(!sec){
+      sec=document.createElement('section'); sec.id=SECTION_ID; sec.className='hidden'; sec.innerHTML=`
+        <div class="oc-page">
+          <header class="oc-hero"><small><i class="fa-solid fa-people-arrows-left-right"></i> Área independiente</small><h2>Orientación y Convivencia</h2><p>Espacio separado de Educación Física para registrar tus cursos, planificaciones, evaluaciones, asistencia y seguimiento de convivencia. Nada de este módulo modifica las planificaciones ni evaluaciones de Educación Física.</p><span class="oc-badge"><i class="fa-solid fa-shield-halved"></i> Datos separados por docente</span></header>
+          <nav class="oc-tabs" id="oc-subtabs">
+            <button class="oc-tab active" data-oc-view="cursos"><i class="fa-solid fa-users-rectangle"></i> Cursos</button>
+            <button class="oc-tab" data-oc-view="planificacion"><i class="fa-solid fa-calendar-days"></i> Planificación</button>
+            <button class="oc-tab" data-oc-view="evaluacion"><i class="fa-solid fa-list-check"></i> Evaluación</button>
+            <button class="oc-tab" data-oc-view="asistencia"><i class="fa-solid fa-clipboard-user"></i> Asistencia</button>
+            <button class="oc-tab" data-oc-view="seguimiento"><i class="fa-solid fa-handshake-angle"></i> Seguimiento</button>
+          </nav>
+          <div id="oc-content"></div>
+        </div>`;
+      main.appendChild(sec);
+      sec.querySelectorAll('[data-oc-view]').forEach(b=>b.addEventListener('click',()=>{currentView=b.dataset.ocView; sec.querySelectorAll('[data-oc-view]').forEach(x=>x.classList.toggle('active',x===b)); render();}));
+    }
+    return true;
+  }
+
+  function openModule(tab){
+    if(!eligible()) return;
+    document.querySelectorAll('#app-nav .nav-item').forEach(i=>{i.classList.remove('is-active');i.setAttribute('aria-selected','false');});
+    document.querySelectorAll('#app-main > section').forEach(s=>s.classList.add('hidden'));
+    tab.classList.add('is-active'); tab.setAttribute('aria-selected','true'); $(SECTION_ID)?.classList.remove('hidden');
+    const t=$('page-title'), d=$('page-description'); if(t)t.textContent=AREA; if(d)d.textContent='Cursos, planificación, evaluaciones, asistencia y seguimiento independientes de Educación Física.';
+    render(); window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function render(){
+    const host=$('oc-content'); if(!host) return;
+    if(currentView==='cursos') renderCourses(host);
+    else if(currentView==='planificacion') renderPlanning(host);
+    else if(currentView==='evaluacion') renderEvaluation(host);
+    else if(currentView==='asistencia') renderAttendance(host);
+    else renderFollowup(host);
+  }
+
+  function renderCourses(host){
+    const cursos=load().cursos.filter(c=>c.activo!==false);
+    host.innerHTML=`<section class="oc-card"><h3>Cursos de Orientación y Convivencia</h3><p class="oc-help">Registra aquí únicamente los cursos que atiendes en esta materia. Ya dejé preparados 2.º A y 4.º A del turno mañana; puedes agregar, cambiar o quitar cursos sin afectar Educación Física.</p>
+      <div class="oc-grid">
+        <div class="oc-field"><label>Año</label><select id="oc-course-year"><option>1er Año</option><option selected>2do Año</option><option>3er Año</option><option>4to Año</option><option>5to Año</option></select></div>
+        <div class="oc-field"><label>Sección</label><select id="oc-course-section"><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+        <div class="oc-field"><label>Turno</label><select id="oc-course-shift"><option>Mañana</option><option>Tarde</option></select></div>
+        <div class="oc-field"><label>Materia</label><input value="${AREA}" disabled></div>
+      </div><div class="oc-actions"><button class="oc-btn primary" id="oc-add-course"><i class="fa-solid fa-plus"></i> Agregar curso</button></div>
+      <div class="oc-course-list">${cursos.length?cursos.map(c=>`<div class="oc-course"><div><strong>${esc(courseLabel(c))}</strong><small>${AREA}</small></div><button class="oc-btn danger" data-oc-remove-course="${esc(c.id)}"><i class="fa-solid fa-trash"></i> Quitar</button></div>`).join(''):'<div class="oc-empty">Todavía no hay cursos registrados.</div>'}</div></section>`;
+    $('oc-add-course')?.addEventListener('click',()=>{
+      const ano=$('oc-course-year').value,seccion=$('oc-course-section').value,turno=$('oc-course-shift').value;
+      if(load().cursos.some(c=>c.activo!==false&&norm(c.ano)===norm(ano)&&norm(c.seccion)===norm(seccion)&&norm(c.turno)===norm(turno))) return toast('Ese curso ya está registrado.','warning');
+      state.cursos.push({id:uniqueId('curso'),ano,seccion,turno,activo:true}); save('Curso agregado a Orientación y Convivencia.'); renderCourses(host);
+    });
+    host.querySelectorAll('[data-oc-remove-course]').forEach(b=>b.addEventListener('click',()=>{
+      const c=courseById(b.dataset.ocRemoveCourse); if(!c)return; if(!confirm(`¿Quitar ${courseLabel(c)} de Orientación y Convivencia?`))return; c.activo=false; save('Curso retirado de esta materia.'); renderCourses(host);
+    }));
+  }
+
+  function renderPlanning(host){
+    const cursos=load().cursos.filter(c=>c.activo!==false);
+    if(!cursos.length){host.innerHTML='<div class="oc-empty">Primero registra al menos un curso en la pestaña Cursos.</div>';return;}
+    host.innerHTML=`<section class="oc-card"><h3>Nueva planificación</h3><p class="oc-help">Planifica exclusivamente Orientación y Convivencia. Puedes guardar tantas sesiones como necesites por curso y lapso.</p>
+      <div class="oc-grid">
+        <div class="oc-field"><label>Curso</label><select id="oc-plan-course">${courseOptions()}</select></div>
+        <div class="oc-field"><label>Lapso</label><select id="oc-plan-lapso"><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select></div>
+        <div class="oc-field"><label>Fecha</label><input id="oc-plan-date" type="date" value="${today()}"></div>
+        <div class="oc-field"><label>Tema</label><input id="oc-plan-theme" placeholder="Ej.: Convivencia, respeto y resolución de conflictos"></div>
+        <div class="oc-field full"><label>Propósito / objetivo</label><textarea id="oc-plan-purpose" placeholder="¿Qué se espera lograr con la sesión?"></textarea></div>
+        <div class="oc-field"><label>Inicio</label><textarea id="oc-plan-start" placeholder="Motivación, diálogo inicial, dinámica..."></textarea></div>
+        <div class="oc-field"><label>Desarrollo</label><textarea id="oc-plan-dev" placeholder="Actividad central, análisis, trabajo grupal..."></textarea></div>
+        <div class="oc-field"><label>Cierre</label><textarea id="oc-plan-close" placeholder="Conclusiones, compromiso, reflexión..."></textarea></div>
+        <div class="oc-field"><label>Evidencia / recurso</label><textarea id="oc-plan-evidence" placeholder="Producción, registro, lista de cotejo, cartel..."></textarea></div>
+      </div><div class="oc-actions"><button class="oc-btn green" id="oc-save-plan"><i class="fa-solid fa-floppy-disk"></i> Guardar planificación</button><button class="oc-btn soft" id="oc-print-plan"><i class="fa-solid fa-print"></i> Imprimir listado</button></div></section>
+      <section class="oc-card"><h3>Planificaciones guardadas</h3><div class="oc-list" id="oc-plan-list"></div></section>`;
+    const draw=()=>{const list=$('oc-plan-list'),items=[...load().planificaciones].sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));list.innerHTML=items.length?items.map(p=>{const c=courseById(p.cursoId);return `<div class="oc-item"><div class="oc-item-body"><strong>${esc(p.tema||'Planificación sin título')}</strong><div class="oc-meta"><span>${esc(c?courseLabel(c):'Curso')}</span><span>${esc(p.lapso)}</span><span>${prettyDate(p.fecha)}</span></div><small>${esc(p.proposito||'')}</small></div><button class="oc-btn danger" data-oc-del-plan="${esc(p.id)}"><i class="fa-solid fa-trash"></i></button></div>`}).join(''):'<div class="oc-empty">Aún no has guardado planificaciones de esta materia.</div>';list.querySelectorAll('[data-oc-del-plan]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('¿Eliminar esta planificación?'))return;state.planificaciones=state.planificaciones.filter(x=>x.id!==b.dataset.ocDelPlan);save();draw();}));}; draw();
+    $('oc-save-plan')?.addEventListener('click',()=>{const tema=$('oc-plan-theme').value.trim();if(!tema)return toast('Escribe el tema de la planificación.','warning');state.planificaciones.push({id:uniqueId('plan'),cursoId:$('oc-plan-course').value,lapso:$('oc-plan-lapso').value,fecha:$('oc-plan-date').value,tema,proposito:$('oc-plan-purpose').value.trim(),inicio:$('oc-plan-start').value.trim(),desarrollo:$('oc-plan-dev').value.trim(),cierre:$('oc-plan-close').value.trim(),evidencia:$('oc-plan-evidence').value.trim(),area:AREA,creadoEn:new Date().toISOString()});save('Planificación de Orientación y Convivencia guardada.');renderPlanning(host);});
+    $('oc-print-plan')?.addEventListener('click',()=>printPlans());
+  }
+
+  function evalTotal(courseId,lapso){ return load().evaluaciones.filter(e=>(!courseId||e.cursoId===courseId)&&(!lapso||e.lapso===lapso)).reduce((s,e)=>s+(Number(e.puntos)||0),0); }
+  function renderEvaluation(host){
+    const cursos=load().cursos.filter(c=>c.activo!==false); if(!cursos.length){host.innerHTML='<div class="oc-empty">Primero registra un curso.</div>';return;}
+    host.innerHTML=`<section class="oc-card"><h3>Plan de evaluación · Orientación y Convivencia</h3><p class="oc-help">Cada actividad conserva su fecha y puntos. La sumatoria se calcula automáticamente sobre 20 puntos por curso y lapso.</p>
+      <div class="oc-grid"><div class="oc-field"><label>Curso</label><select id="oc-eval-course">${courseOptions()}</select></div><div class="oc-field"><label>Lapso</label><select id="oc-eval-lapso"><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select></div><div class="oc-field"><label>Fecha</label><input id="oc-eval-date" type="date" value="${today()}"></div><div class="oc-field"><label>Puntos</label><input id="oc-eval-points" type="number" min="0" max="20" step="0.5" value="2"></div><div class="oc-field full"><label>Actividad / contenido evaluado</label><input id="oc-eval-name" placeholder="Ej.: Análisis sobre normas de convivencia"></div><div class="oc-field full"><label>Cómo se evaluará</label><textarea id="oc-eval-how" placeholder="Ej.: Producción escrita, exposición, lista de cotejo, participación..."></textarea></div></div>
+      <div id="oc-eval-total"></div><div class="oc-actions"><button class="oc-btn green" id="oc-save-eval"><i class="fa-solid fa-plus"></i> Agregar evaluación</button><button class="oc-btn soft" id="oc-print-eval"><i class="fa-solid fa-print"></i> Imprimir plan</button></div></section><section class="oc-card"><h3>Evaluaciones guardadas</h3><div class="oc-list" id="oc-eval-list"></div></section>`;
+    function draw(){const course=$('oc-eval-course').value,lapso=$('oc-eval-lapso').value,total=evalTotal(course,lapso),remain=20-total;const box=$('oc-eval-total');box.className='oc-total'+(total>20?' warn':'');box.innerHTML=`<div><b>Total acumulado del lapso</b><br><small>${total===20?'Plan completo':total<20?`Faltan ${remain} pts para 20`:`Excede por ${Math.abs(remain)} pts`}</small></div><strong>${total} / 20 pts</strong>`;const items=load().evaluaciones.filter(e=>e.cursoId===course&&e.lapso===lapso).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));const list=$('oc-eval-list');list.innerHTML=items.length?items.map((e,i)=>`<div class="oc-item"><div class="oc-item-body"><strong>${i+1}. ${esc(e.nombre)}</strong><div class="oc-meta"><span>${prettyDate(e.fecha)}</span><span>${esc(e.puntos)} pts</span></div><small>${esc(e.como||'')}</small></div><button class="oc-btn danger" data-oc-del-eval="${esc(e.id)}"><i class="fa-solid fa-trash"></i></button></div>`).join(''):'<div class="oc-empty">No hay evaluaciones en este curso y lapso.</div>';list.querySelectorAll('[data-oc-del-eval]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('¿Eliminar esta evaluación?'))return;state.evaluaciones=state.evaluaciones.filter(x=>x.id!==b.dataset.ocDelEval);save();draw();}));}
+    draw(); $('oc-eval-course').addEventListener('change',draw); $('oc-eval-lapso').addEventListener('change',draw);
+    $('oc-save-eval').addEventListener('click',()=>{const nombre=$('oc-eval-name').value.trim(),pts=Number($('oc-eval-points').value||0);if(!nombre)return toast('Escribe el nombre de la actividad.','warning');if(!(pts>0))return toast('Coloca los puntos de la evaluación.','warning');const current=evalTotal($('oc-eval-course').value,$('oc-eval-lapso').value);if(current+pts>20&&!confirm(`La suma quedará en ${current+pts} puntos. ¿Deseas guardarla de todos modos?`))return;state.evaluaciones.push({id:uniqueId('eval'),cursoId:$('oc-eval-course').value,lapso:$('oc-eval-lapso').value,fecha:$('oc-eval-date').value,nombre,puntos:pts,como:$('oc-eval-how').value.trim(),area:AREA,creadoEn:new Date().toISOString()});save('Evaluación guardada.');renderEvaluation(host);});
+    $('oc-print-eval').addEventListener('click',()=>printEvaluations($('oc-eval-course').value,$('oc-eval-lapso').value));
+  }
+
+  async function getStudentsForCourse(c){
+    if(typeof window.EDUGESTION_API_REQUEST !== 'function') throw new Error('La conexión con el servidor no está disponible.');
+    const resp=await window.EDUGESTION_API_REQUEST('obtenerAlumnos',{ano:c.ano,seccion:c.seccion,turno:c.turno});
+    return Array.isArray(resp?.alumnos)?resp.alumnos:[];
+  }
+  function attKey(courseId,date){return `${courseId}|${date}`;}
+  function renderAttendance(host){
+    const cursos=load().cursos.filter(c=>c.activo!==false); if(!cursos.length){host.innerHTML='<div class="oc-empty">Primero registra un curso.</div>';return;}
+    host.innerHTML=`<section class="oc-card"><h3>Asistencia de Orientación y Convivencia</h3><p class="oc-help">Esta asistencia queda separada de Educación Física. Usa los alumnos ya registrados para ese año, sección y turno.</p><div class="oc-grid"><div class="oc-field"><label>Curso</label><select id="oc-att-course">${courseOptions()}</select></div><div class="oc-field"><label>Fecha</label><input id="oc-att-date" type="date" value="${today()}"></div></div><div class="oc-actions"><button class="oc-btn primary" id="oc-load-students"><i class="fa-solid fa-users"></i> Cargar alumnos</button><button class="oc-btn green" id="oc-save-att" disabled><i class="fa-solid fa-floppy-disk"></i> Guardar asistencia</button></div><div id="oc-att-list" style="margin-top:14px"><div class="oc-empty">Pulsa “Cargar alumnos” para comenzar.</div></div></section>`;
+    const loadStudents=async()=>{const c=courseById($('oc-att-course').value);if(!c)return;const list=$('oc-att-list');list.innerHTML='<div class="oc-empty"><i class="fa-solid fa-circle-notch fa-spin"></i> Cargando alumnos…</div>';try{attendanceStudents=await getStudentsForCourse(c);const saved=load().asistencias[attKey(c.id,$('oc-att-date').value)]?.estados||{};if(!attendanceStudents.length){list.innerHTML='<div class="oc-empty">No hay alumnos registrados para este curso todavía.</div>';$('oc-save-att').disabled=true;return;}list.innerHTML=`<div class="oc-table-wrap"><table class="oc-table"><thead><tr><th>N.º</th><th>Estudiante</th><th>Estado</th></tr></thead><tbody>${attendanceStudents.map((a,i)=>`<tr><td>${i+1}</td><td><strong>${esc(a.nombre||'')}</strong></td><td><div class="oc-status" data-student="${esc(a.id)}">${['Presente','Ausente','Tarde','Justificado'].map(s=>`<button type="button" data-status="${s}" class="${(saved[a.id]||'Presente')===s?'active':''}">${s}</button>`).join('')}</div></td></tr>`).join('')}</tbody></table></div>`;list.querySelectorAll('.oc-status button').forEach(b=>b.addEventListener('click',()=>{const group=b.closest('.oc-status');group.querySelectorAll('button').forEach(x=>x.classList.remove('active'));b.classList.add('active');}));$('oc-save-att').disabled=false;}catch(e){list.innerHTML=`<div class="oc-empty">${esc(e.message||'No se pudieron cargar los alumnos.')}</div>`;$('oc-save-att').disabled=true;}};
+    $('oc-load-students').addEventListener('click',loadStudents); $('oc-att-course').addEventListener('change',()=>{attendanceStudents=[];$('oc-att-list').innerHTML='<div class="oc-empty">Pulsa “Cargar alumnos” para comenzar.</div>';$('oc-save-att').disabled=true;}); $('oc-att-date').addEventListener('change',()=>{if(attendanceStudents.length)loadStudents();});
+    $('oc-save-att').addEventListener('click',()=>{const c=courseById($('oc-att-course').value),date=$('oc-att-date').value;if(!c||!date)return;const estados={};$('oc-att-list').querySelectorAll('.oc-status').forEach(g=>{estados[g.dataset.student]=g.querySelector('button.active')?.dataset.status||'Presente';});state.asistencias[attKey(c.id,date)]={cursoId:c.id,fecha:date,estados,area:AREA,guardadoEn:new Date().toISOString()};save('Asistencia de Orientación y Convivencia guardada.');});
+  }
+
+  function renderFollowup(host){
+    const cursos=load().cursos.filter(c=>c.activo!==false);if(!cursos.length){host.innerHTML='<div class="oc-empty">Primero registra un curso.</div>';return;}
+    host.innerHTML=`<section class="oc-card"><h3>Seguimiento de convivencia</h3><p class="oc-help">Registra orientaciones, compromisos, mediaciones y observaciones propias de esta materia. Quedan separadas de Educación Física.</p><div class="oc-grid"><div class="oc-field"><label>Curso</label><select id="oc-fu-course">${courseOptions()}</select></div><div class="oc-field"><label>Fecha</label><input id="oc-fu-date" type="date" value="${today()}"></div><div class="oc-field"><label>Tipo</label><select id="oc-fu-type"><option>Orientación</option><option>Convivencia</option><option>Compromiso</option><option>Mediación</option><option>Observación</option></select></div><div class="oc-field"><label>Estudiante / grupo</label><input id="oc-fu-student" placeholder="Nombre o grupo completo"></div><div class="oc-field full"><label>Situación / descripción</label><textarea id="oc-fu-desc"></textarea></div><div class="oc-field full"><label>Acuerdos / acciones</label><textarea id="oc-fu-actions"></textarea></div></div><div class="oc-actions"><button class="oc-btn green" id="oc-save-fu"><i class="fa-solid fa-floppy-disk"></i> Guardar seguimiento</button></div></section><section class="oc-card"><h3>Registros recientes</h3><div class="oc-list" id="oc-fu-list"></div></section>`;
+    const draw=()=>{const items=[...load().seguimientos].sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));const list=$('oc-fu-list');list.innerHTML=items.length?items.map(f=>{const c=courseById(f.cursoId);return `<div class="oc-item"><div class="oc-item-body"><strong>${esc(f.tipo)} · ${esc(f.estudiante||'Grupo')}</strong><div class="oc-meta"><span>${esc(c?courseLabel(c):'Curso')}</span><span>${prettyDate(f.fecha)}</span></div><small>${esc(f.descripcion||'')}</small></div><button class="oc-btn danger" data-oc-del-fu="${esc(f.id)}"><i class="fa-solid fa-trash"></i></button></div>`}).join(''):'<div class="oc-empty">No hay registros de seguimiento todavía.</div>';list.querySelectorAll('[data-oc-del-fu]').forEach(b=>b.addEventListener('click',()=>{if(!confirm('¿Eliminar este registro?'))return;state.seguimientos=state.seguimientos.filter(x=>x.id!==b.dataset.ocDelFu);save();draw();}));};draw();
+    $('oc-save-fu').addEventListener('click',()=>{const desc=$('oc-fu-desc').value.trim();if(!desc)return toast('Describe brevemente la situación u orientación realizada.','warning');state.seguimientos.push({id:uniqueId('seg'),cursoId:$('oc-fu-course').value,fecha:$('oc-fu-date').value,tipo:$('oc-fu-type').value,estudiante:$('oc-fu-student').value.trim(),descripcion:desc,acciones:$('oc-fu-actions').value.trim(),area:AREA,creadoEn:new Date().toISOString()});save('Seguimiento guardado.');renderFollowup(host);});
+  }
+
+  function printWindow(title,body){
+    const w=window.open('','_blank','width=1000,height=760'); if(!w)return toast('El navegador bloqueó la ventana de impresión.','warning');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:letter landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#17243a}h1{text-align:center;font-size:19px;margin:0 0 4px}.sub{text-align:center;font-size:11px;margin-bottom:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #8ea0b4;padding:6px;font-size:9px;vertical-align:top}th{background:#eaf1f7}.foot{font-size:8px;margin-top:10px;color:#617086}</style></head><body><h1>${esc(title)}</h1><div class="sub">Docente: ${esc(window.profesorActual?.nombre||'')} · ${AREA}</div>${body}<div class="foot">Generado desde EduGestión.</div><script>window.onload=()=>setTimeout(()=>window.print(),200)<\/script></body></html>`); w.document.close();
+  }
+  function printPlans(){
+    const items=[...load().planificaciones].sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))); if(!items.length)return toast('No hay planificaciones para imprimir.','warning');
+    printWindow('PLANIFICACIONES · ORIENTACIÓN Y CONVIVENCIA',`<table><thead><tr><th>Fecha</th><th>Curso</th><th>Lapso</th><th>Tema</th><th>Propósito</th><th>Inicio</th><th>Desarrollo</th><th>Cierre</th><th>Evidencia</th></tr></thead><tbody>${items.map(p=>{const c=courseById(p.cursoId);return `<tr><td>${prettyDate(p.fecha)}</td><td>${esc(c?courseLabel(c):'')}</td><td>${esc(p.lapso)}</td><td>${esc(p.tema)}</td><td>${esc(p.proposito)}</td><td>${esc(p.inicio)}</td><td>${esc(p.desarrollo)}</td><td>${esc(p.cierre)}</td><td>${esc(p.evidencia)}</td></tr>`}).join('')}</tbody></table>`);
+  }
+  function printEvaluations(courseId,lapso){
+    const c=courseById(courseId),items=load().evaluaciones.filter(e=>e.cursoId===courseId&&e.lapso===lapso).sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha))); if(!items.length)return toast('No hay evaluaciones en este curso y lapso.','warning'); const total=items.reduce((s,e)=>s+(Number(e.puntos)||0),0);
+    printWindow('PLAN DE EVALUACIÓN · ORIENTACIÓN Y CONVIVENCIA',`<div class="sub"><b>${esc(c?courseLabel(c):'')}</b> · ${esc(lapso)}</div><table><thead><tr><th>N.º</th><th>Actividad / contenido</th><th>Cómo se evaluará</th><th>Fecha</th><th>Puntos</th></tr></thead><tbody>${items.map((e,i)=>`<tr><td>${i+1}</td><td>${esc(e.nombre)}</td><td>${esc(e.como)}</td><td>${prettyDate(e.fecha)}</td><td>${e.puntos}</td></tr>`).join('')}<tr><td colspan="4" style="text-align:right"><b>TOTAL</b></td><td><b>${total} pts</b></td></tr></tbody></table>`);
+  }
+
+  function refreshEligibility(){
+    state=null;
+    const created=createUI();
+    if(!created){const tab=$(TAB_ID);if(tab)tab.classList.add('hidden');return;}
+    const sec=$(SECTION_ID); if(sec&&!sec.classList.contains('hidden')) render();
+  }
+  function init(){ createUI(); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(init,250),{once:true}); else setTimeout(init,120);
+  window.addEventListener('edugestion:session',()=>setTimeout(refreshEligibility,220));
+  window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{if(eligible())createUI();},180));
+})();
+/* EDUGESTION_ORIENTACION_CONVIVENCIA_V61_END */

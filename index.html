@@ -598,7 +598,32 @@
         </div>
        </div>
       </div>
-     </section>
+     
+      <section class="attendance-progress-v62" id="attendance-progress-v62">
+       <div class="attendance-progress-v62__head">
+        <div>
+         <span class="attendance-progress-v62__eyebrow"><i class="fa-solid fa-chart-line"></i> Seguimiento del lapso</span>
+         <h3 id="attendance-progress-title">Selecciona una sección para ver su progreso</h3>
+         <p id="attendance-progress-last">Última asistencia: —</p>
+        </div>
+        <label class="attendance-progress-v62__lapso"><span>Lapso</span><select id="attendance-progress-lapso"><option value="1">1.er Lapso</option><option value="2">2.º Lapso</option><option value="3">3.er Lapso</option></select></label>
+       </div>
+       <div class="attendance-progress-v62__cards">
+        <article><span class="attendance-progress-v62__icon is-green"><i class="fa-solid fa-calendar-check"></i></span><div><strong id="attendance-progress-registered">0</strong><small>Jornadas registradas</small></div></article>
+        <article><span class="attendance-progress-v62__icon is-amber"><i class="fa-solid fa-calendar-xmark"></i></span><div><strong id="attendance-progress-pending">0</strong><small>Jornadas pendientes</small></div></article>
+        <article><span class="attendance-progress-v62__icon is-blue"><i class="fa-solid fa-percent"></i></span><div><strong id="attendance-progress-average">0%</strong><small>Asistencia promedio</small></div></article>
+        <button type="button" id="attendance-progress-history-btn" class="attendance-progress-v62__history-button"><span class="attendance-progress-v62__icon is-violet"><i class="fa-solid fa-clock-rotate-left"></i></span><div><strong>Ver historial</strong><small id="attendance-progress-count-label">0 fechas guardadas</small></div><i class="fa-solid fa-chevron-down attendance-progress-v62__chevron"></i></button>
+       </div>
+       <div class="attendance-progress-v62__bar"><div class="attendance-progress-v62__bar-top"><span id="attendance-progress-caption">0 de 0 jornadas registradas · 0%</span><span id="attendance-progress-status" class="attendance-progress-v62__status is-pending">Pendiente</span></div><div class="attendance-progress-v62__track"><span id="attendance-progress-fill" style="width:0%"></span></div></div>
+       <div id="attendance-progress-details" class="attendance-progress-v62__details hidden">
+        <div class="attendance-progress-v62__detail-grid">
+         <section class="attendance-progress-v62__panel"><div class="attendance-progress-v62__panel-head"><div><span>Historial de la sección</span><strong>Asistencias guardadas por fecha</strong></div><button type="button" id="attendance-progress-refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button></div><div id="attendance-history-list" class="attendance-history-list"><div class="attendance-progress-v62__empty">Selecciona una sección para consultar el historial.</div></div></section>
+         <section class="attendance-progress-v62__panel"><div class="attendance-progress-v62__panel-head"><div><span>Resumen por alumno</span><strong>Acumulado del lapso</strong></div></div><div id="attendance-student-summary" class="attendance-student-summary"><div class="attendance-progress-v62__empty">Aquí aparecerá el acumulado individual.</div></div></section>
+        </div>
+        <section class="attendance-progress-v62__pending-panel"><div class="attendance-progress-v62__panel-head"><div><span>Jornadas pendientes</span><strong>Fechas de clase sin asistencia guardada</strong></div></div><div id="attendance-pending-dates" class="attendance-pending-dates"></div></section>
+       </div>
+      </section>
+</section>
      <section class="hidden max-w-[1480px] mx-auto space-y-6" id="section-planificacion">
       <div class="planning-hero">
        <div class="planning-hero__copy">
