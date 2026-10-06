@@ -1178,8 +1178,10 @@ const SESSION_KEY = 'edugestion_session_v2';
           <span class="attendance-class-card__numbers">
             <span><b>${resumen.presentes}</b><small>Presentes</small></span>
             <span><b>${resumen.ausentes}</b><small>Ausentes</small></span>
-            <span><b>${resumen.total}</b><small>Estudiantes</small></span>
+            <span><b>${resumen.tardanzas||0}</b><small>Tardanzas</small></span>
+            <span><b>${resumen.justificadas||0}</b><small>Justificadas</small></span>
           </span>
+          <span class="attendance-class-card__meta"><i class="fa-solid fa-chart-simple"></i>Asistencia del día: <b>${resumen.existe && resumen.total ? Math.round(((resumen.presentes+(resumen.tardanzas||0))/resumen.total)*100) : 0}%</b> · ${resumen.total} estudiantes</span>
           <span class="attendance-class-card__action"><span>${resumen.incompleta ? 'Completar asistencia' : resumen.existe ? 'Consultar o editar' : 'Registrar asistencia'}</span><i class="fa-solid fa-arrow-right"></i></span>`;
         tarjeta.addEventListener('click', () => abrirClaseDesdeAgenda(clase, fechaISO));
         agendaClasesDia.appendChild(tarjeta);
@@ -1473,6 +1475,10 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     window.setA = function(id, est, idDom = id) {
+      if(window.EDUGESTION_ASISTENCIA_V63?.estaCerradaActual?.()){
+        mostrarToast('Esta asistencia está cerrada. Reábrela desde el Panel avanzado para hacer cambios.','warning','Asistencia cerrada');
+        return;
+      }
       const estado = normalizarEstadoAsistencia(est);
       asistenciaTemporal[id] = estado;
       const fila = document.getElementById(`p-${idDom}`)?.closest('.attendance-student-row--advanced')
@@ -1639,7 +1645,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       if(!porAlumno.length) alumnosBox.innerHTML='<div class="attendance-progress-v62__empty">Aún no hay acumulado individual para este lapso.</div>';
       else alumnosBox.innerHTML=porAlumno.map((x,i)=>{
         const n=numMap.get(String(x.idAlumno||''))||i+1;
-        return `<div class="attendance-student-row-summary"><span class="attendance-student-row-summary__num">${n}</span><div><div class="attendance-student-row-summary__name">${escaparHTML(x.alumno||'Estudiante')}</div><div class="attendance-student-row-summary__meta">P ${Number(x.presentes||0)} · A ${Number(x.ausentes||0)} · T ${Number(x.tardanzas||0)} · J ${Number(x.justificadas||0)}</div></div><span class="attendance-student-row-summary__pct">${Math.round(Number(x.porcentajeAsistencia||0))}%</span></div>`;
+        return `<div class="attendance-student-row-summary"><span class="attendance-student-row-summary__num">${n}</span><div><div class="attendance-student-row-summary__name">${escaparHTML(x.alumno||'Estudiante')}</div><div class="attendance-student-row-summary__meta">P ${Number(x.presentes||0)} · A ${Number(x.ausentes||0)} · T ${Number(x.tardanzas||0)} · J ${Number(x.justificadas||0)}</div></div><div><span class="attendance-student-row-summary__pct">${Math.round(Number(x.porcentajeAsistencia||0))}%</span><button type="button" class="attendance-v63-student-report" data-v63-student-id="${escaparHTML(String(x.idAlumno||''))}"><i class="fa-solid fa-file-lines"></i> Informe</button></div></div>`;
       }).join('');
     }
 
@@ -1676,6 +1682,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         const st=estadoProgresoV62(registradas,programadas.length),badge=document.getElementById('attendance-progress-status');
         if(badge){badge.textContent=st.texto;badge.className=`attendance-progress-v62__status ${st.clase}`;}
         renderHistorialV62(datos);renderPendientesV62(pendientes);
+        window.dispatchEvent(new CustomEvent('edugestion:attendance-progress',{detail:{datos,ctx,lapso,programadas,pendientes,registradas}}));
         if(abrirHistorial)document.getElementById('attendance-progress-details')?.classList.remove('hidden');
       }catch(e){console.error('No se pudo actualizar el progreso de asistencia:',e);setTextV62('attendance-progress-last','No se pudo consultar el historial en este momento.');}
       finally{attendanceProgressLoadingV62=false;}
@@ -1734,6 +1741,10 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     if(btnGuardarAsistencia) {
       btnGuardarAsistencia.addEventListener('click', async () => {
+        if(window.EDUGESTION_ASISTENCIA_V63?.estaCerradaActual?.()){
+          mostrarToast('La asistencia de esta sección y fecha está cerrada. Reábrela si necesitas corregirla.','warning','Asistencia cerrada');
+          return;
+        }
         if(Object.keys(asistenciaTemporal).length === 0) return alert('Busca una lista primero.');
         if (!fechaAsistencia.value) return alert('Selecciona la fecha de asistencia.');
         btnGuardarAsistencia.disabled = true;
@@ -18561,3 +18572,189 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{if(eligible())createUI();},180));
 })();
 /* EDUGESTION_ORIENTACION_CONVIVENCIA_V61_END */
+
+
+/* ================================================================
+   EduGestión · ASISTENCIA AVANZADA · V6.3
+   ================================================================ */
+(() => {
+  const MARK='EDUGESTION_ASISTENCIA_AVANZADA_V63';
+  if(window[MARK]) return;
+  window[MARK]=true;
+
+  let ultimo={datos:null,ctx:null,lapso:null,programadas:[],pendientes:[],registradas:0};
+
+  const esc=v=>typeof escaparHTML==='function'?escaparHTML(String(v??'')):String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const docenteId=()=>String(profesorActual?.id||profesorActual?.usuario||'docente').trim().toLowerCase().replace(/[^a-z0-9._-]+/g,'_');
+  const cierreKey=()=>`edugestion_asistencia_cierre_v63__docente_${docenteId()}`;
+  const readJSON=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')||f}catch(_){return f}};
+  const writeJSON=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  const claveActual=()=>{
+    const ctx=typeof seccionSeleccionadaV62==='function'?seccionSeleccionadaV62():{ano:selectFiltroAno?.value,seccion:selectFiltroSeccion?.value,turno:selectFiltroTurno?.value,materia:profesorActual?.materia};
+    return [fechaAsistencia?.value||'',ctx.materia||'',ctx.ano||'',ctx.seccion||'',ctx.turno||''].join('|');
+  };
+  const cierres=()=>readJSON(cierreKey(),{});
+  const estaCerradaActual=()=>Boolean(cierres()[claveActual()]);
+  const fechaCorta=iso=>typeof fechaCortaV62==='function'?fechaCortaV62(iso):String(iso||'');
+  const $=id=>document.getElementById(id);
+
+  function actualizarBotonCierre(){
+    const btn=$('attendance-v63-close-day'); if(!btn) return;
+    const cerrada=estaCerradaActual();
+    btn.classList.toggle('is-closed',cerrada);
+    btn.innerHTML=cerrada
+      ? '<i class="fa-solid fa-lock-open"></i> Reabrir asistencia del día'
+      : '<i class="fa-solid fa-lock"></i> Cerrar asistencia del día';
+  }
+
+  function toggleCierre(){
+    if(!fechaAsistencia?.value || !selectFiltroAno?.value || !selectFiltroSeccion?.value){
+      mostrarToast('Selecciona primero una sección y una fecha.','warning','Falta información'); return;
+    }
+    const mapa=cierres(), key=claveActual(), estaba=Boolean(mapa[key]);
+    if(estaba){
+      if(!window.confirm('¿Reabrir esta asistencia para permitir correcciones?')) return;
+      delete mapa[key];
+      writeJSON(cierreKey(),mapa);
+      mostrarToast('La asistencia fue reabierta y ya puede corregirse.','success','Asistencia reabierta');
+    }else{
+      if(!window.confirm('¿Cerrar la asistencia de esta sección y fecha? Después tendrás que reabrirla para modificarla.')) return;
+      mapa[key]={cerradaEn:new Date().toISOString(),docente:profesorActual?.nombre||profesorActual?.usuario||'Docente'};
+      writeJSON(cierreKey(),mapa);
+      mostrarToast('La asistencia quedó cerrada para evitar cambios accidentales.','success','Asistencia cerrada');
+    }
+    actualizarBotonCierre();
+  }
+
+  function renderAlertas(datos){
+    const box=$('attendance-v63-alerts'), count=$('attendance-v63-alert-count');
+    if(!box||!count)return;
+    const alumnos=Array.isArray(datos?.porAlumno)?datos.porAlumno:[];
+    const alertas=alumnos.filter(x=>Number(x.ausentes||0)>=3 || Number(x.tardanzas||0)>=3)
+      .sort((a,b)=>(Number(b.ausentes||0)*3+Number(b.tardanzas||0))-(Number(a.ausentes||0)*3+Number(a.tardanzas||0)));
+    count.textContent=String(alertas.length);
+    box.innerHTML=alertas.length?alertas.slice(0,6).map(x=>`<div class="attendance-v63-mini-item is-alert"><span>${esc(x.alumno||'Estudiante')}</span><b>${Number(x.ausentes||0)} A · ${Number(x.tardanzas||0)} T</b></div>`).join('')
+      : '<span>Sin alertas: ningún alumno llega al umbral de 3 ausencias o 3 tardanzas.</span>';
+  }
+
+  function renderRanking(datos){
+    const box=$('attendance-v63-ranking'), count=$('attendance-v63-ranking-count');
+    if(!box||!count)return;
+    const alumnos=(Array.isArray(datos?.porAlumno)?[...datos.porAlumno]:[])
+      .filter(x=>Number(x.ausentes||0)>0).sort((a,b)=>Number(b.ausentes||0)-Number(a.ausentes||0));
+    count.textContent=String(alumnos.reduce((s,x)=>s+Number(x.ausentes||0),0));
+    box.innerHTML=alumnos.length?alumnos.slice(0,6).map((x,i)=>`<div class="attendance-v63-mini-item"><span>${i+1}. ${esc(x.alumno||'Estudiante')}</span><b>${Number(x.ausentes||0)} faltas</b></div>`).join('')
+      : '<span>No hay ausencias acumuladas en este lapso.</span>';
+  }
+
+  function renderMes(datos,programadas){
+    const host=$('attendance-v63-month'), label=$('attendance-v63-month-label');
+    if(!host||!label)return;
+    const base=fechaAsistencia?.value?fechaLocalAsistencia(fechaAsistencia.value):new Date();
+    const y=base.getFullYear(),m=base.getMonth();
+    label.textContent=base.toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+    const guardadas=new Set((Array.isArray(datos?.porFecha)?datos.porFecha:[]).map(x=>String(x.fecha||'')));
+    const prog=new Set((programadas||[]).filter(f=>{const d=fechaLocalAsistencia(f);return d&&d.getFullYear()===y&&d.getMonth()===m}));
+    const first=new Date(y,m,1), last=new Date(y,m+1,0);
+    const cells=[];
+    let offset=(first.getDay()+6)%7;
+    for(let i=0;i<offset;i++)cells.push('<span class="attendance-v63-day is-empty"></span>');
+    for(let d=1;d<=last.getDate();d++){
+      const iso=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const cls=guardadas.has(iso)?'is-saved':prog.has(iso)?'is-pending':'';
+      const title=guardadas.has(iso)?'Asistencia guardada':prog.has(iso)?'Jornada pendiente':'Sin clase programada';
+      cells.push(`<span class="attendance-v63-day ${cls}" title="${esc(title)}">${d}</span>`);
+    }
+    host.innerHTML=cells.join('');
+  }
+
+  async function renderAuditoria(){
+    const host=$('attendance-v63-audit-list'); if(!host||!ultimo.ctx)return;
+    host.innerHTML='<div class="attendance-progress-v62__empty">Consultando cambios…</div>';
+    try{
+      const r=await apiRequest('obtenerAuditoriaAsistencia',{ano:ultimo.ctx.ano,seccion:ultimo.ctx.seccion,turno:ultimo.ctx.turno,limite:40});
+      const items=Array.isArray(r?.auditoria)?r.auditoria:[];
+      host.innerHTML=items.length?items.map(x=>`<div class="attendance-v63-audit-item"><strong>${esc(x.alumno||'Estudiante')}</strong> · ${esc(x.fecha||'')} · ${esc(x.estadoAnterior||'—')} → ${esc(x.estadoNuevo||'—')}<br><span>${esc(x.accion||'Cambio')} · ${esc(x.actorNombre||x.docente||'Docente')} · ${esc(x.origen||'Web')}</span></div>`).join('')
+        : '<div class="attendance-progress-v62__empty">No hay correcciones registradas para esta sección.</div>';
+    }catch(e){
+      host.innerHTML='<div class="attendance-progress-v62__empty">No fue posible consultar la auditoría.</div>';
+    }
+  }
+
+  async function renderComparacion(){
+    const panel=$('attendance-v63-compare-panel'), host=$('attendance-v63-compare-table');
+    if(!panel||!host||!ultimo.lapso)return;
+    panel.classList.remove('hidden');
+    host.innerHTML='<div class="attendance-progress-v62__empty">Calculando comparación…</div>';
+    try{
+      const r=await apiRequest('obtenerEstadisticasAsistencia',{
+        fechaDesde:ultimo.lapso.desde,fechaHasta:ultimo.lapso.hasta,materia:profesorActual?.materia||''
+      });
+      const secs=Array.isArray(r?.porSeccion)?r.porSeccion:[];
+      $('attendance-v63-compare-total').textContent=String(secs.length);
+      host.innerHTML=secs.length?`<table class="attendance-v63-table"><thead><tr><th>Sección</th><th>Turno</th><th>Presentes</th><th>Ausentes</th><th>Tardanzas</th><th>Justificadas</th><th>Asistencia</th></tr></thead><tbody>${secs.map(x=>`<tr><td>${esc(x.ano)} ${esc(x.seccion)}</td><td>${esc(x.turno)}</td><td>${Number(x.presentes||0)}</td><td>${Number(x.ausentes||0)}</td><td>${Number(x.tardanzas||0)}</td><td>${Number(x.justificadas||0)}</td><td><b>${Math.round(Number(x.porcentajeAsistencia||0))}%</b></td></tr>`).join('')}</tbody></table>`
+        : '<div class="attendance-progress-v62__empty">No hay suficientes datos para comparar secciones.</div>';
+    }catch(e){host.innerHTML='<div class="attendance-progress-v62__empty">No se pudo generar la comparación.</div>';}
+  }
+
+  function tablaInforme(datos){
+    const rows=Array.isArray(datos?.porAlumno)?datos.porAlumno:[];
+    return `<table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="border:1px solid #bbb;padding:6px">N°</th><th style="border:1px solid #bbb;padding:6px;text-align:left">Estudiante</th><th style="border:1px solid #bbb;padding:6px">P</th><th style="border:1px solid #bbb;padding:6px">A</th><th style="border:1px solid #bbb;padding:6px">T</th><th style="border:1px solid #bbb;padding:6px">J</th><th style="border:1px solid #bbb;padding:6px">%</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td style="border:1px solid #bbb;padding:6px;text-align:center">${i+1}</td><td style="border:1px solid #bbb;padding:6px">${esc(x.alumno||'Estudiante')}</td><td style="border:1px solid #bbb;padding:6px;text-align:center">${Number(x.presentes||0)}</td><td style="border:1px solid #bbb;padding:6px;text-align:center">${Number(x.ausentes||0)}</td><td style="border:1px solid #bbb;padding:6px;text-align:center">${Number(x.tardanzas||0)}</td><td style="border:1px solid #bbb;padding:6px;text-align:center">${Number(x.justificadas||0)}</td><td style="border:1px solid #bbb;padding:6px;text-align:center">${Math.round(Number(x.porcentajeAsistencia||0))}%</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function imprimirInforme(){
+    if(!ultimo.datos||!ultimo.ctx||!ultimo.lapso){mostrarToast('Carga primero una sección.','warning','Sin datos');return;}
+    const w=window.open('','_blank'); if(!w)return;
+    const r=ultimo.datos.resumen||{};
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Informe de asistencia</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#222}h1{font-size:20px;margin:0 0 6px}p{font-size:12px;margin:3px 0}.cards{display:flex;gap:10px;margin:16px 0}.cards div{border:1px solid #ccc;border-radius:8px;padding:8px 12px;font-size:12px} @media print{button{display:none}}</style></head><body><h1>Informe de asistencia · ${esc(profesorActual?.materia||'')}</h1><p><b>Docente:</b> ${esc(profesorActual?.nombre||profesorActual?.usuario||'')}</p><p><b>Sección:</b> ${esc(ultimo.ctx.ano)} ${esc(ultimo.ctx.seccion)} · ${esc(ultimo.ctx.turno)} · ${esc(ultimo.lapso.nombre)}</p><div class="cards"><div>Presentes: <b>${Number(r.presentes||0)}</b></div><div>Ausentes: <b>${Number(r.ausentes||0)}</b></div><div>Tardanzas: <b>${Number(r.tardanzas||0)}</b></div><div>Justificadas: <b>${Number(r.justificadas||0)}</b></div><div>Asistencia: <b>${Math.round(Number(r.porcentajeAsistencia||0))}%</b></div></div>${tablaInforme(ultimo.datos)}<script>window.onload=()=>window.print();<\/script></body></html>`);
+    w.document.close();
+  }
+
+  function csvEscape(v){const s=String(v??'');return `"${s.replace(/"/g,'""')}"`;}
+  function exportarCSV(){
+    if(!ultimo.datos||!ultimo.ctx){mostrarToast('Carga primero una sección.','warning','Sin datos');return;}
+    const rows=[['Estudiante','Presentes','Ausentes','Tardanzas','Justificadas','Porcentaje']];
+    (ultimo.datos.porAlumno||[]).forEach(x=>rows.push([x.alumno,Number(x.presentes||0),Number(x.ausentes||0),Number(x.tardanzas||0),Number(x.justificadas||0),`${Math.round(Number(x.porcentajeAsistencia||0))}%`]));
+    const csv='\ufeff'+rows.map(r=>r.map(csvEscape).join(';')).join('\r\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=`asistencia_${ultimo.ctx.ano}_${ultimo.ctx.seccion}_${ultimo.lapso?.key||'lapso'}.csv`;a.click();URL.revokeObjectURL(url);
+  }
+
+  function imprimirAlumno(id){
+    const x=(ultimo.datos?.porAlumno||[]).find(a=>String(a.idAlumno||'')===String(id||'')); if(!x)return;
+    const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Asistencia individual</title><style>body{font-family:Arial;padding:30px;color:#222}h1{font-size:20px}.box{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.box div{border:1px solid #ccc;border-radius:8px;padding:10px;text-align:center}</style></head><body><h1>Informe individual de asistencia</h1><p><b>Estudiante:</b> ${esc(x.alumno||'')}</p><p><b>Sección:</b> ${esc(ultimo.ctx?.ano||'')} ${esc(ultimo.ctx?.seccion||'')} · ${esc(ultimo.lapso?.nombre||'')}</p><div class="box"><div>Presentes<br><b>${Number(x.presentes||0)}</b></div><div>Ausentes<br><b>${Number(x.ausentes||0)}</b></div><div>Tardanzas<br><b>${Number(x.tardanzas||0)}</b></div><div>Justificadas<br><b>${Number(x.justificadas||0)}</b></div><div>Asistencia<br><b>${Math.round(Number(x.porcentajeAsistencia||0))}%</b></div></div><script>window.onload=()=>window.print();<\/script></body></html>`);w.document.close();
+  }
+
+  function aplicarDatos(detail){
+    ultimo=detail||ultimo;
+    if(!ultimo.datos)return;
+    renderAlertas(ultimo.datos);renderRanking(ultimo.datos);renderMes(ultimo.datos,ultimo.programadas||[]);
+    const totalSecs=Array.isArray(ultimo.datos?.porSeccion)?ultimo.datos.porSeccion.length:0;
+    if($('attendance-v63-compare-total'))$('attendance-v63-compare-total').textContent=String(totalSecs||1);
+    actualizarBotonCierre();
+    renderAuditoria();
+  }
+
+  function init(){
+    $('attendance-v63-close-day')?.addEventListener('click',toggleCierre);
+    $('attendance-v63-print')?.addEventListener('click',imprimirInforme);
+    $('attendance-v63-excel')?.addEventListener('click',exportarCSV);
+    $('attendance-v63-compare-btn')?.addEventListener('click',renderComparacion);
+    $('attendance-v63-compare-close')?.addEventListener('click',()=>$('attendance-v63-compare-panel')?.classList.add('hidden'));
+    $('attendance-v63-audit-refresh')?.addEventListener('click',renderAuditoria);
+    document.addEventListener('click',e=>{
+      const btn=e.target.closest?.('[data-v63-student-id]');
+      if(btn) imprimirAlumno(btn.dataset.v63StudentId);
+    });
+    window.addEventListener('edugestion:attendance-progress',e=>aplicarDatos(e.detail));
+    fechaAsistencia?.addEventListener('change',actualizarBotonCierre);
+    selectFiltroAno?.addEventListener('change',actualizarBotonCierre);
+    selectFiltroSeccion?.addEventListener('change',actualizarBotonCierre);
+    selectFiltroTurno?.addEventListener('change',actualizarBotonCierre);
+    actualizarBotonCierre();
+  }
+
+  window.EDUGESTION_ASISTENCIA_V63={estaCerradaActual,actualizarBotonCierre,imprimirInforme,exportarCSV};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,200),{once:true});else setTimeout(init,100);
+})();

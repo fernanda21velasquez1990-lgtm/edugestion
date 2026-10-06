@@ -623,6 +623,51 @@
         <section class="attendance-progress-v62__pending-panel"><div class="attendance-progress-v62__panel-head"><div><span>Jornadas pendientes</span><strong>Fechas de clase sin asistencia guardada</strong></div></div><div id="attendance-pending-dates" class="attendance-pending-dates"></div></section>
        </div>
       </section>
+
+      <section class="attendance-advanced-v63" id="attendance-advanced-v63">
+       <div class="attendance-advanced-v63__head">
+        <div>
+         <span><i class="fa-solid fa-chart-column"></i> Panel avanzado de asistencia</span>
+         <h3>Control, alertas e informes</h3>
+         <p>Consulta rápidamente el comportamiento de la sección durante el lapso.</p>
+        </div>
+        <div class="attendance-advanced-v63__actions">
+         <button type="button" id="attendance-v63-close-day"><i class="fa-solid fa-lock"></i> Cerrar asistencia del día</button>
+         <button type="button" id="attendance-v63-print"><i class="fa-solid fa-print"></i> Imprimir informe</button>
+         <button type="button" id="attendance-v63-excel"><i class="fa-solid fa-file-excel"></i> Excel (CSV)</button>
+        </div>
+       </div>
+       <div class="attendance-advanced-v63__grid">
+        <article class="attendance-advanced-v63__card">
+         <div class="attendance-advanced-v63__card-title"><i class="fa-solid fa-triangle-exclamation"></i><span>Alertas automáticas</span></div>
+         <strong id="attendance-v63-alert-count">0</strong><small>alumnos que requieren seguimiento</small>
+         <div id="attendance-v63-alerts" class="attendance-v63-mini-list"><span>Selecciona una sección.</span></div>
+        </article>
+        <article class="attendance-advanced-v63__card">
+         <div class="attendance-advanced-v63__card-title"><i class="fa-solid fa-ranking-star"></i><span>Mayor inasistencia</span></div>
+         <strong id="attendance-v63-ranking-count">0</strong><small>ausencias acumuladas en el lapso</small>
+         <div id="attendance-v63-ranking" class="attendance-v63-mini-list"><span>Sin datos todavía.</span></div>
+        </article>
+        <article class="attendance-advanced-v63__card">
+         <div class="attendance-advanced-v63__card-title"><i class="fa-solid fa-calendar-days"></i><span>Historial mensual</span></div>
+         <strong id="attendance-v63-month-label">—</strong><small>días con asistencia guardada</small>
+         <div id="attendance-v63-month" class="attendance-v63-month"></div>
+        </article>
+        <article class="attendance-advanced-v63__card">
+         <div class="attendance-advanced-v63__card-title"><i class="fa-solid fa-scale-balanced"></i><span>Comparar secciones</span></div>
+         <strong id="attendance-v63-compare-total">0</strong><small>secciones con datos del lapso</small>
+         <button type="button" id="attendance-v63-compare-btn" class="attendance-v63-secondary-btn">Ver comparación</button>
+        </article>
+       </div>
+       <div class="attendance-v63-expand hidden" id="attendance-v63-compare-panel">
+        <div class="attendance-v63-expand__head"><div><span>Comparación entre secciones</span><strong>Promedio acumulado del lapso</strong></div><button type="button" id="attendance-v63-compare-close"><i class="fa-solid fa-xmark"></i></button></div>
+        <div id="attendance-v63-compare-table" class="attendance-v63-table-wrap"></div>
+       </div>
+       <div class="attendance-v63-expand" id="attendance-v63-audit-panel">
+        <div class="attendance-v63-expand__head"><div><span>Correcciones controladas</span><strong>Últimos cambios registrados</strong></div><button type="button" id="attendance-v63-audit-refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button></div>
+        <div id="attendance-v63-audit-list" class="attendance-v63-audit-list"><div class="attendance-progress-v62__empty">Aún no hay cambios para mostrar.</div></div>
+       </div>
+      </section>
 </section>
      <section class="hidden max-w-[1480px] mx-auto space-y-6" id="section-planificacion">
       <div class="planning-hero">
