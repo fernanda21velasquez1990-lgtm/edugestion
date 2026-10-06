@@ -19343,6 +19343,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
               <button type="button" data-eval-v66-view="alumno"><i class="fa-solid fa-user-graduate"></i> Por alumno</button>
               <button type="button" data-eval-v66-view="seccion"><i class="fa-solid fa-table"></i> Resumen de sección</button>
               <button type="button" data-eval-v66-view="alertas"><i class="fa-solid fa-triangle-exclamation"></i> Alertas</button>
+              <button type="button" data-eval-v66-view="expediente"><i class="fa-solid fa-folder-open"></i> Expediente</button>
               <button type="button" data-eval-v66-view="seguimiento"><i class="fa-solid fa-handshake-angle"></i> Seguimiento</button>
               <button type="button" data-eval-v66-view="recuperacion"><i class="fa-solid fa-arrow-rotate-left"></i> Recuperación</button>
               <button type="button" data-eval-v66-view="cierre"><i class="fa-solid fa-lock"></i> Cierre de lapso</button>
@@ -19635,6 +19636,51 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
 
 
+
+  async function renderExpedienteV70(){
+    const host=$('eval-v66-content');if(!host)return;
+    const alumnos=data?.alumnos||[];
+    if(!studentActual&&alumnos.length)studentActual=alumnos[0].id;
+    host.innerHTML=`<div class="eval-v66-student-select"><label>Estudiante<select id="eval-v70-student-select">${alumnos.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(studentActual)?'selected':''}>${x.numeroLista}. ${esc(x.nombre)}</option>`).join('')}</select></label></div><div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente integral…</div>`;
+    $('eval-v70-student-select')?.addEventListener('change',e=>{studentActual=e.target.value;renderExpedienteV70();});
+    if(!studentActual)return;
+
+    try{
+      const exp=await api('obtenerExpedienteIntegralV70',{...contexto(),idAlumno:studentActual});
+      const al=exp.alumno||{},r=exp.resumen||{},i=exp.indicadores||{};
+      const riesgo=String(i.riesgoIntegral||'VERDE').toLowerCase();
+      const compromisos=exp.compromisos||[],actas=exp.actas||[],segu=exp.seguimiento||[];
+      host.innerHTML=`
+        <div class="eval-v66-student-select"><label>Estudiante<select id="eval-v70-student-select">${alumnos.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(studentActual)?'selected':''}>${x.numeroLista}. ${esc(x.nombre)}</option>`).join('')}</select></label></div>
+        <div class="eval-v70-hero">
+          <div><span class="eval-v66-avatar">${esc((al.nombre||'E')[0])}</span><div><h3>${esc(al.nombre||'Estudiante')}</h3><p>${esc(data?.ano||'')} ${esc(data?.seccion||'')} · ${esc(data?.materia||'')}</p></div></div>
+          <span class="eval-v70-risk is-${riesgo}">Riesgo integral: ${esc(i.riesgoIntegral||'VERDE')}</span>
+        </div>
+        <div class="eval-v70-kpis">
+          <article><b>${Number(r.puntosAcumulados||0)}/${Number(r.puntosPlanificados||0)}</b><small>Puntos</small></article>
+          <article><b>${Number(r.porcentajeAcademico||0)}%</b><small>Rendimiento</small></article>
+          <article><b>${Number(i.porcentajeAsistencia||0)}%</b><small>Asistencia</small></article>
+          <article class="${Number(i.noEntregadas||0)>=2?'is-danger':''}"><b>${Number(i.noEntregadas||0)}</b><small>No entregadas</small></article>
+          <article class="${Number(i.compromisosVencidos||0)>0?'is-danger':''}"><b>${Number(i.compromisosPendientes||0)}</b><small>Compromisos pendientes</small></article>
+          <article><b>${Number(i.actas||0)}</b><small>Actas</small></article>
+        </div>
+
+        <div class="eval-v70-grid">
+          <section class="eval-v70-panel"><div class="eval-v69-panel-head"><div><span>Evaluaciones</span><strong>Actividad por actividad</strong></div></div><div class="eval-v70-list">${(exp.actividades||[]).map(x=>`<div class="eval-v70-row"><span><strong>${esc(x.nombre)}</strong><small>${esc(x.fecha||'')}</small></span><span>${esc(x.estadoEntrega||'Pendiente')}</span><span>${x.notaFinal===''?'—':`${esc(x.notaFinal)}/${Number(x.puntos||0)}`}</span></div>`).join('')||'<div class="eval-v66-empty">Sin actividades.</div>'}</div></section>
+          <section class="eval-v70-panel"><div class="eval-v69-panel-head"><div><span>Asistencia</span><strong>Resumen del lapso</strong></div></div><div class="eval-v70-att-grid"><span><b>${Number(i.presentes||0)}</b><small>Presentes</small></span><span><b>${Number(i.ausentes||0)}</b><small>Ausentes</small></span><span><b>${Number(i.tardanzas||0)}</b><small>Tardanzas</small></span><span><b>${Number(i.justificadas||0)}</b><small>Justificadas</small></span></div></section>
+          <section class="eval-v70-panel"><div class="eval-v69-panel-head"><div><span>Compromisos</span><strong>Representante y seguimiento</strong></div></div><div class="eval-v70-list">${compromisos.slice(0,12).map(x=>`<div class="eval-v70-row"><span><strong>${esc(x.compromiso||'Seguimiento')}</strong><small>${esc(x.fechaCompromiso||'')}</small></span><span>${esc(x.estado||'')}</span></div>`).join('')||'<div class="eval-v66-empty">Sin compromisos.</div>'}</div></section>
+          <section class="eval-v70-panel"><div class="eval-v69-panel-head"><div><span>Actas y seguimiento</span><strong>Historial institucional</strong></div></div><div class="eval-v70-list">${[...actas.slice(0,6).map(x=>`<div class="eval-v70-row"><span><strong>${esc(x.tipo||x.titulo||'Acta')}</strong><small>${esc(x.fecha||'')}</small></span><span>Acta</span></div>`),...segu.slice(0,6).map(x=>`<div class="eval-v70-row"><span><strong>${esc(x.tipo||'Seguimiento')}</strong><small>${esc(x.fecha||'')}</small></span><span>Seguimiento</span></div>`)].join('')||'<div class="eval-v66-empty">Sin registros.</div>'}</div></section>
+        </div>
+        <div class="eval-v70-actions"><button type="button" id="eval-v70-print"><i class="fa-solid fa-print"></i> Imprimir expediente</button><button type="button" id="eval-v70-follow"><i class="fa-solid fa-phone"></i> Registrar seguimiento</button><button type="button" id="eval-v70-orient"><i class="fa-solid fa-compass"></i> Orientación</button></div>`;
+      $('eval-v70-student-select')?.addEventListener('change',e=>{studentActual=e.target.value;renderExpedienteV70();});
+      $('eval-v70-print')?.addEventListener('click',()=>window.print());
+      $('eval-v70-follow')?.addEventListener('click',()=>abrirSeguimiento(studentActual));
+      $('eval-v70-orient')?.addEventListener('click',()=>abrirOrientacionAlumno(studentActual));
+    }catch(e){
+      host.innerHTML=`<div class="eval-v66-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar el expediente.</strong><span>${esc(e?.message||'')}</span></div>`;
+    }
+  }
+
   function estadoCompromisoClaseV69(item){
     if(String(item?.estado||'').toUpperCase()==='RESUELTO') return 'is-resolved';
     if(item?.vencido) return 'is-overdue';
@@ -19749,6 +19795,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if(vista==='alumno')renderAlumno();
     else if(vista==='seccion')renderSeccion();
     else if(vista==='alertas')renderAlertas();
+    else if(vista==='expediente')renderExpedienteV70();
     else if(vista==='seguimiento')renderSeguimientoV69();
     else if(vista==='recuperacion')renderRecuperacionV68();
     else if(vista==='cierre')renderCierreV68();

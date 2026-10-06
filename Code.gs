@@ -670,6 +670,9 @@ function doPost(e) {
       case 'obtenerFichaAcademicaAlumnoV68':
         respuesta = obtenerFichaAcademicaAlumnoV68_(sesion.docente, payload);
         break;
+      case 'obtenerExpedienteIntegralV70':
+        respuesta = obtenerExpedienteIntegralV70_(sesion.docente, payload);
+        break;
       case 'sincronizarPlanificacionExpressEvaluaciones':
         respuesta = sincronizarPlanificacionExpressEvaluaciones_(sesion.docente, payload);
         break;
@@ -6122,3 +6125,79 @@ function actualizarEstadoCompromisoAcademico_(docente, payload) {
   return { status: 'success', compromiso: datos, message: 'Compromiso actualizado.' };
 }
 /* EDUGESTION_COMPROMISOS_ACADEMICOS_V69_END */
+
+
+/* =========================================================
+ * EduGestión · V7.0
+ * EXPEDIENTE ACADÉMICO INTEGRAL DEL ESTUDIANTE
+ * ========================================================= */
+function obtenerExpedienteIntegralV70_(docente, payload) {
+  var ficha = obtenerFichaAcademicaAlumnoV68_(docente, payload);
+  var compromisos = obtenerCompromisosAcademicos_(docente, {
+    ano: payload.ano,
+    seccion: payload.seccion,
+    turno: payload.turno,
+    lapso: payload.lapso,
+    idAlumno: payload.idAlumno
+  });
+
+  var actas = filtrarPorProfesor_(EG.SHEETS.ACTAS, docente.id).filter(function(r) {
+    return String(r.idAlumno || '') === String(payload.idAlumno || '');
+  }).sort(function(a,b) {
+    return String(b.fecha || b.creadoEn || '').localeCompare(String(a.fecha || a.creadoEn || ''));
+  }).slice(0, 100).map(limpiarMeta_);
+
+  var asistencia = ficha.asistencia || [];
+  var presentes = 0, ausentes = 0, tardanzas = 0, justificadas = 0;
+  asistencia.forEach(function(r) {
+    var e = normalizarEstadoAsistencia_(r.estado || '');
+    if (e === 'Presente') presentes++;
+    else if (e === 'Ausente') ausentes++;
+    else if (e === 'Tardanza') tardanzas++;
+    else if (e === 'Justificada') justificadas++;
+  });
+  var totalAsistencia = asistencia.length;
+  var pctAsistencia = totalAsistencia ? Math.round(((presentes + tardanzas) / totalAsistencia) * 100) : 0;
+
+  var actividades = ficha.actividades || [];
+  var noEntregadas = actividades.filter(function(x){ return x.estadoEntrega === 'No entrego'; }).length;
+  var pendientes = actividades.filter(function(x){ return x.estadoEntrega === 'Pendiente'; }).length;
+  var entregadas = actividades.filter(function(x){ return x.estadoEntrega === 'Entrego' || x.estadoEntrega === 'Tardia'; }).length;
+
+  var compromisosPendientes = (compromisos.compromisos || []).filter(function(x){
+    return String(x.estado || '').toUpperCase() === 'PENDIENTE';
+  });
+  var vencidos = compromisosPendientes.filter(function(x){ return x.vencido; }).length;
+
+  var estado = String((ficha.resumen || {}).estadoAcademico || '');
+  var riesgo = 'VERDE';
+  if (noEntregadas >= 3 || pctAsistencia < 70 || estado === 'REPROBADO') riesgo = 'ROJO';
+  else if (noEntregadas >= 2 || pctAsistencia < 85 || vencidos > 0 || estado === 'EN_RIESGO') riesgo = 'AMARILLO';
+
+  return {
+    status: 'success',
+    alumno: ficha.alumno,
+    resumen: ficha.resumen,
+    actividades: actividades,
+    seguimiento: ficha.seguimiento || [],
+    asistencia: asistencia,
+    compromisos: compromisos.compromisos || [],
+    actas: actas,
+    indicadores: {
+      totalActividades: actividades.length,
+      entregadas: entregadas,
+      noEntregadas: noEntregadas,
+      pendientes: pendientes,
+      presentes: presentes,
+      ausentes: ausentes,
+      tardanzas: tardanzas,
+      justificadas: justificadas,
+      porcentajeAsistencia: pctAsistencia,
+      compromisosPendientes: compromisosPendientes.length,
+      compromisosVencidos: vencidos,
+      actas: actas.length,
+      riesgoIntegral: riesgo
+    }
+  };
+}
+/* EDUGESTION_EXPEDIENTE_INTEGRAL_V70_END */
