@@ -32,7 +32,11 @@ var EG = Object.freeze({
     ESTADO_DOCENTE: 'EstadoDocente',
     CHAT_INTERNO: 'ChatInterno',
     EVALUACION_SEGUIMIENTO: 'EvaluacionSeguimiento',
-    SEGUIMIENTO_ACADEMICO: 'SeguimientoAcademico'
+    SEGUIMIENTO_ACADEMICO: 'SeguimientoAcademico',
+    RECUPERACIONES_EVALUACION: 'RecuperacionesEvaluacion',
+    AUDITORIA_CALIFICACIONES: 'AuditoriaCalificaciones',
+    ESTADO_ACTIVIDADES_EVALUACION: 'EstadoActividadesEvaluacion',
+    CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico'
   }),
   HEADERS: Object.freeze({
     Docentes: [
@@ -101,6 +105,27 @@ var EG = Object.freeze({
       'id', 'idProfesor', 'materia', 'ano', 'seccion', 'turno', 'lapso',
       'idAlumno', 'alumno', 'tipo', 'fecha', 'motivo', 'medio',
       'representante', 'compromiso', 'observacion', 'creadoEn', 'actualizadoEn'
+    ],
+    RecuperacionesEvaluacion: [
+      'id', 'idProfesor', 'materia', 'ano', 'seccion', 'turno', 'lapso',
+      'idActividad', 'actividad', 'puntos', 'idAlumno', 'alumno',
+      'notaOriginal', 'notaRecuperacion', 'notaFinal', 'fecha', 'observacion',
+      'creadoEn', 'actualizadoEn'
+    ],
+    AuditoriaCalificaciones: [
+      'id', 'idProfesor', 'docente', 'materia', 'ano', 'seccion', 'turno', 'lapso',
+      'idActividad', 'actividad', 'idAlumno', 'alumno',
+      'estadoAnterior', 'estadoNuevo', 'notaAnterior', 'notaNueva',
+      'origen', 'registradoEn'
+    ],
+    EstadoActividadesEvaluacion: [
+      'id', 'idProfesor', 'idActividad', 'materia', 'ano', 'seccion', 'turno',
+      'lapso', 'cerrada', 'cerradaEn', 'reabiertaEn', 'actualizadoEn'
+    ],
+    CierresLapsoAcademico: [
+      'id', 'idProfesor', 'materia', 'ano', 'seccion', 'turno', 'lapso',
+      'estado', 'puntosPlanificados', 'promedioSeccion', 'alertas',
+      'cerradoEn', 'reabiertoEn', 'observacion', 'actualizadoEn'
     ]
   })
 });
@@ -619,6 +644,24 @@ function doPost(e) {
         break;
       case 'guardarAsistencia':
         respuesta = guardarAsistencia_(sesion.docente, payload);
+        break;
+      case 'obtenerComplementoEvaluacionesV68':
+        respuesta = obtenerComplementoEvaluacionesV68_(sesion.docente, payload);
+        break;
+      case 'registrarRecuperacionEvaluacion':
+        respuesta = registrarRecuperacionEvaluacion_(sesion.docente, payload);
+        break;
+      case 'cambiarEstadoActividadEvaluacion':
+        respuesta = cambiarEstadoActividadEvaluacion_(sesion.docente, payload);
+        break;
+      case 'cerrarLapsoAcademicoV68':
+        respuesta = cerrarLapsoAcademicoV68_(sesion.docente, payload);
+        break;
+      case 'reabrirLapsoAcademicoV68':
+        respuesta = reabrirLapsoAcademicoV68_(sesion.docente, payload);
+        break;
+      case 'obtenerFichaAcademicaAlumnoV68':
+        respuesta = obtenerFichaAcademicaAlumnoV68_(sesion.docente, payload);
         break;
       case 'sincronizarPlanificacionExpressEvaluaciones':
         respuesta = sincronizarPlanificacionExpressEvaluaciones_(sesion.docente, payload);
@@ -5045,6 +5088,10 @@ function asegurarGestionEvaluaciones_() {
   asegurarHoja_(getDb_(), EG.SHEETS.EVALUACION_SEGUIMIENTO, EG.HEADERS.EvaluacionSeguimiento);
   asegurarHoja_(getDb_(), EG.SHEETS.SEGUIMIENTO_ACADEMICO, EG.HEADERS.SeguimientoAcademico);
   asegurarHoja_(getDb_(), EG.SHEETS.CALIFICACIONES, EG.HEADERS.Calificaciones);
+  asegurarHoja_(getDb_(), EG.SHEETS.RECUPERACIONES_EVALUACION, EG.HEADERS.RecuperacionesEvaluacion);
+  asegurarHoja_(getDb_(), EG.SHEETS.AUDITORIA_CALIFICACIONES, EG.HEADERS.AuditoriaCalificaciones);
+  asegurarHoja_(getDb_(), EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, EG.HEADERS.EstadoActividadesEvaluacion);
+  asegurarHoja_(getDb_(), EG.SHEETS.CIERRES_LAPSO_ACADEMICO, EG.HEADERS.CierresLapsoAcademico);
 }
 
 function rangoLapsoEvaluacion_(lapso) {
@@ -5275,6 +5322,9 @@ function guardarRegistrosEvaluacion_(docente, payload) {
   var seccion = limpiarRequerido_(payload.seccion, 'sección').toUpperCase();
   var turno = normalizarTurno_(limpiarRequerido_(payload.turno, 'turno'));
   var rango = rangoLapsoEvaluacion_(payload.lapso || '1er Lapso');
+  if (lapsoCerradoV68_(docente, ano, seccion, turno, rango.lapso)) {
+    lanzar_('Este lapso está cerrado. Reábrelo antes de modificar calificaciones.', 'LAPSO_CLOSED');
+  }
   var registros = Array.isArray(payload.registros) ? payload.registros : [];
   if (!registros.length) lanzar_('No se recibieron registros de evaluación.', 'VALIDATION_ERROR');
 
@@ -5282,6 +5332,14 @@ function guardarRegistrosEvaluacion_(docente, payload) {
     return String(p.id || '') === idActividad;
   })[0];
   if (!plan) lanzar_('La actividad no pertenece a la planificación del docente.', 'NOT_FOUND');
+
+  var estadoActividad = filtrarPorProfesor_(EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, docente.id).filter(function(e) {
+    return String(e.idActividad || '') === idActividad &&
+      String(e.cerrada || '').toUpperCase() === 'SI';
+  })[0];
+  if (estadoActividad) {
+    lanzar_('Esta actividad está cerrada. Reábrela antes de modificar entregas o calificaciones.', 'ACTIVITY_CLOSED');
+  }
 
   var actividad = actividadEvaluacionPublica_(plan);
   var alumnos = filtrarPorProfesor_(EG.SHEETS.ALUMNOS, docente.id).filter(function(a) {
@@ -5341,8 +5399,35 @@ function guardarRegistrosEvaluacion_(docente, payload) {
         actualizadoEn: ahora_()
       };
 
-      if (anterior) actualizarFilaObjeto_(EG.SHEETS.EVALUACION_SEGUIMIENTO, anterior.__row, datos);
-      else anexarObjeto_(EG.SHEETS.EVALUACION_SEGUIMIENTO, datos);
+      if (anterior) {
+        var estadoAnterior = normalizarEstadoEntregaEvaluacion_(anterior.estadoEntrega);
+        var notaAnterior = anterior.nota === '' || anterior.nota === null || anterior.nota === undefined ? '' : Number(anterior.nota);
+        if (estadoAnterior !== estado || String(notaAnterior) !== String(nota)) {
+          anexarObjeto_(EG.SHEETS.AUDITORIA_CALIFICACIONES, {
+            id: Utilities.getUuid(),
+            idProfesor: String(docente.id),
+            docente: String(docente.nombre || docente.usuario || 'Docente'),
+            materia: String(docente.materia || ''),
+            ano: ano,
+            seccion: seccion,
+            turno: turno,
+            lapso: rango.lapso,
+            idActividad: idActividad,
+            actividad: actividad.nombre,
+            idAlumno: idAlumno,
+            alumno: String(alumno.nombre || ''),
+            estadoAnterior: estadoAnterior,
+            estadoNuevo: estado,
+            notaAnterior: notaAnterior,
+            notaNueva: nota,
+            origen: String(payload.origen || 'Web'),
+            registradoEn: ahora_()
+          });
+        }
+        actualizarFilaObjeto_(EG.SHEETS.EVALUACION_SEGUIMIENTO, anterior.__row, datos);
+      } else {
+        anexarObjeto_(EG.SHEETS.EVALUACION_SEGUIMIENTO, datos);
+      }
 
       upsertCalificacionEvaluacion_(docente, actividad, alumno, {
         ano: ano, seccion: seccion, turno: turno, lapso: rango.lapso
@@ -5478,3 +5563,431 @@ function sincronizarPlanificacionExpressEvaluaciones_(docente, payload) {
     message: 'Planificación Express sincronizada con Evaluaciones y Notas.'
   };
 }
+
+
+/* =========================================================
+ * EduGestión · V6.8
+ * LIBRO DE CALIFICACIONES + RECUPERACIÓN + CIERRE DE LAPSO
+ * ========================================================= */
+
+function estadoAcademicoV68_(porcentaje, noEntregadas, asistencia, evidencias) {
+  porcentaje = Number(porcentaje || 0);
+  noEntregadas = Number(noEntregadas || 0);
+  asistencia = Number(asistencia || 0);
+  evidencias = Number(evidencias || 0);
+  if (evidencias === 0) return 'SIN_EVIDENCIAS';
+  if (porcentaje < 50) return 'REPROBADO';
+  if (noEntregadas >= 2 || porcentaje < 60 || (asistencia > 0 && asistencia < 80)) return 'EN_RIESGO';
+  if (porcentaje >= 90) return 'EXCELENTE';
+  return 'APROBADO';
+}
+
+function lapsoCerradoV68_(docente, ano, seccion, turno, lapso) {
+  asegurarGestionEvaluaciones_();
+  return filtrarPorProfesor_(EG.SHEETS.CIERRES_LAPSO_ACADEMICO, docente.id).filter(function(r) {
+    return normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(lapso || '') &&
+      String(r.estado || '').toUpperCase() === 'CERRADO';
+  }).length > 0;
+}
+
+function obtenerComplementoEvaluacionesV68_(docente, payload) {
+  asegurarGestionEvaluaciones_();
+  var base = obtenerGestionEvaluaciones_(docente, payload);
+  var rango = rangoLapsoEvaluacion_(payload.lapso || base.lapso || '1er Lapso');
+
+  var recuperaciones = filtrarPorProfesor_(EG.SHEETS.RECUPERACIONES_EVALUACION, docente.id).filter(function(r) {
+    return normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  });
+
+  var recMap = {};
+  recuperaciones.forEach(function(r) {
+    recMap[String(r.idActividad || '') + '|' + String(r.idAlumno || '')] = limpiarMeta_(r);
+  });
+
+  var estados = filtrarPorProfesor_(EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, docente.id).filter(function(r) {
+    return normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  });
+  var estadoActMap = {};
+  estados.forEach(function(r) {
+    estadoActMap[String(r.idActividad || '')] = {
+      cerrada: String(r.cerrada || '').toUpperCase() === 'SI',
+      cerradaEn: String(r.cerradaEn || ''),
+      reabiertaEn: String(r.reabiertaEn || '')
+    };
+  });
+
+  var auditoria = filtrarPorProfesor_(EG.SHEETS.AUDITORIA_CALIFICACIONES, docente.id).filter(function(r) {
+    return normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  }).sort(function(a,b){
+    return String(b.registradoEn || '').localeCompare(String(a.registradoEn || ''));
+  }).slice(0, 500).map(limpiarMeta_);
+
+  var seguimientos = filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_ACADEMICO, docente.id).filter(function(r) {
+    return normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  });
+
+  var seguimientoCount = {};
+  seguimientos.forEach(function(r) {
+    var k = String(r.idAlumno || '');
+    seguimientoCount[k] = (seguimientoCount[k] || 0) + 1;
+  });
+
+  var cierres = filtrarPorProfesor_(EG.SHEETS.CIERRES_LAPSO_ACADEMICO, docente.id).filter(function(r) {
+    return normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  }).sort(function(a,b){
+    return String(b.actualizadoEn || b.cerradoEn || '').localeCompare(String(a.actualizadoEn || a.cerradoEn || ''));
+  });
+  var cierre = cierres.length ? limpiarMeta_(cierres[0]) : null;
+
+  var effectiveGrades = {};
+  Object.keys(base.registros || {}).forEach(function(k) {
+    var r = base.registros[k] || {};
+    effectiveGrades[k] = r.nota === '' || r.nota === null || r.nota === undefined ? '' : Number(r.nota);
+  });
+  Object.keys(recMap).forEach(function(k) {
+    var rr = recMap[k] || {};
+    if (rr.notaFinal !== '' && rr.notaFinal !== null && rr.notaFinal !== undefined) {
+      effectiveGrades[k] = Number(rr.notaFinal);
+    }
+  });
+
+  var alumnosResumen = (base.resumen && base.resumen.estudiantes ? base.resumen.estudiantes : []).map(function(a) {
+    var puntos = 0;
+    var evidencias = 0;
+    (base.actividades || []).forEach(function(act) {
+      var key = String(act.id) + '|' + String(a.idAlumno);
+      var n = effectiveGrades[key];
+      if (n !== '' && n !== null && n !== undefined) {
+        puntos += Number(n || 0);
+        evidencias++;
+      }
+    });
+    var total = Number(base.resumen.puntosPlanificados || 0);
+    var pct = total ? Math.round((puntos / total) * 100) : 0;
+    return {
+      idAlumno: a.idAlumno,
+      alumno: a.alumno,
+      noEntregadas: Number(a.noEntregadas || 0),
+      tardias: Number(a.tardias || 0),
+      entregadas: Number(a.entregadas || 0),
+      justificadas: Number(a.justificadas || 0),
+      puntosAcumulados: Math.round(puntos * 100) / 100,
+      puntosPlanificados: total,
+      porcentajeAcademico: pct,
+      porcentajeAsistencia: Number(a.porcentajeAsistencia || 0),
+      alerta: Number(a.noEntregadas || 0) >= 3 ? 'ROJA' : Number(a.noEntregadas || 0) >= 2 ? 'AMARILLA' : 'VERDE',
+      estadoAcademico: estadoAcademicoV68_(pct, a.noEntregadas, a.porcentajeAsistencia, evidencias),
+      evidencias: evidencias,
+      seguimientos: Number(seguimientoCount[String(a.idAlumno)] || 0)
+    };
+  });
+
+  var conPuntos = alumnosResumen.filter(function(a){ return Number(a.puntosPlanificados || 0) > 0; });
+  var promedioSeccion = conPuntos.length
+    ? Math.round((conPuntos.reduce(function(s,a){ return s + Number(a.porcentajeAcademico || 0); },0) / conPuntos.length) * 100) / 100
+    : 0;
+
+  var actividadDificil = null;
+  var actividadStats = (base.actividades || []).map(function(act) {
+    var notas = [];
+    var noEntrego = 0;
+    (base.alumnos || []).forEach(function(al) {
+      var k = String(act.id) + '|' + String(al.id);
+      var reg = (base.registros || {})[k] || {};
+      if (reg.estadoEntrega === 'No entrego') noEntrego++;
+      var n = effectiveGrades[k];
+      if (n !== '' && n !== null && n !== undefined) notas.push(Number(n));
+    });
+    var prom = notas.length ? notas.reduce(function(s,n){return s+n;},0)/notas.length : 0;
+    var pct = Number(act.puntos || 0) ? Math.round((prom / Number(act.puntos || 0))*100) : 0;
+    return {id:act.id,nombre:act.nombre,promedio:Math.round(prom*100)/100,porcentaje:pct,noEntrego:noEntrego};
+  });
+  actividadStats.sort(function(a,b){
+    return a.porcentaje - b.porcentaje || b.noEntrego - a.noEntrego;
+  });
+  if (actividadStats.length) actividadDificil = actividadStats[0];
+
+  return {
+    status:'success',
+    recuperaciones: recMap,
+    estadoActividades: estadoActMap,
+    auditoria: auditoria,
+    seguimientoPorAlumno: seguimientoCount,
+    cierreLapso: cierre,
+    notasEfectivas: effectiveGrades,
+    alumnosResumen: alumnosResumen,
+    promedioSeccion: promedioSeccion,
+    actividadDificil: actividadDificil,
+    actividadStats: actividadStats
+  };
+}
+
+function registrarRecuperacionEvaluacion_(docente, payload) {
+  asegurarGestionEvaluaciones_();
+  var idActividad = limpiarRequerido_(payload.idActividad, 'actividad');
+  var idAlumno = limpiarRequerido_(payload.idAlumno, 'estudiante');
+  var base = obtenerGestionEvaluaciones_(docente, payload);
+  var actividad = (base.actividades || []).filter(function(a){ return String(a.id) === idActividad; })[0];
+  var alumno = (base.alumnos || []).filter(function(a){ return String(a.id) === idAlumno; })[0];
+  if (!actividad || !alumno) lanzar_('Actividad o estudiante no válido.', 'NOT_FOUND');
+
+  var key = idActividad + '|' + idAlumno;
+  var regBase = (base.registros || {})[key] || {};
+  var notaOriginal = regBase.nota === '' || regBase.nota === null || regBase.nota === undefined ? 0 : Number(regBase.nota);
+  var notaRec = Number(payload.notaRecuperacion);
+  if (!isFinite(notaRec) || notaRec < 0 || notaRec > Number(actividad.puntos || 0)) {
+    lanzar_('La nota de recuperación debe estar entre 0 y ' + Number(actividad.puntos || 0) + ' puntos.', 'VALIDATION_ERROR');
+  }
+  var notaFinal = Math.max(notaOriginal, notaRec);
+  var rango = rangoLapsoEvaluacion_(payload.lapso || base.lapso || '1er Lapso');
+  if (lapsoCerradoV68_(docente, base.ano, base.seccion, base.turno, rango.lapso)) {
+    lanzar_('Este lapso está cerrado. Reábrelo antes de registrar recuperaciones.', 'LAPSO_CLOSED');
+  }
+
+  var tablaRec = leerObjetos_(EG.SHEETS.RECUPERACIONES_EVALUACION);
+  var anteriorRec = tablaRec.objetos.filter(function(r){
+    return String(r.idProfesor) === String(docente.id) &&
+      String(r.idActividad || '') === idActividad &&
+      String(r.idAlumno || '') === idAlumno &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  })[0];
+
+  var datosRec = {
+    id: anteriorRec && anteriorRec.id ? anteriorRec.id : Utilities.getUuid(),
+    idProfesor:String(docente.id),
+    materia:String(docente.materia || ''),
+    ano:base.ano,
+    seccion:base.seccion,
+    turno:base.turno,
+    lapso:rango.lapso,
+    idActividad:idActividad,
+    actividad:actividad.nombre,
+    puntos:Number(actividad.puntos || 0),
+    idAlumno:idAlumno,
+    alumno:alumno.nombre,
+    notaOriginal: anteriorRec && anteriorRec.notaOriginal !== '' ? Number(anteriorRec.notaOriginal) : notaOriginal,
+    notaRecuperacion:notaRec,
+    notaFinal:notaFinal,
+    fecha:String(payload.fecha || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')),
+    observacion:String(payload.observacion || '').slice(0,700),
+    creadoEn: anteriorRec ? String(anteriorRec.creadoEn || ahora_()) : ahora_(),
+    actualizadoEn: ahora_()
+  };
+  if (anteriorRec) actualizarFilaObjeto_(EG.SHEETS.RECUPERACIONES_EVALUACION, anteriorRec.__row, datosRec);
+  else anexarObjeto_(EG.SHEETS.RECUPERACIONES_EVALUACION, datosRec);
+
+  var tablaEval = leerObjetos_(EG.SHEETS.EVALUACION_SEGUIMIENTO);
+  var regEval = tablaEval.objetos.filter(function(r){
+    return String(r.idProfesor) === String(docente.id) &&
+      String(r.idActividad || '') === idActividad &&
+      String(r.idAlumno || '') === idAlumno &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  })[0];
+  if (regEval) {
+    actualizarFilaObjeto_(EG.SHEETS.EVALUACION_SEGUIMIENTO, regEval.__row, {
+      nota: notaFinal,
+      observacion: String(regEval.observacion || '') + (payload.observacion ? ' | Recuperación: ' + String(payload.observacion).slice(0,300) : ''),
+      actualizadoEn: ahora_()
+    });
+  }
+
+  upsertCalificacionEvaluacion_(docente, actividad, alumno, {
+    ano:base.ano,seccion:base.seccion,turno:base.turno,lapso:rango.lapso
+  }, {nota:notaFinal});
+
+  anexarObjeto_(EG.SHEETS.AUDITORIA_CALIFICACIONES, {
+    id:Utilities.getUuid(),
+    idProfesor:String(docente.id),
+    docente:String(docente.nombre || docente.usuario || 'Docente'),
+    materia:String(docente.materia || ''),
+    ano:base.ano,seccion:base.seccion,turno:base.turno,lapso:rango.lapso,
+    idActividad:idActividad,actividad:actividad.nombre,idAlumno:idAlumno,alumno:alumno.nombre,
+    estadoAnterior:String(regBase.estadoEntrega || ''),
+    estadoNuevo:String(regBase.estadoEntrega || ''),
+    notaAnterior:notaOriginal,
+    notaNueva:notaFinal,
+    origen:'Recuperacion',
+    registradoEn:ahora_()
+  });
+
+  return {status:'success', recuperacion:limpiarMeta_(datosRec), notaFinal:notaFinal, message:'Recuperación registrada correctamente.'};
+}
+
+function cambiarEstadoActividadEvaluacion_(docente, payload) {
+  asegurarGestionEvaluaciones_();
+  var idActividad = limpiarRequerido_(payload.idActividad, 'actividad');
+  var cerrar = payload.cerrada === true || String(payload.cerrada || '').toUpperCase() === 'SI';
+  var base = obtenerGestionEvaluaciones_(docente, payload);
+  var actividad = (base.actividades || []).filter(function(a){ return String(a.id) === idActividad; })[0];
+  if (!actividad) lanzar_('Actividad no encontrada.', 'NOT_FOUND');
+
+  if (cerrar) {
+    var pendientes = [];
+    (base.alumnos || []).forEach(function(al){
+      var r = (base.registros || {})[idActividad + '|' + al.id] || {};
+      var estado = r.estadoEntrega || 'Pendiente';
+      var sinNota = (estado === 'Entrego' || estado === 'Tardia') && (r.nota === '' || r.nota === null || r.nota === undefined);
+      if (estado === 'Pendiente' || sinNota) pendientes.push(al.nombre);
+    });
+    if (pendientes.length) {
+      lanzar_('No puedes cerrar la actividad: hay ' + pendientes.length + ' estudiante(s) pendientes de entrega o calificación.', 'PENDING_GRADES');
+    }
+  }
+
+  var rango = rangoLapsoEvaluacion_(payload.lapso || base.lapso || '1er Lapso');
+  var tabla = leerObjetos_(EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION);
+  var anterior = tabla.objetos.filter(function(r){
+    return String(r.idProfesor) === String(docente.id) &&
+      String(r.idActividad || '') === idActividad &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  })[0];
+
+  var ahora = ahora_();
+  var datos = {
+    id: anterior && anterior.id ? anterior.id : Utilities.getUuid(),
+    idProfesor:String(docente.id),idActividad:idActividad,materia:String(docente.materia||''),
+    ano:base.ano,seccion:base.seccion,turno:base.turno,lapso:rango.lapso,
+    cerrada:cerrar?'SI':'NO',
+    cerradaEn:cerrar?ahora:String(anterior && anterior.cerradaEn || ''),
+    reabiertaEn:cerrar?'':ahora,
+    actualizadoEn:ahora
+  };
+  if (anterior) actualizarFilaObjeto_(EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, anterior.__row, datos);
+  else anexarObjeto_(EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, datos);
+
+  return {status:'success',cerrada:cerrar,actividad:actividad,message:cerrar?'Actividad cerrada.':'Actividad reabierta.'};
+}
+
+function cerrarLapsoAcademicoV68_(docente, payload) {
+  asegurarGestionEvaluaciones_();
+  var base = obtenerGestionEvaluaciones_(docente, payload);
+  var comp = obtenerComplementoEvaluacionesV68_(docente, payload);
+  var errores = [];
+  var puntos = Number(base.resumen && base.resumen.puntosPlanificados || 0);
+  if (Math.abs(puntos - 20) > 0.001) errores.push('El plan del lapso debe sumar exactamente 20 puntos. Actualmente suma ' + puntos + '.');
+
+  (base.actividades || []).forEach(function(act){
+    (base.alumnos || []).forEach(function(al){
+      var r = (base.registros || {})[act.id + '|' + al.id] || {};
+      var estado = r.estadoEntrega || 'Pendiente';
+      if (estado === 'Pendiente') errores.push(al.nombre + ': actividad "' + act.nombre + '" pendiente.');
+      if ((estado === 'Entrego' || estado === 'Tardia') && (r.nota === '' || r.nota === null || r.nota === undefined)) {
+        errores.push(al.nombre + ': actividad "' + act.nombre + '" entregada pero sin nota.');
+      }
+    });
+  });
+
+  (base.alertas || []).forEach(function(a){
+    if (!Number(comp.seguimientoPorAlumno[String(a.idAlumno)] || 0)) {
+      errores.push(a.alumno + ': tiene alerta por actividades sin entregar y aún no registra seguimiento con representante.');
+    }
+  });
+
+  if (errores.length) {
+    return {status:'blocked',puedeCerrar:false,errores:errores.slice(0,100),totalErrores:errores.length};
+  }
+
+  var tabla = leerObjetos_(EG.SHEETS.CIERRES_LAPSO_ACADEMICO);
+  var rango = rangoLapsoEvaluacion_(payload.lapso || base.lapso || '1er Lapso');
+  var anterior = tabla.objetos.filter(function(r){
+    return String(r.idProfesor) === String(docente.id) &&
+      normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  })[0];
+
+  var datos = {
+    id: anterior && anterior.id ? anterior.id : Utilities.getUuid(),
+    idProfesor:String(docente.id),materia:String(docente.materia||''),ano:base.ano,seccion:base.seccion,turno:base.turno,lapso:rango.lapso,
+    estado:'CERRADO',puntosPlanificados:puntos,promedioSeccion:Number(comp.promedioSeccion||0),alertas:Number(base.resumen.alertas||0),
+    cerradoEn:ahora_(),reabiertoEn:'',observacion:String(payload.observacion||'').slice(0,700),actualizadoEn:ahora_()
+  };
+  if (anterior) actualizarFilaObjeto_(EG.SHEETS.CIERRES_LAPSO_ACADEMICO, anterior.__row, datos);
+  else anexarObjeto_(EG.SHEETS.CIERRES_LAPSO_ACADEMICO, datos);
+  return {status:'success',puedeCerrar:true,cierre:limpiarMeta_(datos),message:'Lapso cerrado correctamente.'};
+}
+
+function reabrirLapsoAcademicoV68_(docente, payload) {
+  asegurarGestionEvaluaciones_();
+  var base = obtenerGestionEvaluaciones_(docente, payload);
+  var rango = rangoLapsoEvaluacion_(payload.lapso || base.lapso || '1er Lapso');
+  var tabla = leerObjetos_(EG.SHEETS.CIERRES_LAPSO_ACADEMICO);
+  var anterior = tabla.objetos.filter(function(r){
+    return String(r.idProfesor) === String(docente.id) &&
+      normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.lapso || '') === normalizarTexto_(rango.lapso);
+  })[0];
+  if (!anterior) lanzar_('No existe un cierre de lapso para reabrir.', 'NOT_FOUND');
+  actualizarFilaObjeto_(EG.SHEETS.CIERRES_LAPSO_ACADEMICO, anterior.__row, {
+    estado:'ABIERTO',reabiertoEn:ahora_(),actualizadoEn:ahora_()
+  });
+  return {status:'success',message:'Lapso reabierto.'};
+}
+
+function obtenerFichaAcademicaAlumnoV68_(docente, payload) {
+  asegurarGestionEvaluaciones_();
+  var idAlumno = limpiarRequerido_(payload.idAlumno, 'estudiante');
+  var base = obtenerGestionEvaluaciones_(docente, payload);
+  var comp = obtenerComplementoEvaluacionesV68_(docente, payload);
+  var alumno = (base.alumnos || []).filter(function(a){ return String(a.id) === idAlumno; })[0];
+  if (!alumno) lanzar_('Estudiante no encontrado en la sección.', 'NOT_FOUND');
+  var resumen = (comp.alumnosResumen || []).filter(function(a){ return String(a.idAlumno) === idAlumno; })[0] || {};
+
+  var actividades = (base.actividades || []).map(function(act){
+    var key = act.id + '|' + idAlumno;
+    var reg = (base.registros || {})[key] || {};
+    var rec = comp.recuperaciones[key] || null;
+    return {
+      id:act.id,nombre:act.nombre,puntos:act.puntos,fecha:act.fecha,
+      estadoEntrega:reg.estadoEntrega || 'Pendiente',fechaEntrega:reg.fechaEntrega || '',
+      notaOriginal:rec ? Number(rec.notaOriginal || 0) : (reg.nota === '' ? '' : Number(reg.nota || 0)),
+      notaRecuperacion:rec ? Number(rec.notaRecuperacion || 0) : '',
+      notaFinal:comp.notasEfectivas[key] === '' ? '' : Number(comp.notasEfectivas[key] || 0),
+      asistencia:(base.asistenciaPorActividad[act.id] || {})[idAlumno] || '',
+      observacion:String(reg.observacion || '')
+    };
+  });
+
+  var seguimiento = filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_ACADEMICO, docente.id).filter(function(r){
+    return String(r.idAlumno || '') === idAlumno &&
+      normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase();
+  }).sort(function(a,b){return String(b.fecha||'').localeCompare(String(a.fecha||''));}).map(limpiarMeta_);
+
+  var asistencia = filtrarPorProfesor_(EG.SHEETS.ASISTENCIA, docente.id).filter(function(r){
+    return String(r.idAlumno || '') === idAlumno &&
+      normalizarTexto_(r.ano || '').toUpperCase() === normalizarTexto_(base.ano || '').toUpperCase() &&
+      normalizarTexto_(r.seccion || '').toUpperCase() === normalizarTexto_(base.seccion || '').toUpperCase() &&
+      normalizarTurno_(r.turno || '') === normalizarTurno_(base.turno || '') &&
+      normalizarTexto_(r.materia || '') === normalizarTexto_(docente.materia || '');
+  }).sort(function(a,b){
+    return String(serializarValor_(b.fecha,'fecha')||'').localeCompare(String(serializarValor_(a.fecha,'fecha')||''));
+  }).slice(0,200).map(limpiarMeta_);
+
+  return {
+    status:'success',alumno:alumno,resumen:resumen,actividades:actividades,
+    seguimiento:seguimiento,asistencia:asistencia
+  };
+}
+/* EDUGESTION_LIBRO_CALIFICACIONES_V68_END */

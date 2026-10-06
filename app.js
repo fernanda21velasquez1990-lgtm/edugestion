@@ -13466,6 +13466,145 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
     return tabs.map(([k,i,t])=>`<button class="ag-tab ${vista===k?'is-active':''}" data-ag-view="${k}"><i class="fa-solid ${i}"></i> ${t}</button>`).join('');
   }
 
+
+  function estadoAcademicoTextoV68(v){
+    return ({EXCELENTE:'Excelente',APROBADO:'Aprobado',EN_RIESGO:'En riesgo',REPROBADO:'Reprobado',SIN_EVIDENCIAS:'Sin suficientes evidencias'})[String(v||'').toUpperCase()]||'En proceso';
+  }
+  function estadoAcademicoClaseV68(v){
+    const x=String(v||'').toUpperCase();
+    if(x==='EXCELENTE'||x==='APROBADO')return'is-ok';
+    if(x==='EN_RIESGO'||x==='SIN_EVIDENCIAS')return'is-warning';
+    return'is-danger';
+  }
+
+  async function toggleActividadV68(){
+    const act=(data?.actividades||[]).find(a=>a.id===actividadActual);if(!act)return;
+    const cerrada=Boolean(complemento68?.estadoActividades?.[act.id]?.cerrada);
+    if(!cerrada){
+      if(!window.confirm('¿Cerrar esta actividad? Deben estar resueltas todas las entregas y calificaciones.'))return;
+    }else if(!window.confirm('¿Reabrir esta actividad para permitir correcciones?'))return;
+    try{
+      await api('cambiarEstadoActividadEvaluacion',{...contexto(),idActividad:act.id,cerrada:!cerrada});
+      mostrarToast?.(!cerrada?'Actividad cerrada correctamente.':'Actividad reabierta.','success','Evaluación');
+      await cargar();
+    }catch(e){mostrarToast?.(e?.message||'No se pudo cambiar el estado de la actividad.','error','Evaluación');}
+  }
+
+  function recoveryCandidatesV68(threshold){
+    const out=[],acts=data?.actividades||[],students=data?.alumnos||[];
+    acts.forEach(act=>students.forEach(al=>{
+      const key=`${act.id}|${al.id}`,reg=data?.registros?.[key]||{},max=Number(act.puntos||0);
+      const effective=complemento68?.notasEfectivas?.[key];
+      const hasGrade=effective!==''&&effective!==null&&effective!==undefined;
+      const pct=hasGrade&&max?Number(effective)/max*100:0;
+      if(reg.estadoEntrega==='No entrego'||(hasGrade&&pct<threshold)){
+        out.push({act,al,reg,key,effective:hasGrade?Number(effective):0,pct:Math.round(pct),rec:complemento68?.recuperaciones?.[key]||null});
+      }
+    }));
+    return out;
+  }
+
+  function renderRecuperacionV68(){
+    const host=$('eval-v66-content');if(!host)return;
+    const threshold=Number($('eval-v68-threshold')?.value||50);
+    const rows=recoveryCandidatesV68(threshold);
+    host.innerHTML=`<div class="eval-v66-view-head"><div><span>Plan de recuperación</span><h3>Recuperación pedagógica</h3><p>La nota original se conserva en el historial. La nota final toma el mejor resultado.</p></div><label class="eval-v68-threshold">Umbral<select id="eval-v68-threshold"><option value="50" ${threshold===50?'selected':''}>Menor de 50%</option><option value="60" ${threshold===60?'selected':''}>Menor de 60%</option><option value="70" ${threshold===70?'selected':''}>Menor de 70%</option></select></label></div>
+    ${rows.length?`<div class="eval-v66-table-wrap"><table class="eval-v66-table"><thead><tr><th>Estudiante</th><th>Actividad</th><th>Nota actual</th><th>Máximo</th><th>Recuperación</th><th>Fecha</th><th>Observación</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr data-v68-rec-row="${esc(x.key)}"><td><strong>${esc(x.al.nombre)}</strong></td><td>${esc(x.act.nombre)}</td><td>${x.effective}/${Number(x.act.puntos||0)} <small>${x.pct}%</small>${x.rec?`<small>Original: ${esc(x.rec.notaOriginal)}</small>`:''}</td><td>${Number(x.act.puntos||0)}</td><td><input data-v68-rec-grade type="number" min="0" max="${Number(x.act.puntos||0)}" step="0.01" value="${x.rec?esc(x.rec.notaRecuperacion):''}" placeholder="Nota"></td><td><input data-v68-rec-date type="date" value="${x.rec?esc(x.rec.fecha||''):new Date().toISOString().slice(0,10)}"></td><td><input data-v68-rec-note value="${x.rec?esc(x.rec.observacion||''):''}" placeholder="Observación"></td><td><button type="button" class="eval-v68-rec-save" data-v68-rec-act="${esc(x.act.id)}" data-v68-rec-student="${esc(x.al.id)}"><i class="fa-solid fa-floppy-disk"></i> Guardar</button></td></tr>`).join('')}</tbody></table></div>`:'<div class="eval-v66-empty is-success"><i class="fa-solid fa-circle-check"></i><strong>No hay estudiantes dentro del criterio de recuperación.</strong><span>Puedes cambiar el umbral para revisar otros casos.</span></div>'}
+    <div class="eval-v68-audit"><div class="eval-v68-audit-head"><span>Historial de cambios de notas</span><strong>${Number(complemento68?.auditoria?.length||0)} movimientos</strong></div>${(complemento68?.auditoria||[]).slice(0,30).map(a=>`<div class="eval-v68-audit-row"><span>${esc(a.alumno||'Estudiante')} · ${esc(a.actividad||'Actividad')}</span><b>${a.notaAnterior===''?'—':esc(a.notaAnterior)} → ${a.notaNueva===''?'—':esc(a.notaNueva)}</b><small>${esc(a.origen||'Web')} · ${esc(a.registradoEn||'')}</small></div>`).join('')||'<div class="eval-v66-empty">Sin cambios registrados.</div>'}</div>`;
+    $('eval-v68-threshold')?.addEventListener('change',renderRecuperacionV68);
+    host.querySelectorAll('[data-v68-rec-act]').forEach(btn=>btn.addEventListener('click',()=>guardarRecuperacionV68(btn)));
+  }
+
+  async function guardarRecuperacionV68(btn){
+    const actId=btn.dataset.v68RecAct,studentId=btn.dataset.v68RecStudent;
+    const row=btn.closest('[data-v68-rec-row]');if(!row)return;
+    const nota=row.querySelector('[data-v68-rec-grade]')?.value;
+    const fecha=row.querySelector('[data-v68-rec-date]')?.value||'';
+    const observacion=row.querySelector('[data-v68-rec-note]')?.value||'';
+    if(nota===''||nota==null){mostrarToast?.('Escribe la nota de recuperación.','warning','Falta nota');return;}
+    btn.disabled=true;
+    try{
+      const r=await api('registrarRecuperacionEvaluacion',{...contexto(),idActividad:actId,idAlumno:studentId,notaRecuperacion:nota,fecha,observacion});
+      mostrarToast?.(`Recuperación guardada. Nota final: ${r.notaFinal}.`,'success','Recuperación');
+      await cargar();
+      vista='recuperacion';renderVista();
+    }catch(e){mostrarToast?.(e?.message||'No se pudo guardar la recuperación.','error','Recuperación');}
+    finally{btn.disabled=false;}
+  }
+
+  function validacionCierreV68(){
+    const acts=data?.actividades||[],students=data?.alumnos||[];
+    const points=Number(data?.resumen?.puntosPlanificados||0);
+    let pending=0,pendingGrade=0;
+    acts.forEach(a=>students.forEach(al=>{
+      const r=data?.registros?.[`${a.id}|${al.id}`]||{},e=r.estadoEntrega||'Pendiente';
+      if(e==='Pendiente')pending++;
+      if(['Entrego','Tardia'].includes(e)&&(r.nota===''||r.nota==null||r.nota===undefined))pendingGrade++;
+    }));
+    const alertsWithoutFollow=(data?.alertas||[]).filter(a=>!Number(complemento68?.seguimientoPorAlumno?.[String(a.idAlumno)]||0)).length;
+    return {points,pending,pendingGrade,alertsWithoutFollow};
+  }
+
+  function renderCierreV68(){
+    const host=$('eval-v66-content');if(!host)return;
+    const v=validacionCierreV68(),closed=String(complemento68?.cierreLapso?.estado||'').toUpperCase()==='CERRADO';
+    const difficult=complemento68?.actividadDificil;
+    const checks=[
+      {ok:Math.abs(v.points-20)<.001,label:`Plan del lapso: ${v.points}/20 puntos`},
+      {ok:v.pending===0,label:`Estados pendientes: ${v.pending}`},
+      {ok:v.pendingGrade===0,label:`Entregas sin calificar: ${v.pendingGrade}`},
+      {ok:v.alertsWithoutFollow===0,label:`Alertas sin seguimiento al representante: ${v.alertsWithoutFollow}`}
+    ];
+    host.innerHTML=`<div class="eval-v68-close-hero ${closed?'is-closed':''}"><div><span>${closed?'Lapso cerrado':'Validación de cierre'}</span><h3>${esc(data.lapso)} · ${esc(data.ano)} ${esc(data.seccion)}</h3><p>${closed?`Cerrado el ${esc(complemento68?.cierreLapso?.cerradoEn||'')}`:'EduGestión comprobará que el libro esté listo antes de cerrar.'}</p></div><i class="fa-solid ${closed?'fa-lock':'fa-list-check'}"></i></div>
+    <div class="eval-v68-close-grid"><section><h4>Requisitos</h4>${checks.map(c=>`<div class="eval-v68-check ${c.ok?'is-ok':'is-bad'}"><i class="fa-solid ${c.ok?'fa-circle-check':'fa-circle-xmark'}"></i><span>${esc(c.label)}</span></div>`).join('')}</section><section><h4>Resumen académico</h4><div class="eval-v68-kpi"><b>${Math.round(Number(complemento68?.promedioSeccion||0))}%</b><span>Promedio de la sección</span></div><div class="eval-v68-kpi"><b>${Number(data?.resumen?.alertas||0)}</b><span>Alertas académicas</span></div>${difficult?`<div class="eval-v68-difficult"><small>Actividad con mayor dificultad</small><strong>${esc(difficult.nombre)}</strong><span>Rendimiento ${Number(difficult.porcentaje||0)}% · ${Number(difficult.noEntrego||0)} no entregaron</span></div>`:''}</section></div>
+    <div class="eval-v68-close-actions">${closed?'<button type="button" id="eval-v68-reopen-lapso"><i class="fa-solid fa-lock-open"></i> Reabrir lapso</button>':'<button type="button" id="eval-v68-close-lapso"><i class="fa-solid fa-lock"></i> Validar y cerrar lapso</button>'}<button type="button" id="eval-v68-print-recovery"><i class="fa-solid fa-print"></i> Reporte de recuperación</button></div>`;
+    $('eval-v68-close-lapso')?.addEventListener('click',cerrarLapsoV68);
+    $('eval-v68-reopen-lapso')?.addEventListener('click',reabrirLapsoV68);
+    $('eval-v68-print-recovery')?.addEventListener('click',imprimirRecuperacionV68);
+  }
+
+  async function cerrarLapsoV68(){
+    if(!window.confirm('¿Validar y cerrar este lapso?'))return;
+    try{
+      const r=await api('cerrarLapsoAcademicoV68',contexto());
+      if(r.status==='blocked'){
+        mostrarToast?.(`No se puede cerrar: ${r.totalErrores} requisito(s) pendientes.`,'warning','Cierre bloqueado');
+      }else{
+        mostrarToast?.('El lapso quedó cerrado correctamente.','success','Cierre de lapso');
+      }
+      await cargar();vista='cierre';renderVista();
+    }catch(e){mostrarToast?.(e?.message||'No se pudo cerrar el lapso.','error','Cierre');}
+  }
+  async function reabrirLapsoV68(){
+    if(!window.confirm('¿Reabrir este lapso para permitir nuevas correcciones?'))return;
+    try{await api('reabrirLapsoAcademicoV68',contexto());mostrarToast?.('Lapso reabierto.','success','Cierre de lapso');await cargar();vista='cierre';renderVista();}
+    catch(e){mostrarToast?.(e?.message||'No se pudo reabrir.','error','Cierre');}
+  }
+
+  function imprimirRecuperacionV68(){
+    const rows=recoveryCandidatesV68(60);
+    const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Reporte de recuperación</title><style>body{font-family:Arial;padding:25px;color:#222}h1{font-size:20px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#f2f2f2}</style></head><body><h1>Reporte de recuperación</h1><p><b>${esc(data.ano)} ${esc(data.seccion)} · ${esc(data.materia)} · ${esc(data.lapso)}</b></p><table><thead><tr><th>N°</th><th>Estudiante</th><th>Actividad</th><th>Nota actual</th><th>Máximo</th><th>Estado</th></tr></thead><tbody>${rows.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.al.nombre)}</td><td>${esc(x.act.nombre)}</td><td>${x.effective}</td><td>${Number(x.act.puntos||0)}</td><td>${x.rec?'Recuperación registrada':'Pendiente'}</td></tr>`).join('')}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);w.document.close();
+  }
+
+  async function abrirFichaAcademicaV68(id,printMode){
+    try{
+      const ficha=await api('obtenerFichaAcademicaAlumnoV68',{...contexto(),idAlumno:id});
+      if(printMode){imprimirResumenRepresentanteV68(ficha);return;}
+      const host=$('eval-v66-content');if(!host)return;
+      const r=ficha.resumen||{},a=ficha.alumno||{};
+      const att=ficha.asistencia||[],segu=ficha.seguimiento||[],acts=ficha.actividades||[];
+      host.innerHTML=`<div class="eval-v66-view-head"><div><span>Ficha académica integral</span><h3>${esc(a.nombre||'Estudiante')}</h3><p>${esc(data.ano)} ${esc(data.seccion)} · ${esc(data.materia)}</p></div><button id="eval-v68-back-student"><i class="fa-solid fa-arrow-left"></i> Volver</button></div><div class="eval-v68-ficha-kpis"><article><b>${r.puntosAcumulados||0}/${r.puntosPlanificados||0}</b><small>Puntos</small></article><article><b>${r.porcentajeAcademico||0}%</b><small>Rendimiento</small></article><article><b>${r.porcentajeAsistencia||0}%</b><small>Asistencia</small></article><article><b>${r.noEntregadas||0}</b><small>No entregadas</small></article><article><b>${r.seguimientos||0}</b><small>Seguimientos</small></article></div><div class="eval-v68-ficha-grid"><section><h4>Evaluaciones</h4>${acts.map(x=>`<div class="eval-v68-ficha-row"><span>${esc(x.nombre)}</span><b>${x.notaFinal===''?'—':`${x.notaFinal}/${x.puntos}`}</b><small>${esc(x.estadoEntrega)}${x.notaRecuperacion!==''?` · Recuperación ${x.notaRecuperacion}`:''}</small></div>`).join('')}</section><section><h4>Seguimiento</h4>${segu.slice(0,15).map(x=>`<div class="eval-v68-ficha-row"><span>${esc(x.fecha)} · ${esc(x.tipo)}</span><b>${esc(x.medio||'')}</b><small>${esc(x.motivo||'')}</small></div>`).join('')||'<div class="eval-v66-empty">Sin seguimientos.</div>'}</section><section><h4>Asistencia reciente</h4>${att.slice(0,15).map(x=>`<div class="eval-v68-ficha-row"><span>${esc(x.fecha||'')}</span><b>${esc(x.estado||'')}</b></div>`).join('')||'<div class="eval-v66-empty">Sin registros.</div>'}</section></div>`;
+      $('eval-v68-back-student')?.addEventListener('click',()=>{vista='alumno';renderVista();});
+    }catch(e){mostrarToast?.(e?.message||'No se pudo abrir la ficha académica.','error','Ficha académica');}
+  }
+
+  function imprimirResumenRepresentanteV68(ficha){
+    const a=ficha.alumno||{},r=ficha.resumen||{},acts=ficha.actividades||[],segu=ficha.seguimiento||[];
+    const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Resumen académico para representante</title><style>body{font-family:Arial;padding:28px;color:#222}h1{font-size:20px}h2{font-size:14px;margin-top:20px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #bbb;padding:7px;text-align:left}.kpis{display:flex;gap:8px;flex-wrap:wrap}.kpis div{border:1px solid #ccc;border-radius:8px;padding:8px 10px}</style></head><body><h1>Resumen académico para representante</h1><p><b>Estudiante:</b> ${esc(a.nombre||'')}<br><b>Sección:</b> ${esc(data.ano)} ${esc(data.seccion)} · <b>Materia:</b> ${esc(data.materia)} · <b>Lapso:</b> ${esc(data.lapso)}</p><div class="kpis"><div>Puntos: <b>${r.puntosAcumulados||0}/${r.puntosPlanificados||0}</b></div><div>Rendimiento: <b>${r.porcentajeAcademico||0}%</b></div><div>Asistencia: <b>${r.porcentajeAsistencia||0}%</b></div><div>No entregadas: <b>${r.noEntregadas||0}</b></div></div><h2>Actividades</h2><table><thead><tr><th>Actividad</th><th>Entrega</th><th>Nota final</th><th>Asistencia</th></tr></thead><tbody>${acts.map(x=>`<tr><td>${esc(x.nombre)}</td><td>${esc(x.estadoEntrega)}</td><td>${x.notaFinal===''?'—':`${x.notaFinal}/${x.puntos}`}</td><td>${esc(x.asistencia||'—')}</td></tr>`).join('')}</tbody></table><h2>Seguimientos y compromisos</h2>${segu.length?segu.slice(0,10).map(x=>`<p><b>${esc(x.fecha)} · ${esc(x.tipo)}</b><br>${esc(x.motivo||'')}${x.compromiso?`<br>Compromiso: ${esc(x.compromiso)}`:''}</p>`).join(''):'<p>Sin seguimientos registrados.</p>'}<script>window.onload=()=>window.print();<\/script></body></html>`);w.document.close();
+  }
+
   function renderVista(){
     if(vista==='calendario') return renderCalendario();
     if(vista==='mensual') return renderMensual();
@@ -19109,6 +19248,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 
   let data=null;
+  let complemento68=null;
   let actividadActual='';
   let vista='actividad';
   let cursos=[];
@@ -19186,6 +19326,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <article><i class="fa-solid fa-pen-to-square"></i><div><strong id="eval-v67-pending-grade">0</strong><small>Pendientes de calificar</small></div></article>
           <article class="is-alert"><i class="fa-solid fa-bell"></i><div><strong id="eval-v66-alerts">0</strong><small>Alertas de representante</small></div></article>
           <article><i class="fa-solid fa-gauge-high"></i><div><strong id="eval-v67-points-total">0/20</strong><small>Plan del lapso</small></div></article>
+          <article><i class="fa-solid fa-chart-line"></i><div><strong id="eval-v68-section-average">0%</strong><small>Promedio de la sección</small></div></article>
+          <article><i class="fa-solid fa-kit-medical"></i><div><strong id="eval-v68-recovery-pending">0</strong><small>Recuperación pendiente</small></div></article>
         </section>
 
         <section class="eval-v66-work">
@@ -19199,6 +19341,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
               <button type="button" data-eval-v66-view="alumno"><i class="fa-solid fa-user-graduate"></i> Por alumno</button>
               <button type="button" data-eval-v66-view="seccion"><i class="fa-solid fa-table"></i> Resumen de sección</button>
               <button type="button" data-eval-v66-view="alertas"><i class="fa-solid fa-triangle-exclamation"></i> Alertas</button>
+              <button type="button" data-eval-v66-view="recuperacion"><i class="fa-solid fa-arrow-rotate-left"></i> Recuperación</button>
+              <button type="button" data-eval-v66-view="cierre"><i class="fa-solid fa-lock"></i> Cierre de lapso</button>
             </div>
             <div id="eval-v66-content"><div class="eval-v66-empty">Selecciona una sección para comenzar.</div></div>
           </main>
@@ -19289,6 +19433,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const host=$('eval-v66-content');if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente académico…</div>';
     try{
       data=await api('obtenerGestionEvaluaciones',c);
+      complemento68=await api('obtenerComplementoEvaluacionesV68',c);
       actividadActual=(data.actividades||[]).some(a=>a.id===actividadActual)?actividadActual:(data.actividades?.[0]?.id||'');
       renderTodo();
     }catch(e){
@@ -19314,6 +19459,9 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     $('eval-v67-pending-grade').textContent=String(pendingGrade);
     $('eval-v67-points-total').textContent=`${points}/20`;
     $('eval-v66-alerts').textContent=String(r.alertas||0);
+    if($('eval-v68-section-average')) $('eval-v68-section-average').textContent=`${Math.round(Number(complemento68?.promedioSeccion||0))}%`;
+    const recoveryPending=(complemento68?.alumnosResumen||[]).filter(x=>Number(x.porcentajeAcademico||0)<50 || Number(x.noEntregadas||0)>=2).length;
+    if($('eval-v68-recovery-pending')) $('eval-v68-recovery-pending').textContent=String(recoveryPending);
   }
 
   function actualizarNavAlert(){
@@ -19358,7 +19506,11 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if(!act){host.innerHTML='<div class="eval-v66-empty">Selecciona una actividad.</div>';return;}
     const alumnos=data?.alumnos||[];
     host.innerHTML=`
-      <div class="eval-v66-view-head"><div><span>Registro de actividad</span><h3>${esc(act.nombre)}</h3><p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b></p></div><button type="button" id="eval-v66-save-activity"><i class="fa-solid fa-cloud-arrow-up"></i> Guardar entregas y notas</button></div>
+      <div class="eval-v66-view-head"><div><span>Registro de actividad</span><h3>${esc(act.nombre)}</h3><p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b>${complemento68?.estadoActividades?.[act.id]?.cerrada?' · <b class="eval-v68-closed-text">Actividad cerrada</b>':''}</p></div><div class="eval-v68-head-actions"><button type="button" id="eval-v68-toggle-activity" class="${complemento68?.estadoActividades?.[act.id]?.cerrada?'is-reopen':''}"><i class="fa-solid ${complemento68?.estadoActividades?.[act.id]?.cerrada?'fa-lock-open':'fa-lock'}"></i> ${complemento68?.estadoActividades?.[act.id]?.cerrada?'Reabrir':'Cerrar actividad'}</button><button type="button" id="eval-v66-save-activity" ${(complemento68?.estadoActividades?.[act.id]?.cerrada||String(complemento68?.cierreLapso?.estado||'').toUpperCase()==='CERRADO')?'disabled':''}><i class="fa-solid fa-cloud-arrow-up"></i> Guardar entregas y notas</button></div></div>
+      <div class="eval-v68-activity-metrics">${(()=>{
+        const st=(complemento68?.actividadStats||[]).find(x=>x.id===act.id)||{};
+        return `<span><b>${Number(st.promedio||0).toFixed(2)}</b><small>Promedio</small></span><span><b>${Number(st.porcentaje||0)}%</b><small>Rendimiento</small></span><span><b>${Number(st.noEntrego||0)}</b><small>No entregaron</small></span>`;
+      })()}</div>
       <div class="eval-v66-help"><i class="fa-solid fa-circle-info"></i> Entrega y nota son datos distintos. Puedes marcar <b>Entregó</b> y dejar la nota vacía hasta corregir la actividad.</div>
       <div class="eval-v67-toolbar">
         <input id="eval-v67-search" type="search" placeholder="Buscar estudiante">
@@ -19375,6 +19527,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       }).join('')}
       </tbody></table></div>`;
     $('eval-v66-save-activity')?.addEventListener('click',guardarActividad);
+    $('eval-v68-toggle-activity')?.addEventListener('click',toggleActividadV68);
     $('eval-v67-search')?.addEventListener('input',filtrarFilasActividadV67);
     $('eval-v67-filter')?.addEventListener('change',filtrarFilasActividadV67);
     $('eval-v67-all-delivered')?.addEventListener('click',()=>{
@@ -19419,7 +19572,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
 
   function resumenAlumno(id){
-    return (data?.resumen?.estudiantes||[]).find(x=>String(x.idAlumno)===String(id));
+    return (complemento68?.alumnosResumen||[]).find(x=>String(x.idAlumno)===String(id))
+      || (data?.resumen?.estudiantes||[]).find(x=>String(x.idAlumno)===String(id));
   }
 
   function renderAlumno(){
@@ -19431,12 +19585,14 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const r=resumenAlumno(al.id)||{};
     const acts=data?.actividades||[];
     host.innerHTML=`<div class="eval-v66-student-select"><label>Estudiante<select id="eval-v66-student-select">${alumnos.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(al.id)?'selected':''}>${x.numeroLista}. ${esc(x.nombre)}</option>`).join('')}</select></label></div>
-    <div class="eval-v66-student-hero"><div><span class="eval-v66-avatar">${esc((al.nombre||'E')[0])}</span><div><h3>${esc(al.nombre)}</h3><p>${esc(data.ano)} ${esc(data.seccion)} · ${esc(data.materia)}</p></div></div><span class="eval-v66-risk is-${String(r.alerta||'VERDE').toLowerCase()}">${r.alerta==='ROJA'?'Riesgo académico alto':r.alerta==='AMARILLA'?'Requiere seguimiento':'Sin alerta'}</span></div>
+    <div class="eval-v66-student-hero"><div><span class="eval-v66-avatar">${esc((al.nombre||'E')[0])}</span><div><h3>${esc(al.nombre)}</h3><p>${esc(data.ano)} ${esc(data.seccion)} · ${esc(data.materia)}</p><small class="eval-v68-academic-status">${esc(estadoAcademicoTextoV68(r.estadoAcademico))}</small></div></div><div class="eval-v68-student-actions"><span class="eval-v66-risk is-${String(r.alerta||'VERDE').toLowerCase()}">${r.alerta==='ROJA'?'Riesgo académico alto':r.alerta==='AMARILLA'?'Requiere seguimiento':'Sin alerta'}</span><button type="button" id="eval-v68-full-record"><i class="fa-solid fa-folder-open"></i> Ficha académica</button><button type="button" id="eval-v68-rep-report"><i class="fa-solid fa-print"></i> Resumen representante</button></div></div>
     <div class="eval-v66-student-stats"><article><b>${r.entregadas||0}</b><small>Entregadas</small></article><article class="is-danger"><b>${r.noEntregadas||0}</b><small>No entregadas</small></article><article><b>${r.tardias||0}</b><small>Tardías</small></article><article><b>${r.puntosAcumulados||0}/${r.puntosPlanificados||0}</b><small>Puntos</small></article><article><b>${r.porcentajeAsistencia||0}%</b><small>Asistencia</small></article></div>
     ${Number(r.noEntregadas||0)>=2?`<div class="eval-v66-callout"><i class="fa-solid fa-bell"></i><div><strong>Alerta: ${Number(r.noEntregadas)} actividades sin entregar</strong><span>Se recomienda realizar contacto con el representante y dejar registro del seguimiento.</span></div><button type="button" data-v66-follow="${esc(al.id)}">Contactar representante</button></div>`:''}
     <div class="eval-v66-table-wrap"><table class="eval-v66-table"><thead><tr><th>Actividad</th><th>Fecha</th><th>Entrega</th><th>Nota</th><th>Asistencia</th></tr></thead><tbody>${acts.map(a=>{const reg=data.registros?.[`${a.id}|${al.id}`]||{};const asi=data.asistenciaPorActividad?.[a.id]?.[al.id]||'';return `<tr><td><strong>${esc(a.nombre)}</strong></td><td>${esc(a.fecha||'—')}</td><td>${esc(reg.estadoEntrega||'Pendiente')}</td><td>${reg.nota===''||reg.nota==null?'—':`${esc(reg.nota)}/${Number(a.puntos||0)}`}</td><td>${badgeAsistencia(asi)}</td></tr>`}).join('')}</tbody></table></div>`;
     $('eval-v66-student-select')?.addEventListener('change',e=>{studentActual=e.target.value;renderAlumno();});
     host.querySelector('[data-v66-follow]')?.addEventListener('click',()=>abrirSeguimiento(al.id));
+    $('eval-v68-full-record')?.addEventListener('click',()=>abrirFichaAcademicaV68(al.id,false));
+    $('eval-v68-rep-report')?.addEventListener('click',()=>abrirFichaAcademicaV68(al.id,true));
   }
 
   function cellEstado(act,al){
@@ -19444,14 +19600,15 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const e=r.estadoEntrega||'Pendiente';
     const letra=e==='Entrego'?'E':e==='No entrego'?'NE':e==='Tardia'?'T':e==='Justificada'?'J':'—';
     const cls=e==='No entrego'?'is-no':e==='Entrego'?'is-ok':e==='Tardia'?'is-late':e==='Justificada'?'is-just':'';
-    return `<span class="eval-v66-matrix-cell ${cls}" title="${esc(e)}">${letra}${r.nota!==''&&r.nota!=null?` · ${esc(r.nota)}`:''}</span>`;
+    const effective=complemento68?.notasEfectivas?.[`${act.id}|${al.id}`];
+    return `<span class="eval-v66-matrix-cell ${cls}" title="${esc(e)}">${letra}${effective!==''&&effective!=null?` · ${esc(effective)}`:''}</span>`;
   }
 
   function renderSeccion(){
     const host=$('eval-v66-content');if(!host)return;
     const acts=data?.actividades||[],alumnos=data?.alumnos||[];
     host.innerHTML=`<div class="eval-v66-view-head"><div><span>Resumen de sección</span><h3>${esc(data.ano)} · Sección ${esc(data.seccion)}</h3><p>Estado de todas las actividades y puntos acumulados.</p></div><button id="eval-v66-print-section" type="button"><i class="fa-solid fa-print"></i> Imprimir libro de notas</button></div>
-    <div class="eval-v66-table-wrap"><table class="eval-v66-table eval-v66-matrix"><thead><tr><th>N°</th><th>Estudiante</th>${acts.map((a,i)=>`<th title="${esc(a.nombre)}">A${i+1}<small>${Number(a.puntos||0)} pts</small></th>`).join('')}<th>Acumulado</th><th>No entregó</th><th>Alerta</th></tr></thead><tbody>${alumnos.map((al,i)=>{const r=resumenAlumno(al.id)||{};return `<tr><td>${al.numeroLista||i+1}</td><td><strong>${esc(al.nombre)}</strong></td>${acts.map(a=>`<td>${cellEstado(a,al)}</td>`).join('')}<td><b>${r.puntosAcumulados||0}/${r.puntosPlanificados||0}</b></td><td>${r.noEntregadas||0}</td><td><span class="eval-v66-risk is-${String(r.alerta||'VERDE').toLowerCase()}">${r.alerta||'VERDE'}</span></td></tr>`}).join('')}</tbody></table></div>
+    <div class="eval-v66-table-wrap"><table class="eval-v66-table eval-v66-matrix"><thead><tr><th>N°</th><th>Estudiante</th>${acts.map((a,i)=>`<th title="${esc(a.nombre)}">A${i+1}<small>${Number(a.puntos||0)} pts</small></th>`).join('')}<th>Acumulado /20</th><th>Promedio %</th><th>No entregó</th><th>Asistencia</th><th>Estado académico</th></tr></thead><tbody>${alumnos.map((al,i)=>{const r=resumenAlumno(al.id)||{};return `<tr><td>${al.numeroLista||i+1}</td><td><strong>${esc(al.nombre)}</strong></td>${acts.map(a=>`<td>${cellEstado(a,al)}</td>`).join('')}<td><b>${r.puntosAcumulados||0}/${r.puntosPlanificados||0}</b></td><td><b>${Number(r.porcentajeAcademico||0)}%</b></td><td>${r.noEntregadas||0}</td><td>${Number(r.porcentajeAsistencia||0)}%</td><td><span class="eval-v68-academic-pill ${estadoAcademicoClaseV68(r.estadoAcademico)}">${esc(estadoAcademicoTextoV68(r.estadoAcademico))}</span></td></tr>`}).join('')}</tbody></table></div>
     <div class="eval-v66-legend"><span><b>E</b> Entregó</span><span><b>NE</b> No entregó</span><span><b>T</b> Tardía</span><span><b>J</b> Justificada</span></div>`;
     $('eval-v66-print-section')?.addEventListener('click',()=>window.print());
   }
@@ -19472,6 +19629,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if(vista==='alumno')renderAlumno();
     else if(vista==='seccion')renderSeccion();
     else if(vista==='alertas')renderAlertas();
+    else if(vista==='recuperacion')renderRecuperacionV68();
+    else if(vista==='cierre')renderCierreV68();
     else renderActividad();
   }
 
