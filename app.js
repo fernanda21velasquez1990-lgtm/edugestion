@@ -19176,13 +19176,16 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <label><span>Lapso</span><select id="eval-v66-lapso"><option>1er Lapso</option><option>2do Lapso</option><option>3er Lapso</option></select></label>
           <label><span>Sección</span><select id="eval-v66-course"><option value="">Selecciona una sección</option></select></label>
           <button type="button" id="eval-v66-load"><i class="fa-solid fa-rotate"></i> Cargar registro</button>
+          <button type="button" id="eval-v67-import-express" class="eval-v67-import"><i class="fa-solid fa-link"></i> Importar Planificación Express</button>
         </section>
 
-        <section class="eval-v66-summary">
+        <section class="eval-v66-summary eval-v67-summary">
           <article><i class="fa-solid fa-clipboard-list"></i><div><strong id="eval-v66-total-act">0</strong><small>Actividades planificadas</small></div></article>
           <article><i class="fa-solid fa-check-double"></i><div><strong id="eval-v66-delivered">0</strong><small>Entregas registradas</small></div></article>
           <article><i class="fa-solid fa-circle-xmark"></i><div><strong id="eval-v66-missing">0</strong><small>No entregadas</small></div></article>
+          <article><i class="fa-solid fa-pen-to-square"></i><div><strong id="eval-v67-pending-grade">0</strong><small>Pendientes de calificar</small></div></article>
           <article class="is-alert"><i class="fa-solid fa-bell"></i><div><strong id="eval-v66-alerts">0</strong><small>Alertas de representante</small></div></article>
+          <article><i class="fa-solid fa-gauge-high"></i><div><strong id="eval-v67-points-total">0/20</strong><small>Plan del lapso</small></div></article>
         </section>
 
         <section class="eval-v66-work">
@@ -19231,6 +19234,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 
   function bindUI(){
     $('eval-v66-load')?.addEventListener('click',cargar);
+    $('eval-v67-import-express')?.addEventListener('click',importarPlanificacionExpress);
     $('eval-v66-lapso')?.addEventListener('change',cargar);
     $('eval-v66-course')?.addEventListener('change',cargar);
     document.querySelectorAll('[data-eval-v66-view]').forEach(b=>b.addEventListener('click',()=>{
@@ -19302,9 +19306,13 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const regs=Object.values(data?.registros||{});
     const delivered=regs.filter(x=>['Entrego','Tardia'].includes(x.estadoEntrega)).length;
     const missing=regs.filter(x=>x.estadoEntrega==='No entrego').length;
+    const pendingGrade=regs.filter(x=>['Entrego','Tardia'].includes(x.estadoEntrega) && (x.nota===''||x.nota===null||x.nota===undefined)).length;
+    const points=Number(r.puntosPlanificados||0);
     $('eval-v66-total-act').textContent=String(r.totalActividades||0);
     $('eval-v66-delivered').textContent=String(delivered);
     $('eval-v66-missing').textContent=String(missing);
+    $('eval-v67-pending-grade').textContent=String(pendingGrade);
+    $('eval-v67-points-total').textContent=`${points}/20`;
     $('eval-v66-alerts').textContent=String(r.alertas||0);
   }
 
@@ -19352,6 +19360,12 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     host.innerHTML=`
       <div class="eval-v66-view-head"><div><span>Registro de actividad</span><h3>${esc(act.nombre)}</h3><p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b></p></div><button type="button" id="eval-v66-save-activity"><i class="fa-solid fa-cloud-arrow-up"></i> Guardar entregas y notas</button></div>
       <div class="eval-v66-help"><i class="fa-solid fa-circle-info"></i> Entrega y nota son datos distintos. Puedes marcar <b>Entregó</b> y dejar la nota vacía hasta corregir la actividad.</div>
+      <div class="eval-v67-toolbar">
+        <input id="eval-v67-search" type="search" placeholder="Buscar estudiante">
+        <select id="eval-v67-filter"><option value="">Todos los estados</option><option>Pendiente</option><option>Entrego</option><option>No entrego</option><option>Tardia</option><option>Justificada</option><option value="SIN_NOTA">Entregó sin nota</option></select>
+        <button type="button" id="eval-v67-all-delivered"><i class="fa-solid fa-check-double"></i> Todos entregaron</button>
+        <button type="button" id="eval-v67-clear-grades"><i class="fa-solid fa-eraser"></i> Limpiar filtro</button>
+      </div>
       <div class="eval-v66-table-wrap"><table class="eval-v66-table"><thead><tr><th>N°</th><th>Estudiante</th><th>Asistencia ese día</th><th>Estado de entrega</th><th>Fecha real</th><th>Nota / ${Number(act.puntos||0)}</th><th>Observación</th></tr></thead><tbody>
       ${alumnos.map((al,i)=>{
         const r=data.registros?.[`${act.id}|${al.id}`]||{};
@@ -19361,6 +19375,27 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       }).join('')}
       </tbody></table></div>`;
     $('eval-v66-save-activity')?.addEventListener('click',guardarActividad);
+    $('eval-v67-search')?.addEventListener('input',filtrarFilasActividadV67);
+    $('eval-v67-filter')?.addEventListener('change',filtrarFilasActividadV67);
+    $('eval-v67-all-delivered')?.addEventListener('click',()=>{
+      document.querySelectorAll('[data-v66-row]').forEach(row=>{const s=row.querySelector('[data-v66-status]');if(s)s.value='Entrego';});
+      filtrarFilasActividadV67();
+    });
+    $('eval-v67-clear-grades')?.addEventListener('click',()=>{if($('eval-v67-search'))$('eval-v67-search').value='';if($('eval-v67-filter'))$('eval-v67-filter').value='';filtrarFilasActividadV67();});
+  }
+
+
+  function filtrarFilasActividadV67(){
+    const q=norm($('eval-v67-search')?.value||'');
+    const f=$('eval-v67-filter')?.value||'';
+    document.querySelectorAll('[data-v66-row]').forEach(row=>{
+      const nombre=norm(row.querySelector('td:nth-child(2)')?.textContent||'');
+      const estado=row.querySelector('[data-v66-status]')?.value||'Pendiente';
+      const nota=row.querySelector('[data-v66-grade]')?.value??'';
+      const matchQ=!q||nombre.includes(q);
+      const matchF=!f||(f==='SIN_NOTA'?(['Entrego','Tardia'].includes(estado)&&String(nota).trim()===''):estado===f);
+      row.style.display=(matchQ&&matchF)?'':'none';
+    });
   }
 
   async function guardarActividad(){
@@ -19495,6 +19530,49 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const tab=document.getElementById('tab-orientacion-convivencia');
     if(tab){tab.click();setTimeout(()=>mostrarToast?.('Registra el seguimiento del estudiante en Orientación y Convivencia.','info','Seguimiento académico'),250);}
     else if(typeof mostrarToast==='function')mostrarToast('El módulo de Orientación y Convivencia no está visible para este usuario.','warning','No disponible');
+  }
+
+
+  function planExpressTeacherKeyV67(){
+    return String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'docente').replace(/[^a-z0-9_-]/gi,'_');
+  }
+  function planExpressStoreV67(){
+    try{return JSON.parse(localStorage.getItem('edugestion_plan_express_v1_'+planExpressTeacherKeyV67())||'{}')||{}}catch(_){return{}}
+  }
+  function academicNumV67(v){return Number(String(v||'').match(/\d+/)?.[0]||0);}
+  function buscarRegistroExpressV67(ano,lapso){
+    const store=planExpressStoreV67(),num=academicNumV67(ano);
+    const key=Object.keys(store).find(k=>{
+      const rec=store[k]||{};
+      return academicNumV67(rec.grade||k)===num && String(rec.lapso||k).toLowerCase().includes(String(lapso||'').charAt(0));
+    });
+    return key?store[key]:null;
+  }
+  async function importarPlanificacionExpress(){
+    const c=contexto();
+    if(!c.ano||!c.seccion){mostrarToast?.('Selecciona primero una sección.','warning','Falta sección');return;}
+    const rec=buscarRegistroExpressV67(c.ano,c.lapso);
+    if(!rec){mostrarToast?.('No encontré una Planificación Express guardada para este año y lapso.','warning','Sin planificación Express');return;}
+    const selected=rec.selected||{};
+    const actividades=Object.entries(selected).filter(([,cfg])=>cfg?.selected).map(([key,cfg])=>{
+      const parts=String(key).split('|||');
+      return {actividad:String(parts[1]||'Actividad evaluativa').trim(),puntos:Number(cfg?.puntos||0),fecha:String(cfg?.fecha||'')};
+    });
+    if(!actividades.length){mostrarToast?.('La Planificación Express no tiene actividades seleccionadas.','warning','Sin actividades');return;}
+    const sinFecha=actividades.filter(a=>!a.fecha);
+    if(sinFecha.length){mostrarToast?.(`Hay ${sinFecha.length} actividad(es) sin fecha. Completa las fechas en Planificación Express antes de importar.`, 'warning','Faltan fechas');return;}
+    const total=actividades.reduce((s,a)=>s+Number(a.puntos||0),0);
+    if(total!==20 && !window.confirm(`La planificación suma ${total} puntos, no 20. ¿Deseas importarla de todos modos?`))return;
+    try{
+      const r=await api('sincronizarPlanificacionExpressEvaluaciones',{...c,actividades});
+      mostrarToast?.(`${r.total||0} actividad(es) sincronizadas con la sección ${c.ano} ${c.seccion}.`,'success','Planificación conectada');
+      const d=await api('validarSesion',{}).catch(()=>null);
+      try{
+        const init=await api('obtenerDatosIniciales',{});
+        if(Array.isArray(init?.planes))planesProfesor=init.planes;
+      }catch(_){}
+      await cargar();
+    }catch(e){mostrarToast?.(e?.message||'No se pudo importar la Planificación Express.','error','Error de sincronización');}
   }
 
   function init(){

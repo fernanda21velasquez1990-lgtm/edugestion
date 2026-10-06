@@ -620,6 +620,9 @@ function doPost(e) {
       case 'guardarAsistencia':
         respuesta = guardarAsistencia_(sesion.docente, payload);
         break;
+      case 'sincronizarPlanificacionExpressEvaluaciones':
+        respuesta = sincronizarPlanificacionExpressEvaluaciones_(sesion.docente, payload);
+        break;
       case 'obtenerGestionEvaluaciones':
         respuesta = obtenerGestionEvaluaciones_(sesion.docente, payload);
         break;
@@ -5416,3 +5419,62 @@ function obtenerSeguimientoAcademico_(docente, payload) {
   return { status: 'success', seguimiento: items, total: items.length };
 }
 /* EDUGESTION_GESTION_EVALUACIONES_V66_END */
+
+
+function sincronizarPlanificacionExpressEvaluaciones_(docente, payload) {
+  var ano = limpiarRequerido_(payload.ano, 'año');
+  var seccion = limpiarRequerido_(payload.seccion, 'sección').toUpperCase();
+  var actividades = Array.isArray(payload.actividades) ? payload.actividades : [];
+  if (!actividades.length) lanzar_('No se recibieron actividades de Planificación Express.', 'VALIDATION_ERROR');
+
+  var tabla = leerObjetos_(EG.SHEETS.PLANIFICACION);
+  var creadas = 0;
+  var actualizadas = 0;
+
+  actividades.forEach(function(item) {
+    var nombre = limpiarRequerido_(item.actividad || item.nombre, 'actividad').slice(0, 250);
+    var puntos = Number(item.puntos || 0);
+    var fecha = String(item.fecha || '').slice(0, 10);
+    if (!fecha) lanzar_('Cada actividad debe tener una fecha para sincronizarse.', 'VALIDATION_ERROR');
+    if (!isFinite(puntos) || puntos < 0 || puntos > 20) {
+      lanzar_('Los puntos de la actividad "' + nombre + '" no son válidos.', 'VALIDATION_ERROR');
+    }
+
+    var existente = tabla.objetos.filter(function(p) {
+      return String(p.idProfesor) === String(docente.id) &&
+        normalizarTexto_(p.ano || '').toUpperCase() === normalizarTexto_(ano).toUpperCase() &&
+        normalizarTexto_(p.seccion || '').toUpperCase() === seccion &&
+        normalizarTexto_(p.actividad || '') === normalizarTexto_(nombre) &&
+        String(serializarValor_(p.fecha, 'fecha') || '') === fecha;
+    })[0];
+
+    var ahora = ahora_();
+    var datos = {
+      id: existente && existente.id ? existente.id : Utilities.getUuid(),
+      idProfesor: String(docente.id),
+      ano: ano,
+      seccion: seccion,
+      actividad: nombre,
+      puntos: puntos,
+      fecha: fecha,
+      creadoEn: existente ? String(existente.creadoEn || ahora) : ahora,
+      actualizadoEn: ahora
+    };
+
+    if (existente) {
+      actualizarFilaObjeto_(EG.SHEETS.PLANIFICACION, existente.__row, datos);
+      actualizadas++;
+    } else {
+      anexarObjeto_(EG.SHEETS.PLANIFICACION, datos);
+      creadas++;
+    }
+  });
+
+  return {
+    status: 'success',
+    creadas: creadas,
+    actualizadas: actualizadas,
+    total: creadas + actualizadas,
+    message: 'Planificación Express sincronizada con Evaluaciones y Notas.'
+  };
+}
