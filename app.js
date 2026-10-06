@@ -2635,6 +2635,8 @@ const SESSION_KEY = 'edugestion_session_v2';
           ? `<i class="fa-solid fa-floppy-disk"></i><span>Actualizar ficha</span>`
           : `<i class="fa-solid fa-user-check"></i><span>Guardar estudiante</span>`;
       }
+      const btnEliminar = document.getElementById('btn-eliminar-estudiante');
+      if (btnEliminar) btnEliminar.disabled = !id;
     }
 
     async function cargarEstudiantesRegistro(forzar = false) {
@@ -2776,6 +2778,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         }
         actualizarModoRegistro();
         actualizarRegistroInteractivo();
+        try { window.dispatchEvent(new CustomEvent('edugestion:students-changed', { detail: { accion:idExistente?'actualizado':'creado', idAlumno:data.alumno?.id||'' } })); } catch (_) {}
       } catch (err) {
         console.error('Error al guardar estudiante:', err);
         mostrarToast(err?.message || 'Verifica la conexión e inténtalo nuevamente.', 'error', 'No se guardó la ficha');
@@ -2877,6 +2880,56 @@ const SESSION_KEY = 'edugestion_session_v2';
       if (!e.target.value) return;
       const alumno = alumnosRegistroCache.find(a => String(a.id) === String(e.target.value));
       if (alumno) cargarFichaRegistro(alumno);
+    });
+
+    document.getElementById('btn-eliminar-estudiante')?.addEventListener('click', async () => {
+      const id = document.getElementById('reg-id')?.value || document.getElementById('reg-estudiante-existente')?.value || '';
+      if (!id) {
+        mostrarToast('Selecciona primero un estudiante registrado.', 'warning', 'Sin estudiante');
+        return;
+      }
+      if (!alumnosRegistroCache.length) await cargarEstudiantesRegistro(true);
+      const alumno = alumnosRegistroCache.find(a => String(a.id) === String(id));
+      if (!alumno) {
+        mostrarToast('No se encontró la ficha seleccionada.', 'warning', 'Ficha no encontrada');
+        return;
+      }
+
+      const nombre = String(alumno.nombre || 'este estudiante');
+      const curso = [alumno.ano, alumno.seccion ? `Sección ${alumno.seccion}` : '', alumno.turno || ''].filter(Boolean).join(' · ');
+      const confirmado = window.confirm(
+        `¿Eliminar definitivamente a "${nombre}"${curso ? ` (${curso})` : ''}?\n\n` +
+        'También se eliminarán sus registros académicos asociados: asistencia, evaluaciones, notas, recuperaciones, seguimientos, compromisos y actas de este docente.\n\n' +
+        'Esta acción no se puede deshacer.'
+      );
+      if (!confirmado) return;
+
+      const btn = document.getElementById('btn-eliminar-estudiante');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Eliminando...</span>';
+      }
+
+      try {
+        const r = await apiRequest('eliminarAlumno', { id, confirmar: true });
+        alumnosRegistroCache = [];
+        alumnosSeccion = alumnosSeccion.filter(a => String(a.id) !== String(id));
+        delete asistenciaTemporal[id];
+        delete estadisticasAlumnos[id];
+        nuevaFichaRegistro();
+        await cargarEstudiantesRegistro(true);
+        try { await cargarAlumnosDeSeccion(); } catch (_) {}
+        try { window.dispatchEvent(new CustomEvent('edugestion:students-changed', { detail: { accion:'eliminado', idAlumno:id } })); } catch (_) {}
+        mostrarToast(r.message || 'El estudiante fue eliminado correctamente.', 'success', 'Estudiante eliminado');
+      } catch (error) {
+        console.error('No se pudo eliminar el estudiante:', error);
+        mostrarToast(error?.message || 'No se pudo eliminar el estudiante.', 'error', 'Error');
+      } finally {
+        if (btn) {
+          btn.innerHTML = '<i class="fa-solid fa-trash-can"></i><span>Eliminar estudiante</span>';
+          actualizarModoRegistro();
+        }
+      }
     });
 
     document.getElementById('btn-nueva-ficha')?.addEventListener('click', nuevaFichaRegistro);
@@ -12590,6 +12643,12 @@ El tema NO se elimina del cuadernillo; volverá a quedar como "Sin asignar".`);i
   function init(){asegurarUI();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,250),{once:true});else setTimeout(init,120);
   window.addEventListener('edugestion:session',()=>setTimeout(()=>{asegurarUI();secciones=[];alumnos=[];stats=null;actividades=[];},80));
+  window.addEventListener('edugestion:control-study-sync',()=>{
+    try{
+      cargarPeriodo();
+      renderTodo();
+    }catch(_){}
+  });
 })();
 /* EDUGESTION_CONTROL_ESTUDIO_V1_END */
 
@@ -19319,6 +19378,11 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <button type="button" id="eval-v66-load"><i class="fa-solid fa-rotate"></i> Cargar registro</button>
           <button type="button" id="eval-v67-import-express" class="eval-v67-import"><i class="fa-solid fa-link"></i> Importar Planificación Express</button>
         </section>
+        <div class="eval-v71-linkbar" id="eval-v71-linkbar">
+          <span><i class="fa-solid fa-users"></i> Sección: <b id="eval-v71-section-status">—</b></span>
+          <span><i class="fa-solid fa-clipboard-list"></i> Planificación: <b id="eval-v71-plan-status">—</b></span>
+          <span><i class="fa-solid fa-building-columns"></i> Control de Estudio: <b id="eval-v71-control-status">Pendiente</b></span>
+        </div>
 
         <section class="eval-v66-summary eval-v67-summary">
           <article><i class="fa-solid fa-clipboard-list"></i><div><strong id="eval-v66-total-act">0</strong><small>Actividades planificadas</small></div></article>
@@ -19413,17 +19477,31 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     return [...map.values()].sort((a,b)=>String(a.ano).localeCompare(String(b.ano),'es')||a.seccion.localeCompare(b.seccion,'es'));
   }
 
-  function cargarCursos(){
-    cursos=cursosDisponibles();
+  async function cargarCursos(){
+    const base=cursosDisponibles();
+    const map=new Map(base.map(c=>[[c.ano,c.seccion,c.turno].join('|'),c]));
+    try{
+      const r=await api('obtenerAlumnos',{});
+      (Array.isArray(r?.alumnos)?r.alumnos:[]).forEach(a=>{
+        const ano=String(a.ano||'').trim(),seccion=String(a.seccion||'').trim().toUpperCase();
+        const turno=turnoAsistencia?turnoAsistencia(a.turno||'Manana'):String(a.turno||'Manana');
+        if(!ano||!seccion)return;
+        const key=[ano,seccion,turno||'Manana'].join('|');
+        if(!map.has(key))map.set(key,{ano,seccion,turno:turno||'Manana'});
+      });
+    }catch(_){}
+    cursos=[...map.values()].sort((a,b)=>String(a.ano).localeCompare(String(b.ano),'es')||a.seccion.localeCompare(b.seccion,'es'));
     const sel=$('eval-v66-course');if(!sel)return;
     const old=sel.value;
+    const filtroActual=[selectFiltroAno?.value||'',selectFiltroSeccion?.value||'',turnoAsistencia?turnoAsistencia(selectFiltroTurno?.value||''):selectFiltroTurno?.value||''].join('|');
     sel.innerHTML='<option value="">-- Selecciona una sección --</option>'+cursos.map(c=>`<option value="${esc([c.ano,c.seccion,c.turno].join('|'))}">${esc(c.ano)} · Sección ${esc(c.seccion)} · ${esc(c.turno==='Manana'?'Mañana':c.turno)}</option>`).join('');
     if(cursos.some(c=>[c.ano,c.seccion,c.turno].join('|')===old))sel.value=old;
+    else if(cursos.some(c=>[c.ano,c.seccion,c.turno].join('|')===filtroActual))sel.value=filtroActual;
     else if(cursos.length)sel.value=[cursos[0].ano,cursos[0].seccion,cursos[0].turno].join('|');
   }
 
   async function abrir(){
-    activar();cargarCursos();
+    activar();await cargarCursos();
     if($('eval-v66-course')?.value) await cargar();
   }
 
@@ -19451,8 +19529,66 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     }
   }
 
+
+  function controlEstudioKeyV71(){
+    const user=String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'sin_usuario').replace(/[^a-z0-9_-]/gi,'_');
+    return `edugestion_control_estudio_v1_${user}`;
+  }
+
+  function sincronizarControlEstudioV71(){
+    if(!data)return;
+    const c=contexto();
+    const activities=(data.actividades||[]).map(act=>{
+      const registros={};
+      (data.alumnos||[]).forEach(al=>{
+        const reg=data.registros?.[`${act.id}|${al.id}`]||{};
+        const efectiva=complemento68?.notasEfectivas?.[`${act.id}|${al.id}`];
+        const raw=efectiva!==''&&efectiva!==null&&efectiva!==undefined?Number(efectiva):(reg.nota===''||reg.nota==null?'':Number(reg.nota));
+        const nota20=raw===''||!Number(act.puntos||0)?'':Math.round((raw/Number(act.puntos))*20*100)/100;
+        registros[String(al.id)]={
+          entrego:['Entrego','Tardia','Justificada'].includes(reg.estadoEntrega)?'Si':'No',
+          nota:nota20,
+          observacion:String(reg.observacion||'')
+        };
+      });
+      return {
+        id:String(act.id||''),
+        nombre:String(act.nombre||'Actividad'),
+        fecha:String(act.fecha||''),
+        ponderacion:Math.round((Number(act.puntos||0)/20)*10000)/100,
+        registros
+      };
+    });
+
+    try{
+      const key=controlEstudioKeyV71();
+      const all=JSON.parse(localStorage.getItem(key)||'{}')||{};
+      const period=[c.ano,c.seccion,c.turno,c.lapso].join('|');
+      all[period]={
+        ...(all[period]||{}),
+        actividades:activities,
+        sincronizadoDesde:'Evaluaciones y Notas',
+        sincronizadoEn:new Date().toISOString()
+      };
+      localStorage.setItem(key,JSON.stringify(all));
+      if($('eval-v71-control-status'))$('eval-v71-control-status').textContent='Sincronizado';
+      try{window.dispatchEvent(new CustomEvent('edugestion:control-study-sync',{detail:{periodo:period}}));}catch(_){}
+    }catch(e){
+      console.warn('No se pudo sincronizar Control de Estudio:',e);
+      if($('eval-v71-control-status'))$('eval-v71-control-status').textContent='Error';
+    }
+  }
+
+  function actualizarEnlacesV71(){
+    const c=contexto();
+    if($('eval-v71-section-status'))$('eval-v71-section-status').textContent=`${c.ano||'—'} ${c.seccion||''} · ${data?.alumnos?.length||0} alumnos`;
+    if($('eval-v71-plan-status'))$('eval-v71-plan-status').textContent=`${data?.actividades?.length||0} actividades · ${Number(data?.resumen?.puntosPlanificados||0)}/20 pts`;
+  }
+
   function renderTodo(){
     renderSummary();renderActividades();renderVista();actualizarNavAlert();
+    actualizarEnlacesV71();
+    sincronizarControlEstudioV71();
   }
 
   function renderSummary(){
@@ -19917,6 +20053,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     crearUI();
     window.addEventListener('edugestion:session',()=>setTimeout(()=>{crearUI();cargarCursos();},250));
     window.addEventListener('edugestion:data-loaded',()=>setTimeout(()=>{crearUI();cargarCursos();},250));
+    window.addEventListener('edugestion:students-changed',()=>setTimeout(()=>cargarCursos(),120));
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,350),{once:true});else setTimeout(init,180);
 })();

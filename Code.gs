@@ -637,6 +637,9 @@ function doPost(e) {
       case 'actualizarAlumno':
         respuesta = actualizarAlumno_(sesion.docente, payload);
         break;
+      case 'eliminarAlumno':
+        respuesta = eliminarAlumno_(sesion.docente, payload);
+        break;
       case 'eliminarAlumnoDuplicado':
         respuesta = eliminarAlumnoDuplicado_(sesion.docente, payload);
         break;
@@ -6201,3 +6204,71 @@ function obtenerExpedienteIntegralV70_(docente, payload) {
   };
 }
 /* EDUGESTION_EXPEDIENTE_INTEGRAL_V70_END */
+
+
+/* =========================================================
+ * EduGestión · V7.1
+ * ELIMINACIÓN SEGURA DE ESTUDIANTES
+ * ========================================================= */
+function eliminarAlumno_(docente, payload) {
+  asegurarCamposBienestarAlumnos_();
+
+  var id = normalizarTexto_(payload.id || payload.idAlumno || '');
+  if (!id) lanzar_('Falta indicar el estudiante que deseas eliminar.', 'BAD_REQUEST');
+
+  var confirmar = payload.confirmar === true || String(payload.confirmar || '').toLowerCase() === 'si';
+  if (!confirmar) lanzar_('Debes confirmar la eliminación del estudiante.', 'CONFIRM_REQUIRED');
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    var tabla = leerObjetos_(EG.SHEETS.ALUMNOS);
+    var alumno = tabla.objetos.filter(function(a) {
+      return String(a.idProfesor) === String(docente.id) && String(a.id) === String(id);
+    })[0];
+
+    if (!alumno) lanzar_('No se encontró la ficha del estudiante.', 'NOT_FOUND');
+
+    var eliminados = {};
+    var hojasRelacionadas = [
+      EG.SHEETS.ASISTENCIA,
+      EG.SHEETS.CALIFICACIONES,
+      EG.SHEETS.ACTAS,
+      EG.SHEETS.EVALUACION_SEGUIMIENTO,
+      EG.SHEETS.SEGUIMIENTO_ACADEMICO,
+      EG.SHEETS.RECUPERACIONES_EVALUACION,
+      EG.SHEETS.AUDITORIA_CALIFICACIONES,
+      EG.SHEETS.COMPROMISOS_ACADEMICOS
+    ];
+
+    hojasRelacionadas.forEach(function(nombreHoja) {
+      if (!nombreHoja) return;
+      eliminados[nombreHoja] = eliminarRegistrosAlumnoEnHoja_(nombreHoja, docente.id, id);
+    });
+
+    // La auditoría de asistencia se conserva para trazabilidad institucional.
+    var tablaActual = leerObjetos_(EG.SHEETS.ALUMNOS);
+    var fila = tablaActual.objetos.filter(function(a) {
+      return String(a.idProfesor) === String(docente.id) && String(a.id) === String(id);
+    })[0];
+
+    if (!fila) lanzar_('La ficha ya no existe.', 'NOT_FOUND');
+    tablaActual.hoja.deleteRow(fila.__row);
+    SpreadsheetApp.flush();
+
+    return {
+      status: 'success',
+      idAlumno: id,
+      nombre: String(alumno.nombre || ''),
+      ano: String(alumno.ano || ''),
+      seccion: String(alumno.seccion || ''),
+      turno: String(alumno.turno || ''),
+      eliminados: eliminados,
+      message: 'El estudiante y sus registros académicos asociados fueron eliminados correctamente.'
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+/* EDUGESTION_ELIMINAR_ALUMNO_V71_END */

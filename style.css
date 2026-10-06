@@ -8733,3 +8733,136 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
 .eval-v70-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.eval-v70-panel{border:1px solid #e0e8f0;border-radius:15px;overflow:hidden;background:#fff}.eval-v70-list{max-height:270px;overflow:auto}.eval-v70-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:9px 11px;border-bottom:1px solid #edf1f5;font-size:9px;color:#5c6e81}.eval-v70-row strong{display:block;color:#314a63;font-size:9px}.eval-v70-row small{display:block;margin-top:2px;color:#8895a3;font-size:8px}.eval-v70-att-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:12px}.eval-v70-att-grid span{border:1px solid #e2e9f0;border-radius:11px;padding:9px;text-align:center;background:#fbfdff}.eval-v70-att-grid b{display:block;color:#214d77;font-size:17px}.eval-v70-att-grid small{display:block;margin-top:3px;font-size:8px;color:#7d8c9d;font-weight:900}
 .eval-v70-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.eval-v70-actions button{border:1px solid #d2deea;background:#f8fbff;color:#2d5f8f;border-radius:10px;padding:9px 11px;font-size:9px;font-weight:900;cursor:pointer}.eval-v70-actions button:first-child{background:#245f98;color:#fff;border-color:#245f98}
 @media(max-width:1000px){.eval-v70-kpis{grid-template-columns:repeat(3,1fr)}}@media(max-width:760px){.eval-v70-grid{grid-template-columns:1fr}.eval-v70-kpis{grid-template-columns:repeat(2,1fr)}.eval-v70-hero{align-items:flex-start;flex-direction:column}}
+
+/* =========================================================
+   V7.1 · Ajustes visuales + enlace integral de módulos
+   ========================================================= */
+
+/* Evita que el encabezado de Evaluaciones quede debajo de la barra superior. */
+.eval-v66-shell{
+  padding-top:18px;
+  overflow:visible;
+}
+.eval-v66-hero{
+  margin-top:0;
+  position:relative;
+  z-index:1;
+}
+
+/* Los cuatro controles superiores conservan su propio espacio. */
+.eval-v66-filters{
+  grid-template-columns:160px minmax(300px,1fr) 170px 215px !important;
+  align-items:end;
+}
+.eval-v66-filters button{
+  width:100%;
+  white-space:nowrap;
+  line-height:1.15;
+}
+.eval-v67-import{
+  min-width:0;
+}
+
+/* Barra que muestra que Sección, Planificación y Control de Estudio están enlazados. */
+.eval-v71-linkbar{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin:10px 0 2px;
+}
+.eval-v71-linkbar span{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-height:38px;
+  padding:8px 10px;
+  border:1px solid #dbe6ef;
+  border-radius:11px;
+  background:#f8fbff;
+  color:#60748a;
+  font-size:9px;
+  font-weight:800;
+  min-width:0;
+}
+.eval-v71-linkbar span i{color:#2d6598}
+.eval-v71-linkbar span b{
+  color:#244666;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+/* Mantiene tarjetas y pestañas separadas, sin montarse entre sí. */
+.eval-v66-summary,
+.eval-v67-summary{
+  align-items:stretch;
+}
+.eval-v66-summary article,
+.eval-v67-summary article{
+  min-width:0;
+  min-height:84px;
+  box-sizing:border-box;
+}
+.eval-v66-work{
+  align-items:start;
+}
+.eval-v66-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:7px;
+}
+.eval-v66-tabs button{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+
+/* Registro de estudiantes: cuarto botón y eliminación visible pero protegida. */
+.student-btn--danger-soft{
+  border-color:#efc8c8 !important;
+  background:#fff7f7 !important;
+  color:#b53434 !important;
+}
+.student-btn--danger-soft:hover:not(:disabled){
+  background:#ffecec !important;
+}
+.student-btn--danger-soft:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+@media (min-width:768px){
+  .grid:has(#reg-estudiante-existente){
+    grid-template-columns:minmax(0,1fr) auto auto auto !important;
+  }
+}
+
+@media(max-width:1180px){
+  .eval-v66-filters{
+    grid-template-columns:minmax(150px,.65fr) minmax(280px,1.35fr) !important;
+  }
+  .eval-v66-filters button{
+    width:auto;
+    min-height:42px;
+  }
+  .eval-v71-linkbar{
+    grid-template-columns:1fr 1fr 1fr;
+  }
+}
+
+@media(max-width:760px){
+  .eval-v66-shell{padding-top:10px}
+  .eval-v66-filters{
+    grid-template-columns:1fr !important;
+  }
+  .eval-v66-filters button{
+    width:100%;
+  }
+  .eval-v71-linkbar{
+    grid-template-columns:1fr;
+  }
+  .eval-v66-tabs button{
+    flex:1 1 calc(50% - 7px);
+    text-align:center;
+  }
+}
