@@ -1560,9 +1560,10 @@ const SESSION_KEY = 'edugestion_session_v2';
         const idDom = `alumno-${String(al.id).replace(/[^a-zA-Z0-9_-]/g, '-')}-${indice}`;
         const nombre = escaparHTML(al.nombre || 'Estudiante');
         const cedula = escaparHTML(al.cedula || 'Sin cédula');
-        const numeroLista = Number(al.numeroLista) > 0
-          ? Number(al.numeroLista)
-          : (alumnosSeccion.findIndex(item => String(item.id) === String(al.id)) + 1);
+        // V7.4: la numeración de asistencia siempre es correlativa según
+        // los alumnos visibles de la sección. Si se elimina o quita un alumno,
+        // la lista vuelve a comenzar en 1 sin dejar huecos (3, 4, 5...).
+        const numeroLista = alumnosSeccion.findIndex(item => String(item.id) === String(al.id)) + 1;
         const estadoInicial = normalizarEstadoAsistencia(asistenciaTemporal[al.id]);
         const botones = ESTADOS_ASISTENCIA.map(estado => {
           const cfg = configuracionEstados[estado];
