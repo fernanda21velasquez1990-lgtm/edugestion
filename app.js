@@ -1313,6 +1313,16 @@ const SESSION_KEY = 'edugestion_session_v2';
       return `edugestion_asistencia_lista_v72__docente_${attendanceRosterTeacherKeyV72()}`;
     }
 
+    function repararListaAsistenciaV73UnaVez() {
+      const marker = `edugestion_asistencia_lista_v73_reparada__docente_${attendanceRosterTeacherKeyV72()}`;
+      if (localStorage.getItem(marker) === 'SI') return;
+      try {
+        // V7.3 corrige listas que quedaron con alumnos ocultos tras probar V7.2.
+        localStorage.removeItem(attendanceRosterStoreKeyV72());
+        localStorage.setItem(marker, 'SI');
+      } catch (_) {}
+    }
+
     function attendanceRosterSectionKeyV72() {
       const a = String(selectFiltroAno?.value || '').trim();
       const s = String(selectFiltroSeccion?.value || '').trim().toUpperCase();
@@ -1405,6 +1415,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     async function cargarAlumnosDeSeccion() {
+      repararListaAsistenciaV73UnaVez();
       const a = selectFiltroAno.value;
       const s = selectFiltroSeccion.value;
       const t = turnoAsistencia(selectFiltroTurno.value);
@@ -1498,7 +1509,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     function renderAsistencia() {
       listaAlumnosAsistencia.innerHTML = '';
       if (alumnosSeccion.length === 0) {
-        listaAlumnosAsistencia.innerHTML = '<div class="py-10 text-center text-gray-400"><i class="fa-solid fa-user-slash text-3xl mb-3 text-gray-300"></i><p class="text-sm font-semibold">No hay estudiantes registrados en esta sección.</p></div>';
+        listaAlumnosAsistencia.innerHTML = '<div class="py-10 text-center text-gray-400"><i class="fa-solid fa-user-slash text-3xl mb-3 text-gray-300"></i><p class="text-sm font-semibold">No hay estudiantes visibles en esta sección.</p><p class="text-xs mt-2">Si quitaste alumnos por error, usa “Recargar alumnos”.</p></div>';
         contadorAsistencia.textContent = '0 Alumnos';
         statPresentes.textContent = '0';
         statAusentes.textContent = '0';
