@@ -7,6 +7,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     let profesorActual = null;
     let sessionToken = '';
     let alumnosSeccion = [];
+    let alumnosSeccionBase = [];
     let alumnosFiltradosActas = [];
     let horariosProfesor = [];
     let horarioContingenciaActual = null;
@@ -310,6 +311,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       try { window.dispatchEvent(new CustomEvent('edugestion:session', { detail: { profesor: null } })); } catch (_) {}
       sessionToken = '';
       alumnosSeccion = [];
+      alumnosSeccionBase = [];
       alumnosFiltradosActas = [];
       planesProfesor = [];
       horariosProfesor = [];
@@ -1296,8 +1298,112 @@ const SESSION_KEY = 'edugestion_session_v2';
       aplicarEstadoMasivo('Ausente');
     });
 
+    document.getElementById('btn-borrar-lista-seccion')?.addEventListener('click', borrarListaSeccionV72);
+    document.getElementById('btn-recargar-lista-seccion')?.addEventListener('click', recargarListaSeccionV72);
+
     btnCargarListaFiltrada.onclick = cargarAlumnosDeSeccion;
    
+
+    function attendanceRosterTeacherKeyV72() {
+      return String(profesorActual?.id || profesorActual?.usuario || profesorActual?.email || 'docente')
+        .replace(/[^a-z0-9_-]/gi, '_');
+    }
+
+    function attendanceRosterStoreKeyV72() {
+      return `edugestion_asistencia_lista_v72__docente_${attendanceRosterTeacherKeyV72()}`;
+    }
+
+    function attendanceRosterSectionKeyV72() {
+      const a = String(selectFiltroAno?.value || '').trim();
+      const s = String(selectFiltroSeccion?.value || '').trim().toUpperCase();
+      const t = String(turnoAsistencia(selectFiltroTurno?.value || '') || '').trim();
+      const materia = String(profesorActual?.materia || '').trim().toLowerCase();
+      return [materia, a, s, t].join('|');
+    }
+
+    function readAttendanceRosterV72() {
+      try { return JSON.parse(localStorage.getItem(attendanceRosterStoreKeyV72()) || '{}') || {}; }
+      catch (_) { return {}; }
+    }
+
+    function writeAttendanceRosterV72(store) {
+      try { localStorage.setItem(attendanceRosterStoreKeyV72(), JSON.stringify(store || {})); } catch (_) {}
+    }
+
+    function hiddenStudentIdsV72() {
+      const store = readAttendanceRosterV72();
+      const row = store[attendanceRosterSectionKeyV72()] || {};
+      return new Set(Array.isArray(row.ocultos) ? row.ocultos.map(String) : []);
+    }
+
+    function aplicarListaAsistenciaV72(lista) {
+      const ocultos = hiddenStudentIdsV72();
+      return (Array.isArray(lista) ? lista : []).filter(a => !ocultos.has(String(a.id)));
+    }
+
+    function guardarOcultosAsistenciaV72(ids) {
+      const store = readAttendanceRosterV72();
+      const key = attendanceRosterSectionKeyV72();
+      store[key] = {
+        ocultos: [...new Set((ids || []).map(String))],
+        actualizadoEn: new Date().toISOString()
+      };
+      writeAttendanceRosterV72(store);
+    }
+
+    function quitarAlumnoListaAsistenciaV72(alumno) {
+      if (!alumno?.id) return;
+      const nombre = String(alumno.nombre || 'este estudiante').trim();
+      const confirmar = window.confirm(
+        `¿Quitar a "${nombre}" de la lista de asistencia de esta sección?\n\n` +
+        'La ficha del estudiante NO se eliminará del sistema. Podrás recuperarlo con el botón "Recargar alumnos".'
+      );
+      if (!confirmar) return;
+
+      const ocultos = hiddenStudentIdsV72();
+      ocultos.add(String(alumno.id));
+      guardarOcultosAsistenciaV72([...ocultos]);
+
+      alumnosSeccion = aplicarListaAsistenciaV72(alumnosSeccionBase);
+      delete asistenciaTemporal[alumno.id];
+      delete estadisticasAlumnos[alumno.id];
+      renderAsistencia();
+      actualizarStatsSeccion();
+      llenarSelectActaRapida();
+      mostrarToast(`${nombre} fue quitado de la lista de asistencia.`, 'success', 'Lista actualizada');
+    }
+
+    function borrarListaSeccionV72() {
+      if (!alumnosSeccionBase.length) {
+        mostrarToast('No hay alumnos cargados en esta sección.', 'info', 'Lista vacía');
+        return;
+      }
+
+      const confirmar = window.confirm(
+        `¿Borrar toda la lista de asistencia de ${selectFiltroAno?.value || ''} ${selectFiltroSeccion?.value || ''}?\n\n` +
+        'Esto NO elimina las fichas de los estudiantes. La lista quedará vacía y podrás cargarla nuevamente con "Recargar alumnos".'
+      );
+      if (!confirmar) return;
+
+      guardarOcultosAsistenciaV72(alumnosSeccionBase.map(a => String(a.id)));
+      alumnosSeccion = [];
+      asistenciaTemporal = {};
+      estadisticasAlumnos = {};
+      renderAsistencia();
+      actualizarStatsSeccion();
+      llenarSelectActaRapida();
+      mostrarToast('La lista de la sección quedó vacía. Usa "Recargar alumnos" para restaurarla.', 'success', 'Sección reiniciada');
+    }
+
+    async function recargarListaSeccionV72() {
+      const store = readAttendanceRosterV72();
+      delete store[attendanceRosterSectionKeyV72()];
+      writeAttendanceRosterV72(store);
+      mostrarToast('Recargando los alumnos registrados de esta sección...', 'info', 'Recargando');
+      await cargarAlumnosDeSeccion();
+      mostrarToast('La lista de alumnos fue cargada nuevamente desde Estudiantes.', 'success', 'Lista restaurada');
+    }
+
     async function cargarAlumnosDeSeccion() {
       const a = selectFiltroAno.value;
       const s = selectFiltroSeccion.value;
@@ -1350,7 +1456,8 @@ const SESSION_KEY = 'edugestion_session_v2';
             materia: profesorActual.materia
           })
         ]);
-        alumnosSeccion = Array.isArray(d.alumnos) ? d.alumnos : [];
+        alumnosSeccionBase = Array.isArray(d.alumnos) ? d.alumnos : [];
+        alumnosSeccion = aplicarListaAsistenciaV72(alumnosSeccionBase);
         asistenciaTemporal = registro.asistencia && typeof registro.asistencia === 'object' ? { ...registro.asistencia } : {};
         estadisticasAlumnos = {};
         if (buscarAlumnoAsistencia) buscarAlumnoAsistencia.value = '';
@@ -1463,12 +1570,15 @@ const SESSION_KEY = 'edugestion_session_v2';
 
         const d = document.createElement('div');
         d.className = `attendance-student-row attendance-student-row--advanced${esCopiaDuplicada ? ' is-duplicate-copy' : ''}`;
-        d.innerHTML = `<div class="attendance-student-main"><div class="attendance-list-number" title="Número de lista">${numeroLista}</div><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">N° ${numeroLista}</span><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span>${esCopiaDuplicada ? '<span class="attendance-duplicate-badge"><i class="fa-solid fa-copy"></i> Duplicado</span>' : ''}</div>${botonEliminarDuplicado}</div></div><div class="attendance-state-grid">${botones}</div>`;
+        d.innerHTML = `<div class="attendance-student-main"><div class="attendance-list-number" title="Número de lista">${numeroLista}</div><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">N° ${numeroLista}</span><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span>${esCopiaDuplicada ? '<span class="attendance-duplicate-badge"><i class="fa-solid fa-copy"></i> Duplicado</span>' : ''}</div><div class="attendance-row-tools"><button type="button" class="attendance-remove-student" data-remove-student="${escaparHTML(String(al.id))}" title="Quitar de esta lista de asistencia"><i class="fa-solid fa-user-minus"></i><span>Quitar de lista</span></button>${botonEliminarDuplicado}</div></div></div><div class="attendance-state-grid">${botones}</div>`;
         d.querySelectorAll('[data-attendance-state]').forEach(boton => {
           boton.addEventListener('click', () => setA(al.id, boton.dataset.attendanceState, idDom));
         });
         d.querySelector('[data-delete-duplicate]')?.addEventListener('click', () => {
           eliminarAlumnoDuplicadoDesdeAsistencia(al);
+        });
+        d.querySelector('[data-remove-student]')?.addEventListener('click', () => {
+          quitarAlumnoListaAsistenciaV72(al);
         });
         listaAlumnosAsistencia.appendChild(d);
       });
