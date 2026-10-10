@@ -953,7 +953,10 @@ const SESSION_KEY = 'edugestion_session_v2';
         renderAsistencia();
         actualizarStatsSeccion();
         llenarSelectActaRapida();
-        contadorAsistencia.textContent = `${alumnosSeccion.length} Alumnos`;
+        const visibilidadActual = resumenVisibilidadListaV75(alumnosSeccionBase);
+        contadorAsistencia.textContent = visibilidadActual.ocultos
+          ? `${visibilidadActual.visibles}/${visibilidadActual.registrados} Alumnos`
+          : `${visibilidadActual.visibles} Alumnos`;
         mostrarToast(data.message || 'La ficha duplicada fue eliminada.', 'success', 'Duplicado eliminado');
       } catch (error) {
         console.error('No se pudo eliminar el estudiante duplicado:', error);
@@ -1032,7 +1035,9 @@ const SESSION_KEY = 'edugestion_session_v2';
           })
         ]);
 
-        const alumnos = Array.isArray(datosAlumnos.alumnos) ? datosAlumnos.alumnos : [];
+        const alumnosTodos = Array.isArray(datosAlumnos.alumnos) ? datosAlumnos.alumnos : [];
+        const visibilidad = resumenVisibilidadListaV75(alumnosTodos, clase.ano, clase.seccion, turno);
+        const alumnos = visibilidad.alumnosVisibles;
         const asistencia = registro.asistencia && typeof registro.asistencia === 'object'
           ? registro.asistencia
           : {};
@@ -1049,7 +1054,8 @@ const SESSION_KEY = 'edugestion_session_v2';
           else if (estado === 'Presente') presentes += 1;
         });
 
-        const registrados = Object.keys(asistencia).length;
+        const idsVisibles = new Set(alumnos.map(a => String(a.id)));
+        const registrados = Object.keys(asistencia).filter(id => idsVisibles.has(String(id))).length;
         const existe = Boolean(registro.existe);
         const incompleta = existe && alumnos.length > 0 && registrados < alumnos.length;
         const resumen = {
@@ -1057,6 +1063,8 @@ const SESSION_KEY = 'edugestion_session_v2';
           incompleta,
           registrados,
           total: alumnos.length,
+          totalRegistrados: visibilidad.registrados,
+          ocultos: visibilidad.ocultos,
           presentes: existe ? presentes : 0,
           ausentes: existe ? ausentes : 0,
           tardanzas: existe ? tardanzas : 0,
@@ -1141,7 +1149,7 @@ const SESSION_KEY = 'edugestion_session_v2';
             <span class="rounded-full px-2 py-1 text-[9px] font-black ${resumen.incompleta ? 'bg-orange-100 text-orange-700' : resumen.existe ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${escaparHTML(estado.texto)}</span>
           </span>
           <span class="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
-            <span>${resumen.total} estudiantes</span>
+            <span>${resumen.ocultos ? `${resumen.total} visibles · ${resumen.ocultos} ocultos` : `${resumen.total} estudiantes`}</span>
             <span>${resumen.existe ? `${resumen.presentes} P · ${resumen.ausentes} A · ${resumen.tardanzas||0} T · ${resumen.justificadas||0} J` : 'Abrir lista →'}</span>
           </span>`;
         boton.addEventListener('click', () => abrirClaseDesdeAgenda(clase, fechaISO));
@@ -1183,7 +1191,7 @@ const SESSION_KEY = 'edugestion_session_v2';
             <span><b>${resumen.tardanzas||0}</b><small>Tardanzas</small></span>
             <span><b>${resumen.justificadas||0}</b><small>Justificadas</small></span>
           </span>
-          <span class="attendance-class-card__meta"><i class="fa-solid fa-chart-simple"></i>Asistencia del día: <b>${resumen.existe && resumen.total ? Math.round(((resumen.presentes+(resumen.tardanzas||0))/resumen.total)*100) : 0}%</b> · ${resumen.total} estudiantes</span>
+          <span class="attendance-class-card__meta"><i class="fa-solid fa-chart-simple"></i>Asistencia del día: <b>${resumen.existe && resumen.total ? Math.round(((resumen.presentes+(resumen.tardanzas||0))/resumen.total)*100) : 0}%</b> · ${resumen.ocultos ? `${resumen.total} visibles / ${resumen.totalRegistrados} registrados` : `${resumen.total} estudiantes`}</span>
           <span class="attendance-class-card__action"><span>${resumen.incompleta ? 'Completar asistencia' : resumen.existe ? 'Consultar o editar' : 'Registrar asistencia'}</span><i class="fa-solid fa-arrow-right"></i></span>`;
         tarjeta.addEventListener('click', () => abrirClaseDesdeAgenda(clase, fechaISO));
         agendaClasesDia.appendChild(tarjeta);
@@ -1300,6 +1308,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     document.getElementById('btn-borrar-lista-seccion')?.addEventListener('click', borrarListaSeccionV72);
     document.getElementById('btn-recargar-lista-seccion')?.addEventListener('click', recargarListaSeccionV72);
+    document.getElementById('btn-ver-ocultos-seccion')?.addEventListener('click', verOcultosSeccionV75);
 
     btnCargarListaFiltrada.onclick = cargarAlumnosDeSeccion;
    
@@ -1323,10 +1332,10 @@ const SESSION_KEY = 'edugestion_session_v2';
       } catch (_) {}
     }
 
-    function attendanceRosterSectionKeyV72() {
-      const a = String(selectFiltroAno?.value || '').trim();
-      const s = String(selectFiltroSeccion?.value || '').trim().toUpperCase();
-      const t = String(turnoAsistencia(selectFiltroTurno?.value || '') || '').trim();
+    function attendanceRosterSectionKeyV72(ano, seccion, turno) {
+      const a = String(ano ?? selectFiltroAno?.value ?? '').trim();
+      const s = String(seccion ?? selectFiltroSeccion?.value ?? '').trim().toUpperCase();
+      const t = String(turnoAsistencia(turno ?? selectFiltroTurno?.value ?? '') || '').trim();
       const materia = String(profesorActual?.materia || '').trim().toLowerCase();
       return [materia, a, s, t].join('|');
     }
@@ -1340,15 +1349,66 @@ const SESSION_KEY = 'edugestion_session_v2';
       try { localStorage.setItem(attendanceRosterStoreKeyV72(), JSON.stringify(store || {})); } catch (_) {}
     }
 
-    function hiddenStudentIdsV72() {
+    function hiddenStudentIdsV72(ano, seccion, turno) {
       const store = readAttendanceRosterV72();
-      const row = store[attendanceRosterSectionKeyV72()] || {};
+      const row = store[attendanceRosterSectionKeyV72(ano, seccion, turno)] || {};
       return new Set(Array.isArray(row.ocultos) ? row.ocultos.map(String) : []);
     }
 
-    function aplicarListaAsistenciaV72(lista) {
-      const ocultos = hiddenStudentIdsV72();
+    function aplicarListaAsistenciaV72(lista, ano, seccion, turno) {
+      const ocultos = hiddenStudentIdsV72(ano, seccion, turno);
       return (Array.isArray(lista) ? lista : []).filter(a => !ocultos.has(String(a.id)));
+    }
+
+    function resumenVisibilidadListaV75(lista, ano, seccion, turno) {
+      const todos = Array.isArray(lista) ? lista : [];
+      const ocultos = hiddenStudentIdsV72(ano, seccion, turno);
+      const visibles = todos.filter(a => !ocultos.has(String(a.id)));
+      return {
+        registrados: todos.length,
+        visibles: visibles.length,
+        ocultos: Math.max(0, todos.length - visibles.length),
+        alumnosVisibles: visibles
+      };
+    }
+
+    function actualizarEstadoListaV75() {
+      const resumen = resumenVisibilidadListaV75(alumnosSeccionBase);
+      const box = document.getElementById('attendance-roster-status');
+      const btnOcultos = document.getElementById('btn-ver-ocultos-seccion');
+      const btnRecargar = document.getElementById('btn-recargar-lista-seccion');
+
+      if (box) {
+        box.innerHTML = resumen.ocultos
+          ? `<i class="fa-solid fa-eye-slash"></i><span><b>${resumen.visibles}</b> visibles · <b>${resumen.registrados}</b> registrados · <b>${resumen.ocultos}</b> ocultos</span>`
+          : `<i class="fa-solid fa-users"></i><span><b>${resumen.visibles}</b> alumnos visibles · Todos los registrados están en la lista.</span>`;
+        box.classList.toggle('has-hidden', resumen.ocultos > 0);
+      }
+
+      if (btnOcultos) {
+        btnOcultos.classList.toggle('hidden', resumen.ocultos === 0);
+        btnOcultos.innerHTML = `<i class="fa-solid fa-eye"></i> Ver ocultos${resumen.ocultos ? ` (${resumen.ocultos})` : ''}`;
+      }
+
+      if (btnRecargar) {
+        btnRecargar.innerHTML = resumen.ocultos
+          ? `<i class="fa-solid fa-rotate"></i> Restaurar ocultos (${resumen.ocultos})`
+          : `<i class="fa-solid fa-rotate"></i> Recargar alumnos`;
+      }
+    }
+
+    function verOcultosSeccionV75() {
+      const ocultos = hiddenStudentIdsV72();
+      const lista = (alumnosSeccionBase || []).filter(a => ocultos.has(String(a.id)));
+      if (!lista.length) {
+        mostrarToast('No hay alumnos ocultos en esta sección.', 'info', 'Lista completa');
+        return;
+      }
+      const nombres = lista.map((a, i) => `${i + 1}. ${String(a.nombre || 'Estudiante')}`).join('\n');
+      const restaurar = window.confirm(
+        `Hay ${lista.length} alumno(s) oculto(s) en esta sección:\n\n${nombres}\n\n¿Deseas restaurarlos todos a la lista de asistencia?`
+      );
+      if (restaurar) recargarListaSeccionV72();
     }
 
     function guardarOcultosAsistenciaV72(ids) {
@@ -1375,11 +1435,14 @@ const SESSION_KEY = 'edugestion_session_v2';
       guardarOcultosAsistenciaV72([...ocultos]);
 
       alumnosSeccion = aplicarListaAsistenciaV72(alumnosSeccionBase);
+      actualizarEstadoListaV75();
       delete asistenciaTemporal[alumno.id];
       delete estadisticasAlumnos[alumno.id];
+      agendaResumenCache?.clear?.();
       renderAsistencia();
       actualizarStatsSeccion();
       llenarSelectActaRapida();
+      renderAgendaAsistencia({ forzar: true }).catch(()=>{});
       mostrarToast(`${nombre} fue quitado de la lista de asistencia.`, 'success', 'Lista actualizada');
     }
 
@@ -1397,11 +1460,14 @@ const SESSION_KEY = 'edugestion_session_v2';
 
       guardarOcultosAsistenciaV72(alumnosSeccionBase.map(a => String(a.id)));
       alumnosSeccion = [];
+      actualizarEstadoListaV75();
       asistenciaTemporal = {};
       estadisticasAlumnos = {};
+      agendaResumenCache?.clear?.();
       renderAsistencia();
       actualizarStatsSeccion();
       llenarSelectActaRapida();
+      renderAgendaAsistencia({ forzar: true }).catch(()=>{});
       mostrarToast('La lista de la sección quedó vacía. Usa "Recargar alumnos" para restaurarla.', 'success', 'Sección reiniciada');
     }
 
@@ -1410,7 +1476,9 @@ const SESSION_KEY = 'edugestion_session_v2';
       delete store[attendanceRosterSectionKeyV72()];
       writeAttendanceRosterV72(store);
       mostrarToast('Recargando los alumnos registrados de esta sección...', 'info', 'Recargando');
+      agendaResumenCache?.clear?.();
       await cargarAlumnosDeSeccion();
+      await renderAgendaAsistencia({ forzar: true });
       mostrarToast('La lista de alumnos fue cargada nuevamente desde Estudiantes.', 'success', 'Lista restaurada');
     }
 
@@ -1469,6 +1537,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         ]);
         alumnosSeccionBase = Array.isArray(d.alumnos) ? d.alumnos : [];
         alumnosSeccion = aplicarListaAsistenciaV72(alumnosSeccionBase);
+        actualizarEstadoListaV75();
         asistenciaTemporal = registro.asistencia && typeof registro.asistencia === 'object' ? { ...registro.asistencia } : {};
         estadisticasAlumnos = {};
         if (buscarAlumnoAsistencia) buscarAlumnoAsistencia.value = '';
@@ -1540,9 +1609,12 @@ const SESSION_KEY = 'edugestion_session_v2';
         contadorDuplicados.set(clave, posicion + 1);
       });
 
+      const visibilidadLista = resumenVisibilidadListaV75(alumnosSeccionBase);
       contadorAsistencia.textContent = termino
-        ? `${visibles.length}/${alumnosSeccion.length} Alumnos`
-        : `${alumnosSeccion.length} Alumnos`;
+        ? `${visibles.length}/${alumnosSeccion.length} visibles`
+        : (visibilidadLista.ocultos
+          ? `${visibilidadLista.visibles}/${visibilidadLista.registrados} Alumnos`
+          : `${visibilidadLista.visibles} Alumnos`);
 
       if (!visibles.length) {
         listaAlumnosAsistencia.innerHTML = '<div class="py-10 text-center text-gray-400"><i class="fa-solid fa-magnifying-glass text-3xl mb-3 text-gray-300"></i><p class="text-sm font-semibold">No hay coincidencias en esta sección.</p></div>';

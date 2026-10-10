@@ -8921,3 +8921,44 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
   .attendance-roster-actions{grid-template-columns:1fr}
   .attendance-remove-student span{display:none}
 }
+
+/* =========================================================
+   V7.5 · Transparencia de alumnos visibles/ocultos
+   ========================================================= */
+.attendance-roster-actions{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+}
+.attendance-roster-status{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:9px;
+  padding:9px 11px;
+  border:1px solid #d8e5ef;
+  border-radius:11px;
+  background:#f8fbff;
+  color:#5f7389;
+  font-size:9px;
+  font-weight:800;
+}
+.attendance-roster-status i{color:#2f6696}
+.attendance-roster-status b{color:#244765}
+.attendance-roster-status.has-hidden{
+  border-color:#f0d19d;
+  background:#fff9ec;
+  color:#8a6728;
+}
+.attendance-roster-status.has-hidden i,
+.attendance-roster-status.has-hidden b{color:#9a6500}
+#btn-ver-ocultos-seccion{
+  border-color:#ead9a9;
+  background:#fffaf0;
+  color:#956800;
+}
+#btn-ver-ocultos-seccion:hover{background:#fff3d3}
+@media(max-width:860px){
+  .attendance-roster-actions{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){
+  .attendance-roster-actions{grid-template-columns:1fr}
+}
