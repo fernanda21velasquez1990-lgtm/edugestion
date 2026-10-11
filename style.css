@@ -8977,3 +8977,100 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
 .rep-v76-credential{margin-top:14px;border:2px solid #2b72a7;border-radius:19px;background:#fff;overflow:hidden;box-shadow:0 12px 30px rgba(27,78,118,.11)}.rep-v76-credential-head{display:flex;justify-content:space-between;align-items:center;padding:13px 15px;background:#eff7fd}.rep-v76-credential-head span{display:block;font-size:8px;text-transform:uppercase;font-weight:900;color:#7f8f9f}.rep-v76-credential-head strong{display:block;margin-top:3px;color:#2b4562;font-size:12px}.rep-v76-credential-head button{border:1px solid #d4e0e9;background:#fff;border-radius:8px;padding:5px 7px;cursor:pointer}.rep-v76-credential-code{text-align:center;padding:19px}.rep-v76-credential-code small,.rep-v76-credential-code span{display:block;color:#7b8998;font-size:9px;font-weight:800}.rep-v76-credential-code strong{display:block;margin:7px 0;font-size:33px;letter-spacing:.14em;color:#1f5f93}.rep-v76-credential>p{max-width:650px;margin:0 auto 13px;text-align:center;color:#7d8b99;font-size:9px}.rep-v76-credential-actions{display:flex;justify-content:center;gap:7px;flex-wrap:wrap;padding:0 15px 16px}.rep-v76-credential-actions button,.rep-v76-credential-actions a{border:1px solid #d2dfe9;background:#f8fbff;color:#2d5f8d;border-radius:9px;padding:8px 10px;font-size:8px;font-weight:900;text-decoration:none;cursor:pointer}
 @media(max-width:900px){.rep-v76-hero{align-items:flex-start;flex-direction:column}.rep-v76-toolbar{grid-template-columns:1fr 1fr}.rep-v76-toolbar label{grid-column:1/-1}.rep-v76-student{grid-template-columns:40px 1fr}.rep-v76-access-state,.rep-v76-actions{grid-column:2}.rep-v76-actions{justify-content:flex-start}}
 @media(max-width:620px){.rep-v76-toolbar,.rep-v76-summary{grid-template-columns:1fr}.rep-v76-toolbar label{grid-column:auto}.rep-v76-list-head{align-items:flex-start;flex-direction:column}.rep-v76-student{grid-template-columns:38px 1fr}.rep-v76-hero h2{font-size:21px}}
+
+/* =========================================================
+   V7.8 · Portal de Representantes organizado por sección
+   ========================================================= */
+.rep-v78-section-panel{
+  margin-top:14px;
+  border:1px solid #dfe8ef;
+  border-radius:18px;
+  background:#fff;
+  overflow:hidden;
+}
+.rep-v78-section-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(250px,380px);
+  gap:16px;
+  align-items:end;
+  padding:14px 16px;
+  background:#f8fbff;
+  border-bottom:1px solid #e5edf3;
+}
+.rep-v78-section-head>div>span,
+.rep-v78-section-head label>span{
+  display:block;
+  font-size:8px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-weight:900;
+  color:#8795a5;
+}
+.rep-v78-section-head>div>strong{
+  display:block;
+  margin-top:3px;
+  font-size:13px;
+  color:#29435f;
+}
+.rep-v78-section-head select{
+  width:100%;
+  height:40px;
+  margin-top:5px;
+  border:1px solid #d3e0ea;
+  border-radius:10px;
+  background:#fff;
+  padding:0 10px;
+  color:#344b63;
+  font-size:10px;
+  font-weight:850;
+}
+.rep-v78-section-tabs{
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  padding:11px 12px 12px;
+  scrollbar-width:thin;
+}
+.rep-v78-section-tabs button{
+  flex:0 0 auto;
+  min-width:132px;
+  text-align:left;
+  border:1px solid #d8e4ed;
+  border-radius:12px;
+  background:#fff;
+  color:#49627a;
+  padding:9px 10px;
+  cursor:pointer;
+}
+.rep-v78-section-tabs button.is-active{
+  background:#245f98;
+  border-color:#245f98;
+  color:#fff;
+  box-shadow:0 7px 18px rgba(36,95,152,.18);
+}
+.rep-v78-section-tabs span,
+.rep-v78-section-tabs small,
+.rep-v78-section-tabs em{
+  display:block;
+}
+.rep-v78-section-tabs span{
+  font-size:10px;
+  font-weight:950;
+}
+.rep-v78-section-tabs small{
+  margin-top:2px;
+  font-size:8px;
+  font-weight:800;
+  opacity:.78;
+}
+.rep-v78-section-tabs em{
+  margin-top:5px;
+  font-size:7px;
+  font-style:normal;
+  font-weight:900;
+  opacity:.9;
+}
+@media(max-width:800px){
+  .rep-v78-section-head{grid-template-columns:1fr}
+  .rep-v78-section-tabs button{min-width:118px}
+}

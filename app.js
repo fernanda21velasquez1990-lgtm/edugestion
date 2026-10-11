@@ -20268,6 +20268,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let alumnos=[];
   let filtroTexto='';
+  let seccionActual='';
+  let seccionesDisponibles=[];
 
   function rolPermitido(){
     const rol=String(window.profesorActual?.rol||'docente').toLowerCase();
@@ -20319,9 +20321,23 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           </div>
         </div>
 
+        <section class="rep-v78-section-panel">
+          <div class="rep-v78-section-head">
+            <div>
+              <span>Organización por sección</span>
+              <strong>Selecciona la sección que deseas gestionar</strong>
+            </div>
+            <label>
+              <span>Sección activa</span>
+              <select id="rep-v78-section-select"><option value="">Cargando secciones…</option></select>
+            </label>
+          </div>
+          <div id="rep-v78-section-tabs" class="rep-v78-section-tabs"></div>
+        </section>
+
         <section class="rep-v76-toolbar">
-          <label><i class="fa-solid fa-magnifying-glass"></i><input id="rep-v76-search" placeholder="Buscar estudiante, cédula o sección"></label>
-          <button type="button" id="rep-v76-refresh"><i class="fa-solid fa-rotate"></i> Actualizar lista</button>
+          <label><i class="fa-solid fa-magnifying-glass"></i><input id="rep-v76-search" placeholder="Buscar alumno o cédula dentro de la sección"></label>
+          <button type="button" id="rep-v76-refresh"><i class="fa-solid fa-rotate"></i> Actualizar sección</button>
           <button type="button" id="rep-v76-copy-link"><i class="fa-solid fa-link"></i> Copiar enlace del portal</button>
         </section>
 
@@ -20333,8 +20349,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 
         <section class="rep-v76-list-card">
           <div class="rep-v76-list-head">
-            <div><span>Accesos familiares</span><strong>Estudiantes registrados</strong></div>
-            <small>El código se muestra únicamente cuando se genera o regenera.</small>
+            <div><span>Accesos familiares</span><strong id="rep-v78-list-title">Estudiantes de la sección</strong></div>
+            <small id="rep-v78-list-note">El código se muestra únicamente cuando se genera o regenera.</small>
           </div>
           <div id="rep-v76-list" class="rep-v76-list"><div class="rep-v76-empty">Cargando estudiantes…</div></div>
         </section>
@@ -20392,6 +20408,16 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       $('rep-v76-search').dataset.bound='1';
       $('rep-v76-search').addEventListener('input',e=>{filtroTexto=String(e.target.value||'').toLowerCase();render();});
     }
+    if($('rep-v78-section-select') && !$('rep-v78-section-select').dataset.bound){
+      $('rep-v78-section-select').dataset.bound='1';
+      $('rep-v78-section-select').addEventListener('change',e=>{
+        seccionActual=String(e.target.value||'');
+        filtroTexto='';
+        if($('rep-v76-search'))$('rep-v76-search').value='';
+        renderSectionTabsV78();
+        render();
+      });
+    }
     $('rep-v76-refresh')?.addEventListener('click',cargar);
     $('rep-v76-copy-link')?.addEventListener('click',async()=>{
       try{await navigator.clipboard.writeText(portalUrl());mostrarToast?.('Enlace del portal copiado.','success','Portal de Representantes');}
@@ -20400,12 +20426,95 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     $('rep-v76-close-credential')?.addEventListener('click',()=> $('rep-v76-credential')?.classList.add('hidden'));
   }
 
+
+  function normalizeTurnoV78(v){
+    const t=String(v||'').toLowerCase();
+    return t.includes('tarde')?'Tarde':'Manana';
+  }
+
+  function gradoOrdenV78(v){
+    const n=Number(String(v||'').match(/\d+/)?.[0]||99);
+    return n;
+  }
+
+  function claveSeccionV78(a){
+    return [String(a.ano||'').trim(),String(a.seccion||'').trim().toUpperCase(),normalizeTurnoV78(a.turno)].join('|');
+  }
+
+  function construirSeccionesV78(){
+    const map=new Map();
+    alumnos.forEach(a=>{
+      const key=claveSeccionV78(a);
+      if(!map.has(key)){
+        map.set(key,{
+          key,
+          ano:String(a.ano||'').trim(),
+          seccion:String(a.seccion||'').trim().toUpperCase(),
+          turno:normalizeTurnoV78(a.turno),
+          total:0,
+          configurados:0,
+          sinCedula:0
+        });
+      }
+      const g=map.get(key);
+      g.total++;
+      if(a.accesoConfigurado)g.configurados++;
+      if(!String(a.cedula||'').trim())g.sinCedula++;
+    });
+    seccionesDisponibles=[...map.values()].sort((a,b)=>
+      gradoOrdenV78(a.ano)-gradoOrdenV78(b.ano) ||
+      String(a.seccion).localeCompare(String(b.seccion),'es') ||
+      String(a.turno).localeCompare(String(b.turno),'es')
+    );
+    if(!seccionesDisponibles.some(s=>s.key===seccionActual)){
+      seccionActual=seccionesDisponibles[0]?.key||'';
+    }
+  }
+
+  function etiquetaSeccionV78(s){
+    if(!s)return 'Sin sección';
+    return `${s.ano} · Sección ${s.seccion} · ${s.turno==='Manana'?'Mañana':'Tarde'}`;
+  }
+
+  function alumnosSeccionActualV78(){
+    if(!seccionActual)return [];
+    return alumnos.filter(a=>claveSeccionV78(a)===seccionActual);
+  }
+
+  function renderSectionTabsV78(){
+    const sel=$('rep-v78-section-select');
+    const tabs=$('rep-v78-section-tabs');
+    if(sel){
+      sel.innerHTML=seccionesDisponibles.length
+        ? seccionesDisponibles.map(s=>`<option value="${esc(s.key)}" ${s.key===seccionActual?'selected':''}>${esc(etiquetaSeccionV78(s))} · ${s.total} alumnos</option>`).join('')
+        : '<option value="">Sin secciones</option>';
+    }
+    if(tabs){
+      tabs.innerHTML=seccionesDisponibles.map(s=>`
+        <button type="button" class="${s.key===seccionActual?'is-active':''}" data-rep-v78-section="${esc(s.key)}">
+          <span>${esc(s.ano)} ${esc(s.seccion)}</span>
+          <small>${s.turno==='Manana'?'Mañana':'Tarde'} · ${s.total}</small>
+          ${s.configurados?`<em>${s.configurados} accesos</em>`:''}
+        </button>`).join('');
+      tabs.querySelectorAll('[data-rep-v78-section]').forEach(b=>b.addEventListener('click',()=>{
+        seccionActual=b.dataset.repV78Section;
+        filtroTexto='';
+        if($('rep-v76-search'))$('rep-v76-search').value='';
+        if(sel)sel.value=seccionActual;
+        renderSectionTabsV78();
+        render();
+      }));
+    }
+  }
+
   async function cargar(){
     const host=$('rep-v76-list');
     if(host)host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes…</div>';
     try{
       const r=await apiRequest('obtenerAccesosRepresentantes',{});
       alumnos=Array.isArray(r?.alumnos)?r.alumnos:[];
+      construirSeccionesV78();
+      renderSectionTabsV78();
       render();
     }catch(e){
       if(host)host.innerHTML=`<div class="rep-v76-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar la información.</strong><span>${esc(e?.message||'')}</span></div>`;
@@ -20413,17 +20522,22 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
 
   function render(){
-    const total=alumnos.length;
-    const configured=alumnos.filter(a=>a.accesoConfigurado).length;
-    const noId=alumnos.filter(a=>!String(a.cedula||'').trim()).length;
+    const base=alumnosSeccionActualV78();
+    const total=base.length;
+    const configured=base.filter(a=>a.accesoConfigurado).length;
+    const noId=base.filter(a=>!String(a.cedula||'').trim()).length;
     if($('rep-v76-total'))$('rep-v76-total').textContent=total;
     if($('rep-v76-configured'))$('rep-v76-configured').textContent=configured;
     if($('rep-v76-no-id'))$('rep-v76-no-id').textContent=noId;
 
+    const sec=seccionesDisponibles.find(s=>s.key===seccionActual);
+    if($('rep-v78-list-title'))$('rep-v78-list-title').textContent=sec?`Estudiantes · ${etiquetaSeccionV78(sec)}`:'Estudiantes de la sección';
+    if($('rep-v78-list-note'))$('rep-v78-list-note').textContent=sec?`${configured} accesos activos · ${noId} sin cédula · ${total} estudiantes`:'Selecciona una sección';
+
     const host=$('rep-v76-list');if(!host)return;
-    const list=alumnos.filter(a=>{
+    const list=base.filter(a=>{
       if(!filtroTexto)return true;
-      return `${a.alumno} ${a.cedula} ${a.ano} ${a.seccion} ${a.representante}`.toLowerCase().includes(filtroTexto);
+      return `${a.alumno} ${a.cedula} ${a.representante}`.toLowerCase().includes(filtroTexto);
     });
     if(!list.length){
       host.innerHTML='<div class="rep-v76-empty">No hay estudiantes que coincidan con la búsqueda.</div>';
