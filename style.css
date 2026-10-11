@@ -9779,3 +9779,241 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
   .rep-v83-weekly-head{align-items:flex-start;flex-direction:column}
   .rep-v83-weekly-grid{grid-template-columns:1fr 1fr}
 }
+
+/* =========================================================
+   V8.4 · Cierre de casos, línea de tiempo y resumen mensual
+   ========================================================= */
+.rep-v84-monthly{
+  margin-top:14px;
+  border:1px solid #dfe8ef;
+  border-radius:18px;
+  background:#fff;
+  overflow:hidden;
+}
+.rep-v84-monthly-head{
+  display:flex;
+  justify-content:space-between;
+  gap:14px;
+  align-items:end;
+  padding:14px 15px;
+  background:#f8fbff;
+  border-bottom:1px solid #e7edf3;
+}
+.rep-v84-monthly-head>div>span,
+.rep-v84-monthly-head label>span{
+  display:block;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  font-weight:900;
+  color:#8795a4;
+}
+.rep-v84-monthly-head>div>strong{
+  display:block;
+  margin-top:3px;
+  font-size:14px;
+  color:#2d4965;
+}
+.rep-v84-monthly-head input{
+  height:40px;
+  border:1px solid #d4e0e9;
+  border-radius:9px;
+  padding:0 9px;
+  color:#35516c;
+  font-size:10px;
+  font-weight:850;
+}
+.rep-v84-monthly-grid{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:8px;
+  padding:12px 14px 14px;
+}
+.rep-v84-monthly-grid article{
+  border:1px solid #e1e8ef;
+  border-radius:12px;
+  background:#fbfdff;
+  padding:10px;
+  text-align:center;
+}
+.rep-v84-monthly-grid b{display:block;font-size:19px;color:#295274}
+.rep-v84-monthly-grid span{display:block;margin-top:3px;font-size:8px;font-weight:900;color:#72869a}
+.rep-v84-monthly-grid article.is-green{background:#eff9f3;border-color:#cde7d7}
+.rep-v84-monthly-grid article.is-green b{color:#1f7650}
+.rep-v84-monthly-grid article.is-yellow{background:#fff8e9;border-color:#ecd7a2}
+.rep-v84-monthly-grid article.is-yellow b{color:#966400}
+.rep-v84-monthly-grid article.is-red{background:#fff2f2;border-color:#efc5c5}
+.rep-v84-monthly-grid article.is-red b{color:#a52e2e}
+
+.rep-v84-case-box{
+  margin:0 15px 14px;
+  border:1px solid #dfe8ef;
+  border-radius:14px;
+  background:#fbfdff;
+  overflow:hidden;
+}
+.rep-v84-case-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:11px 12px;
+  background:#f4f8fb;
+  border-bottom:1px solid #e5ecf2;
+}
+.rep-v84-case-head>div>span{
+  display:block;
+  font-size:8px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#8795a4;
+  font-weight:900;
+}
+.rep-v84-case-head>div>strong{
+  display:block;
+  margin-top:2px;
+  color:#334f69;
+  font-size:11px;
+}
+.rep-v84-case-badge,
+.rep-v84-mini-case{
+  border-radius:999px;
+  padding:5px 8px!important;
+  font-size:8px!important;
+  font-weight:950!important;
+}
+.rep-v84-case-badge.is-resuelto,
+.rep-v84-mini-case.is-resuelto{background:#e2f6ea!important;color:#197149!important}
+.rep-v84-case-badge.is-en-seguimiento,
+.rep-v84-mini-case.is-en-seguimiento{background:#e9f2fb!important;color:#2c6391!important}
+.rep-v84-case-badge.is-sin-respuesta,
+.rep-v84-mini-case.is-sin-respuesta{background:#fff0ce!important;color:#926100!important}
+.rep-v84-case-badge.is-escalado,
+.rep-v84-mini-case.is-escalado{background:#ffe1e1!important;color:#a52f2f!important}
+.rep-v84-case-badge.is-sin-iniciar,
+.rep-v84-mini-case.is-sin-iniciar{background:#eef1f4!important;color:#657687!important}
+
+.rep-v84-case-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+  padding:11px 12px;
+}
+.rep-v84-case-grid label.is-wide{grid-column:1/-1}
+.rep-v84-case-grid label>span{
+  display:block;
+  margin-bottom:5px;
+  font-size:8px;
+  text-transform:uppercase;
+  font-weight:900;
+  color:#74869a;
+}
+.rep-v84-case-grid select,
+.rep-v84-case-grid input,
+.rep-v84-case-grid textarea{
+  width:100%;
+  box-sizing:border-box;
+  border:1px solid #d5e0e9;
+  border-radius:9px;
+  background:#fff;
+  padding:8px 9px;
+  color:#354e67;
+  font-size:10px;
+}
+.rep-v84-case-actions{
+  display:flex;
+  gap:7px;
+  flex-wrap:wrap;
+  padding:0 12px 11px;
+}
+.rep-v84-case-actions button{
+  border:1px solid #d2dfe9;
+  background:#fff;
+  color:#2d5f8d;
+  border-radius:9px;
+  padding:8px 10px;
+  font-size:9px;
+  font-weight:900;
+  cursor:pointer;
+}
+.rep-v84-case-actions button:first-child{
+  background:#245f98;
+  color:#fff;
+  border-color:#245f98;
+}
+
+.rep-v84-timeline-wrap{
+  border-top:1px solid #e7edf3;
+  padding:12px 15px 15px;
+}
+.rep-v84-timeline-head span{
+  display:block;
+  font-size:8px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#8795a4;
+  font-weight:900;
+}
+.rep-v84-timeline-head strong{
+  display:block;
+  margin-top:3px;
+  font-size:12px;
+  color:#334f69;
+}
+.rep-v84-timeline{
+  position:relative;
+  margin-top:10px;
+}
+.rep-v84-event{
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  gap:9px;
+  position:relative;
+  padding-bottom:11px;
+}
+.rep-v84-event:not(:last-child)::before{
+  content:"";
+  position:absolute;
+  left:16px;
+  top:31px;
+  bottom:0;
+  width:1px;
+  background:#dce5ec;
+}
+.rep-v84-event-icon{
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:#eef5fb;
+  color:#2d6391;
+  z-index:1;
+}
+.rep-v84-event.is-alerta_academica .rep-v84-event-icon{background:#fff0dd;color:#9b6500}
+.rep-v84-event.is-estado_caso .rep-v84-event-icon{background:#e8f6ee;color:#257550}
+.rep-v84-event-main{
+  border:1px solid #e4eaf0;
+  border-radius:11px;
+  background:#fbfdff;
+  padding:8px 9px;
+}
+.rep-v84-event-main>div{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+}
+.rep-v84-event-main strong{font-size:10px;color:#324e69}
+.rep-v84-event-main>div span{font-size:8px;color:#83909d;font-weight:800}
+.rep-v84-event-main p{margin:4px 0 0;font-size:8px;color:#697b8d;line-height:1.45}
+.rep-v84-event-main small{display:block;margin-top:3px;font-size:7px;color:#83909d;font-weight:800}
+
+@media(max-width:950px){
+  .rep-v84-monthly-grid{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:650px){
+  .rep-v84-monthly-head{align-items:flex-start;flex-direction:column}
+  .rep-v84-monthly-grid{grid-template-columns:repeat(2,1fr)}
+  .rep-v84-case-grid{grid-template-columns:1fr}
+  .rep-v84-case-grid label.is-wide{grid-column:auto}
+}

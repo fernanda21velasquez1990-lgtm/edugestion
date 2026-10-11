@@ -6337,6 +6337,16 @@ function obtenerAccesosRepresentantes_(docente, payload) {
   var evaluaciones = filtrarPorProfesor_(EG.SHEETS.EVALUACION_SEGUIMIENTO, docente.id);
   var seguimientos = filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_ACADEMICO, docente.id);
   var compromisos = filtrarPorProfesor_(EG.SHEETS.COMPROMISOS_ACADEMICOS, docente.id);
+  asegurarHoja_(getDb_(), EG.SHEETS.SEGUIMIENTO_FAMILIAR_CASOS, EG.HEADERS.SeguimientoFamiliarCasos);
+  var casosFamiliares = filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_FAMILIAR_CASOS, docente.id);
+  var casosPorAlumno = {};
+  casosFamiliares.forEach(function(c) {
+    var k = String(c.idAlumno || '');
+    if (!k) return;
+    if (!casosPorAlumno[k] || String(c.actualizadoEn || c.creadoEn || '') > String(casosPorAlumno[k].actualizadoEn || casosPorAlumno[k].creadoEn || '')) {
+      casosPorAlumno[k] = c;
+    }
+  });
   var hoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
   var ano = normalizarTexto_(payload.ano || '');
@@ -6393,9 +6403,16 @@ function obtenerAccesosRepresentantes_(docente, payload) {
     if (compromisoPendiente) estadoComunicacion = 'COMPROMISO';
     else if (ultimoContacto) estadoComunicacion = 'CONTACTADO';
 
+    var caso = casosPorAlumno[idAlumno] || null;
+    var estadoCaso = caso ? String(caso.estadoCaso || 'EN_SEGUIMIENTO') : (ultimoContacto ? 'EN_SEGUIMIENTO' : 'SIN_INICIAR');
+    var resultadoCaso = caso ? String(caso.resultado || '') : '';
+    var escaladoA = caso ? String(caso.escaladoA || '') : '';
+    var fechaEstadoCaso = caso ? String(serializarValor_(caso.fechaEstado, 'fecha') || '') : '';
+
     var riesgo = 'VERDE';
-    if (noEntregadas >= 3 || compromisoVencido) riesgo = 'ROJO';
-    else if (noEntregadas >= 2 || pendientes >= 2 || compromisoPendiente) riesgo = 'AMARILLO';
+    if (noEntregadas >= 3 || compromisoVencido || estadoCaso === 'ESCALADO') riesgo = 'ROJO';
+    else if (noEntregadas >= 2 || pendientes >= 2 || compromisoPendiente || estadoCaso === 'SIN_RESPUESTA') riesgo = 'AMARILLO';
+    if (estadoCaso === 'RESUELTO' && noEntregadas < 2 && !compromisoVencido) riesgo = 'VERDE';
 
     return {
       idAlumno: idAlumno,
@@ -6420,7 +6437,11 @@ function obtenerAccesosRepresentantes_(docente, payload) {
       proximoCompromiso: compromisoPendiente ? String(serializarValor_(compromisoPendiente.fechaCompromiso, 'fecha') || '') : '',
       compromisoPendiente: compromisoPendiente ? String(compromisoPendiente.compromiso || '') : '',
       compromisoVencido: compromisoVencido,
-      requiereAtencion: noEntregadas >= 2 || compromisoVencido || (!ac || !String(ac.ultimoAcceso || ''))
+      estadoCaso: estadoCaso,
+      resultadoCaso: resultadoCaso,
+      escaladoA: escaladoA,
+      fechaEstadoCaso: fechaEstadoCaso,
+      requiereAtencion: estadoCaso !== 'RESUELTO' && (noEntregadas >= 2 || compromisoVencido || estadoCaso === 'SIN_RESPUESTA' || estadoCaso === 'ESCALADO' || (!ac || !String(ac.ultimoAcceso || '')))
     };
   });
 
@@ -6813,7 +6834,9 @@ var EG = Object.freeze({
     ESTADO_ACTIVIDADES_EVALUACION: 'EstadoActividadesEvaluacion',
     CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico',
     COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos',
-    ACCESO_REPRESENTANTES: 'AccesoRepresentantes'
+    ACCESO_REPRESENTANTES: 'AccesoRepresentantes',
+    PORTAL_REPRESENTANTES_CONFIG: 'PortalRepresentantesConfig',
+    SEGUIMIENTO_FAMILIAR_CASOS: 'SeguimientoFamiliarCasos'
   }),
   HEADERS: Object.freeze({
     Docentes: [
@@ -6913,6 +6936,15 @@ var EG = Object.freeze({
     AccesoRepresentantes: [
       'id', 'cedulaAlumno', 'alumno', 'salt', 'codigoHash', 'activo',
       'creadoPorIdProfesor', 'creadoPor', 'creadoEn', 'actualizadoEn', 'ultimoAcceso'
+    ],
+    PortalRepresentantesConfig: [
+      'idProfesor', 'mostrarNotas', 'mostrarAsistencia', 'mostrarPendientes',
+      'mostrarCompromisos', 'mostrarRecuperaciones', 'actualizadoEn'
+    ],
+    SeguimientoFamiliarCasos: [
+      'id', 'idProfesor', 'materia', 'ano', 'seccion', 'turno',
+      'idAlumno', 'alumno', 'estadoCaso', 'resultado', 'fechaEstado',
+      'escaladoA', 'observacion', 'creadoEn', 'actualizadoEn'
     ]
   })
 });
@@ -7467,6 +7499,21 @@ function doPost(e) {
         break;
       case 'obtenerAccesosRepresentantes':
         respuesta = obtenerAccesosRepresentantes_(sesion.docente, payload);
+        break;
+      case 'obtenerConfiguracionPortalRepresentantes':
+        respuesta = obtenerConfiguracionPortalRepresentantes_(sesion.docente);
+        break;
+      case 'guardarConfiguracionPortalRepresentantes':
+        respuesta = guardarConfiguracionPortalRepresentantes_(sesion.docente, payload);
+        break;
+      case 'guardarEstadoCasoFamiliar':
+        respuesta = guardarEstadoCasoFamiliar_(sesion.docente, payload);
+        break;
+      case 'obtenerLineaTiempoFamiliar':
+        respuesta = obtenerLineaTiempoFamiliar_(sesion.docente, payload);
+        break;
+      case 'obtenerResumenMensualFamilias':
+        respuesta = obtenerResumenMensualFamilias_(sesion.docente, payload);
         break;
       case 'generarAccesoRepresentante':
         respuesta = generarAccesoRepresentante_(sesion.docente, payload);
@@ -13357,20 +13404,28 @@ function consultaRepresentantePublica_(payload) {
     };
   });
 
+  var privacidadPorProfesor = configPortalRepresentantesPorProfesor_();
+  function privacidadDocente_(idProfesor) {
+    return privacidadPorProfesor[String(idProfesor || '')] || {
+      mostrarNotas:true, mostrarAsistencia:true, mostrarPendientes:true,
+      mostrarCompromisos:true, mostrarRecuperaciones:true
+    };
+  }
+
   var evaluaciones = leerObjetos_(EG.SHEETS.EVALUACION_SEGUIMIENTO).objetos.filter(function(r) {
     return ids[String(r.idAlumno || '')];
   });
   var recuperaciones = leerObjetos_(EG.SHEETS.RECUPERACIONES_EVALUACION).objetos.filter(function(r) {
-    return ids[String(r.idAlumno || '')];
+    return ids[String(r.idAlumno || '')] && privacidadDocente_(r.idProfesor).mostrarRecuperaciones;
   });
   var calificaciones = leerObjetos_(EG.SHEETS.CALIFICACIONES).objetos.filter(function(r) {
-    return ids[String(r.idAlumno || '')];
+    return ids[String(r.idAlumno || '')] && privacidadDocente_(r.idProfesor).mostrarNotas;
   });
   var asistencia = leerObjetos_(EG.SHEETS.ASISTENCIA).objetos.filter(function(r) {
-    return ids[String(r.idAlumno || '')];
+    return ids[String(r.idAlumno || '')] && privacidadDocente_(r.idProfesor).mostrarAsistencia;
   });
   var compromisos = leerObjetos_(EG.SHEETS.COMPROMISOS_ACADEMICOS).objetos.filter(function(r) {
-    return ids[String(r.idAlumno || '')];
+    return ids[String(r.idAlumno || '')] && privacidadDocente_(r.idProfesor).mostrarCompromisos;
   });
 
   var recMap = {};
@@ -13385,6 +13440,7 @@ function consultaRepresentantePublica_(payload) {
 
   var actividadesPublicas = evaluaciones.map(function(r) {
     var materia = materiaKey_(r);
+    var privacidad = privacidadDocente_(r.idProfesor);
     var rec = recMap[String(r.idActividad || '') + '|' + String(r.idAlumno || '')];
     var notaOriginal = r.nota === '' || r.nota === null || r.nota === undefined ? '' : Number(r.nota);
     var notaFinal = rec && rec.notaFinal !== '' && rec.notaFinal !== null && rec.notaFinal !== undefined
@@ -13404,11 +13460,15 @@ function consultaRepresentantePublica_(payload) {
     }
     var m = materias[materia];
     m.actividades++;
-    if (estado === 'Entrego' || estado === 'Tardia') m.entregadas++;
-    else if (estado === 'No entrego') m.noEntregadas++;
-    else m.pendientes++;
-    m.puntosPlanificados += Number(r.puntos || 0);
-    if (notaFinal !== '') m.puntosObtenidos += Number(notaFinal || 0);
+    if (privacidad.mostrarPendientes) {
+      if (estado === 'Entrego' || estado === 'Tardia') m.entregadas++;
+      else if (estado === 'No entrego') m.noEntregadas++;
+      else m.pendientes++;
+    }
+    if (privacidad.mostrarNotas) {
+      m.puntosPlanificados += Number(r.puntos || 0);
+      if (notaFinal !== '') m.puntosObtenidos += Number(notaFinal || 0);
+    }
 
     return {
       materia: materia,
@@ -13416,13 +13476,13 @@ function consultaRepresentantePublica_(payload) {
       lapso: String(r.lapso || ''),
       actividad: String(r.actividad || 'Actividad evaluativa'),
       fechaPlanificada: String(serializarValor_(r.fechaPlanificada, 'fecha') || ''),
-      estadoEntrega: estado,
-      fechaEntrega: String(serializarValor_(r.fechaEntrega, 'fecha') || ''),
+      estadoEntrega: privacidad.mostrarPendientes ? estado : 'OCULTO',
+      fechaEntrega: privacidad.mostrarPendientes ? String(serializarValor_(r.fechaEntrega, 'fecha') || '') : '',
       puntos: Number(r.puntos || 0),
-      notaOriginal: notaOriginal,
-      notaRecuperacion: rec && rec.notaRecuperacion !== '' && rec.notaRecuperacion !== null && rec.notaRecuperacion !== undefined
+      notaOriginal: privacidad.mostrarNotas ? notaOriginal : '',
+      notaRecuperacion: (privacidad.mostrarNotas && privacidad.mostrarRecuperaciones && rec && rec.notaRecuperacion !== '' && rec.notaRecuperacion !== null && rec.notaRecuperacion !== undefined)
         ? Number(rec.notaRecuperacion) : '',
-      notaFinal: notaFinal
+      notaFinal: privacidad.mostrarNotas ? notaFinal : ''
     };
   }).sort(function(a,b) {
     return String(b.fechaPlanificada || '').localeCompare(String(a.fechaPlanificada || ''));
@@ -13504,6 +13564,14 @@ function consultaRepresentantePublica_(payload) {
     return m;
   }).sort(function(a,b){ return a.materia.localeCompare(b.materia, 'es'); });
 
+  var profesoresAlumno = {};
+  alumnos.forEach(function(a) { profesoresAlumno[String(a.idProfesor || '')] = true; });
+  function algunoPermite_(campo) {
+    var idsProfesores = Object.keys(profesoresAlumno);
+    if (!idsProfesores.length) return true;
+    return idsProfesores.some(function(id) { return privacidadDocente_(id)[campo] !== false; });
+  }
+
   var compromisosPublicos = compromisos
     .filter(function(r) {
       var estado = String(r.estado || '').toUpperCase();
@@ -13544,7 +13612,261 @@ function consultaRepresentantePublica_(payload) {
     actividades: actividadesPublicas,
     asistenciaPorMateria: Object.keys(asistenciaResumen).map(function(k){ return asistenciaResumen[k]; }),
     compromisos: compromisosPublicos,
-    privacidad: 'El portal muestra información académica. No expone dirección, datos de salud, actas internas ni observaciones privadas del docente.'
+    visibilidad: {
+      notas: algunoPermite_('mostrarNotas'),
+      asistencia: algunoPermite_('mostrarAsistencia'),
+      pendientes: algunoPermite_('mostrarPendientes'),
+      compromisos: algunoPermite_('mostrarCompromisos'),
+      recuperaciones: algunoPermite_('mostrarRecuperaciones'),
+      mensaje: 'La información visible depende de la configuración de cada docente.'
+    },
+    privacidad: 'El portal muestra únicamente la información académica autorizada por cada docente. No expone dirección, datos de salud, actas internas ni observaciones privadas.'
   };
 }
 /* EDUGESTION_PORTAL_REPRESENTANTES_V76_END */
+
+
+/* =========================================================
+ * EduGestión · V8.1
+ * CONFIGURACIÓN DE PRIVACIDAD DEL PORTAL FAMILIAR
+ * ========================================================= */
+function asegurarConfigPortalRepresentantes_() {
+  asegurarHoja_(getDb_(), EG.SHEETS.PORTAL_REPRESENTANTES_CONFIG, EG.HEADERS.PortalRepresentantesConfig);
+}
+
+function configPortalRepresentantesPorProfesor_() {
+  asegurarConfigPortalRepresentantes_();
+  var tabla = leerObjetos_(EG.SHEETS.PORTAL_REPRESENTANTES_CONFIG);
+  var mapa = {};
+  tabla.objetos.forEach(function(r) {
+    mapa[String(r.idProfesor || '')] = {
+      mostrarNotas: String(r.mostrarNotas || 'SI').toUpperCase() !== 'NO',
+      mostrarAsistencia: String(r.mostrarAsistencia || 'SI').toUpperCase() !== 'NO',
+      mostrarPendientes: String(r.mostrarPendientes || 'SI').toUpperCase() !== 'NO',
+      mostrarCompromisos: String(r.mostrarCompromisos || 'SI').toUpperCase() !== 'NO',
+      mostrarRecuperaciones: String(r.mostrarRecuperaciones || 'SI').toUpperCase() !== 'NO'
+    };
+  });
+  return mapa;
+}
+
+function obtenerConfiguracionPortalRepresentantes_(docente) {
+  var mapa = configPortalRepresentantesPorProfesor_();
+  var cfg = mapa[String(docente.id)] || {
+    mostrarNotas: true,
+    mostrarAsistencia: true,
+    mostrarPendientes: true,
+    mostrarCompromisos: true,
+    mostrarRecuperaciones: true
+  };
+  return { status:'success', configuracion:cfg };
+}
+
+function guardarConfiguracionPortalRepresentantes_(docente, payload) {
+  asegurarConfigPortalRepresentantes_();
+  var tabla = leerObjetos_(EG.SHEETS.PORTAL_REPRESENTANTES_CONFIG);
+  var existente = tabla.objetos.filter(function(r) {
+    return String(r.idProfesor || '') === String(docente.id);
+  })[0];
+  var datos = {
+    idProfesor: String(docente.id),
+    mostrarNotas: payload.mostrarNotas === false ? 'NO' : 'SI',
+    mostrarAsistencia: payload.mostrarAsistencia === false ? 'NO' : 'SI',
+    mostrarPendientes: payload.mostrarPendientes === false ? 'NO' : 'SI',
+    mostrarCompromisos: payload.mostrarCompromisos === false ? 'NO' : 'SI',
+    mostrarRecuperaciones: payload.mostrarRecuperaciones === false ? 'NO' : 'SI',
+    actualizadoEn: ahora_()
+  };
+  if (existente) actualizarFilaObjeto_(EG.SHEETS.PORTAL_REPRESENTANTES_CONFIG, existente.__row, datos);
+  else anexarObjeto_(EG.SHEETS.PORTAL_REPRESENTANTES_CONFIG, datos);
+  return { status:'success', configuracion:{
+    mostrarNotas: datos.mostrarNotas === 'SI',
+    mostrarAsistencia: datos.mostrarAsistencia === 'SI',
+    mostrarPendientes: datos.mostrarPendientes === 'SI',
+    mostrarCompromisos: datos.mostrarCompromisos === 'SI',
+    mostrarRecuperaciones: datos.mostrarRecuperaciones === 'SI'
+  }, message:'Configuración del portal actualizada.' };
+}
+
+/* =========================================================
+ * EduGestión V8.4 · CIERRE DE CASOS Y LÍNEA DE TIEMPO FAMILIAR
+ * ========================================================= */
+function asegurarSeguimientoFamiliarCasos_() {
+  return asegurarHoja_(getDb_(), EG.SHEETS.SEGUIMIENTO_FAMILIAR_CASOS, EG.HEADERS.SeguimientoFamiliarCasos);
+}
+
+function guardarEstadoCasoFamiliar_(docente, payload) {
+  asegurarSeguimientoFamiliarCasos_();
+
+  var idAlumno = limpiarRequerido_(payload.idAlumno, 'estudiante');
+  var alumno = filtrarPorProfesor_(EG.SHEETS.ALUMNOS, docente.id).filter(function(a) {
+    return String(a.id || '') === idAlumno;
+  })[0];
+  if (!alumno) lanzar_('El estudiante no pertenece al docente.', 'UNAUTHORIZED');
+
+  var permitido = ['EN_SEGUIMIENTO', 'RESUELTO', 'SIN_RESPUESTA', 'ESCALADO'];
+  var estado = String(payload.estadoCaso || 'EN_SEGUIMIENTO').trim().toUpperCase();
+  if (permitido.indexOf(estado) === -1) lanzar_('Estado del caso no válido.', 'VALIDATION_ERROR');
+
+  var escaladoA = String(payload.escaladoA || '').trim().slice(0, 120);
+  if (estado === 'ESCALADO' && !escaladoA) escaladoA = 'Orientación / Coordinación';
+
+  var registro = {
+    id: Utilities.getUuid(),
+    idProfesor: String(docente.id),
+    materia: String(docente.materia || ''),
+    ano: String(payload.ano || alumno.ano || ''),
+    seccion: String(payload.seccion || alumno.seccion || '').toUpperCase(),
+    turno: normalizarTurno_(payload.turno || alumno.turno || ''),
+    idAlumno: idAlumno,
+    alumno: String(alumno.nombre || ''),
+    estadoCaso: estado,
+    resultado: String(payload.resultado || '').slice(0, 1200),
+    fechaEstado: String(payload.fechaEstado || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')),
+    escaladoA: escaladoA,
+    observacion: String(payload.observacion || '').slice(0, 1200),
+    creadoEn: ahora_(),
+    actualizadoEn: ahora_()
+  };
+
+  anexarObjeto_(EG.SHEETS.SEGUIMIENTO_FAMILIAR_CASOS, registro);
+
+  return {
+    status: 'success',
+    caso: limpiarMeta_(registro),
+    message: estado === 'RESUELTO' ? 'Caso familiar marcado como resuelto.' :
+      estado === 'ESCALADO' ? 'Caso escalado correctamente.' :
+      estado === 'SIN_RESPUESTA' ? 'Caso marcado sin respuesta.' :
+      'Caso mantenido en seguimiento.'
+  };
+}
+
+function obtenerLineaTiempoFamiliar_(docente, payload) {
+  asegurarGestionEvaluaciones_();
+  asegurarCompromisosAcademicos_();
+  asegurarSeguimientoFamiliarCasos_();
+
+  var idAlumno = limpiarRequerido_(payload.idAlumno, 'estudiante');
+  var alumno = filtrarPorProfesor_(EG.SHEETS.ALUMNOS, docente.id).filter(function(a) {
+    return String(a.id || '') === idAlumno;
+  })[0];
+  if (!alumno) lanzar_('El estudiante no pertenece al docente.', 'UNAUTHORIZED');
+
+  var eventos = [];
+
+  filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_ACADEMICO, docente.id)
+    .filter(function(r){ return String(r.idAlumno || '') === idAlumno; })
+    .forEach(function(r){
+      eventos.push({
+        tipo:'CONTACTO',
+        fecha:String(serializarValor_(r.fecha, 'fecha') || ''),
+        titulo:'Contacto con representante',
+        detalle:String(r.motivo || r.observacion || ''),
+        medio:String(r.medio || ''),
+        compromiso:String(r.compromiso || ''),
+        registradoEn:String(r.creadoEn || '')
+      });
+    });
+
+  filtrarPorProfesor_(EG.SHEETS.COMPROMISOS_ACADEMICOS, docente.id)
+    .filter(function(r){ return String(r.idAlumno || '') === idAlumno; })
+    .forEach(function(r){
+      eventos.push({
+        tipo:'COMPROMISO',
+        fecha:String(serializarValor_(r.fechaRegistro, 'fecha') || ''),
+        titulo:String(r.estado || '').toUpperCase() === 'RESUELTO' ? 'Compromiso resuelto' : 'Compromiso académico',
+        detalle:String(r.compromiso || ''),
+        medio:String(r.medio || ''),
+        compromiso:String(serializarValor_(r.fechaCompromiso, 'fecha') || ''),
+        registradoEn:String(r.actualizadoEn || r.creadoEn || '')
+      });
+    });
+
+  filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_FAMILIAR_CASOS, docente.id)
+    .filter(function(r){ return String(r.idAlumno || '') === idAlumno; })
+    .forEach(function(r){
+      var e = String(r.estadoCaso || '');
+      eventos.push({
+        tipo:'ESTADO_CASO',
+        fecha:String(serializarValor_(r.fechaEstado, 'fecha') || ''),
+        titulo:e === 'RESUELTO' ? 'Caso resuelto' :
+          e === 'SIN_RESPUESTA' ? 'Sin respuesta del representante' :
+          e === 'ESCALADO' ? 'Caso escalado' : 'Caso en seguimiento',
+        detalle:String(r.resultado || r.observacion || ''),
+        medio:e === 'ESCALADO' ? String(r.escaladoA || '') : '',
+        compromiso:'',
+        estadoCaso:e,
+        registradoEn:String(r.actualizadoEn || r.creadoEn || '')
+      });
+    });
+
+  filtrarPorProfesor_(EG.SHEETS.EVALUACION_SEGUIMIENTO, docente.id)
+    .filter(function(r){
+      return String(r.idAlumno || '') === idAlumno &&
+        normalizarEstadoEntregaEvaluacion_(r.estadoEntrega) === 'No entrego';
+    })
+    .forEach(function(r){
+      eventos.push({
+        tipo:'ALERTA_ACADEMICA',
+        fecha:String(serializarValor_(r.fechaPlanificada, 'fecha') || ''),
+        titulo:'Actividad no entregada',
+        detalle:String(r.actividad || ''),
+        medio:'',
+        compromiso:'',
+        registradoEn:String(r.actualizadoEn || r.creadoEn || '')
+      });
+    });
+
+  eventos.sort(function(a,b){
+    return String(b.fecha || b.registradoEn || '').localeCompare(String(a.fecha || a.registradoEn || ''));
+  });
+
+  return {
+    status:'success',
+    alumno:{ id:String(alumno.id || ''), nombre:String(alumno.nombre || '') },
+    eventos:eventos.slice(0,120)
+  };
+}
+
+function obtenerResumenMensualFamilias_(docente, payload) {
+  asegurarSeguimientoFamiliarCasos_();
+  var mes = String(payload.mes || Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM')).slice(0,7);
+  if (!/^\d{4}-\d{2}$/.test(mes)) lanzar_('Mes no válido.', 'VALIDATION_ERROR');
+
+  var ano = normalizarTexto_(payload.ano || '');
+  var seccion = normalizarTexto_(payload.seccion || '').toUpperCase();
+  var turno = normalizarTurno_(payload.turno || '');
+
+  function mismaSeccion_(r) {
+    if (ano && normalizarTexto_(r.ano || '').toUpperCase() !== ano.toUpperCase()) return false;
+    if (seccion && normalizarTexto_(r.seccion || '').toUpperCase() !== seccion) return false;
+    if (turno && normalizarTurno_(r.turno || '') !== turno) return false;
+    return true;
+  }
+
+  var segs = filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_ACADEMICO, docente.id).filter(function(r) {
+    return mismaSeccion_(r) && String(serializarValor_(r.fecha, 'fecha') || '').slice(0,7) === mes;
+  });
+  var casos = filtrarPorProfesor_(EG.SHEETS.SEGUIMIENTO_FAMILIAR_CASOS, docente.id).filter(function(r) {
+    return mismaSeccion_(r) && String(serializarValor_(r.fechaEstado, 'fecha') || '').slice(0,7) === mes;
+  });
+
+  var alumnosContactados = {};
+  segs.forEach(function(r){ alumnosContactados[String(r.idAlumno || '')] = true; });
+
+  return {
+    status:'success',
+    mes:mes,
+    resumen:{
+      contactos:segs.length,
+      familiasContactadas:Object.keys(alumnosContactados).filter(Boolean).length,
+      resueltos:casos.filter(function(r){ return String(r.estadoCaso || '').toUpperCase() === 'RESUELTO'; }).length,
+      sinRespuesta:casos.filter(function(r){ return String(r.estadoCaso || '').toUpperCase() === 'SIN_RESPUESTA'; }).length,
+      escalados:casos.filter(function(r){ return String(r.estadoCaso || '').toUpperCase() === 'ESCALADO'; }).length,
+      enSeguimiento:casos.filter(function(r){ return String(r.estadoCaso || '').toUpperCase() === 'EN_SEGUIMIENTO'; }).length
+    }
+  };
+}
+/* EDUGESTION_SEGUIMIENTO_FAMILIAR_V84_END */
+
+/* EDUGESTION_PRIVACIDAD_PORTAL_REPRESENTANTES_V81_END */

@@ -20427,6 +20427,21 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           </div>
         </section>
 
+        <section class="rep-v84-monthly">
+          <div class="rep-v84-monthly-head">
+            <div><span>Resumen mensual</span><strong>Resultados del seguimiento familiar</strong></div>
+            <label><span>Mes</span><input id="rep-v84-month" type="month"></label>
+          </div>
+          <div class="rep-v84-monthly-grid">
+            <article><b id="rep-v84-contacts">0</b><span>Contactos registrados</span></article>
+            <article><b id="rep-v84-families">0</b><span>Familias contactadas</span></article>
+            <article class="is-green"><b id="rep-v84-resolved">0</b><span>Casos resueltos</span></article>
+            <article class="is-yellow"><b id="rep-v84-no-response">0</b><span>Sin respuesta</span></article>
+            <article class="is-red"><b id="rep-v84-escalated">0</b><span>Escalados</span></article>
+            <article><b id="rep-v84-following">0</b><span>En seguimiento</span></article>
+          </div>
+        </section>
+
         <section class="rep-v76-list-card">
           <div class="rep-v76-list-head">
             <div><span>Accesos familiares</span><strong id="rep-v78-list-title">Estudiantes de la sección</strong></div>
@@ -20466,6 +20481,30 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
             <label class="is-wide"><span>Compromiso acordado</span><textarea id="rep-v80-commitment" rows="2"></textarea></label>
             <label class="is-wide"><span>Observación</span><textarea id="rep-v80-note" rows="2"></textarea></label>
           </div>
+
+          <div class="rep-v84-case-box">
+            <div class="rep-v84-case-head">
+              <div><span>Estado del caso familiar</span><strong>Cierre y escalamiento</strong></div>
+              <span id="rep-v84-current-case" class="rep-v84-case-badge">Sin iniciar</span>
+            </div>
+            <div class="rep-v84-case-grid">
+              <label><span>Estado</span>
+                <select id="rep-v84-case-state">
+                  <option value="EN_SEGUIMIENTO">En seguimiento</option>
+                  <option value="RESUELTO">Resuelto</option>
+                  <option value="SIN_RESPUESTA">Sin respuesta</option>
+                  <option value="ESCALADO">Escalar a Orientación / Coordinación</option>
+                </select>
+              </label>
+              <label><span>Escalar a</span><input id="rep-v84-escalate-to" placeholder="Ej.: Orientación / Coordinación"></label>
+              <label class="is-wide"><span>Resultado o motivo del estado</span><textarea id="rep-v84-case-result" rows="2" placeholder="Describe brevemente el resultado del seguimiento"></textarea></label>
+            </div>
+            <div class="rep-v84-case-actions">
+              <button type="button" id="rep-v84-save-case"><i class="fa-solid fa-circle-check"></i> Guardar estado del caso</button>
+              <button type="button" id="rep-v84-refresh-timeline"><i class="fa-solid fa-clock-rotate-left"></i> Actualizar línea de tiempo</button>
+            </div>
+          </div>
+
           <div class="rep-v80-management-actions">
             <button type="button" id="rep-v80-save-contact"><i class="fa-solid fa-floppy-disk"></i> Guardar contacto</button>
             <button type="button" id="rep-v80-whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
@@ -20473,6 +20512,10 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
             <button type="button" id="rep-v80-view-file"><i class="fa-solid fa-folder-open"></i> Ver expediente</button>
           </div>
           <div id="rep-v80-history" class="rep-v80-history"></div>
+          <div class="rep-v84-timeline-wrap">
+            <div class="rep-v84-timeline-head"><span>Línea de tiempo</span><strong>Historial del caso familiar</strong></div>
+            <div id="rep-v84-timeline" class="rep-v84-timeline"></div>
+          </div>
         </section>`;
       main.appendChild(sec);
     }
@@ -20518,6 +20561,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
         if($('rep-v76-search'))$('rep-v76-search').value='';
         renderSectionTabsV78();
         render();
+        cargarResumenMensualV84();
       });
     }
     if($('rep-v82-sort') && !$('rep-v82-sort').dataset.bound){
@@ -20537,6 +20581,13 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     $('rep-v81-print-pending')?.addEventListener('click',imprimirPendientesFamiliasV81);
     $('rep-v83-print-week')?.addEventListener('click',imprimirSeguimientoSemanalV83);
     $('rep-v83-export-csv')?.addEventListener('click',exportarSeguimientoCSVV83);
+    if($('rep-v84-month') && !$('rep-v84-month').dataset.bound){
+      $('rep-v84-month').dataset.bound='1';
+      $('rep-v84-month').value=new Date().toISOString().slice(0,7);
+      $('rep-v84-month').addEventListener('change',cargarResumenMensualV84);
+    }
+    $('rep-v84-save-case')?.addEventListener('click',guardarEstadoCasoV84);
+    $('rep-v84-refresh-timeline')?.addEventListener('click',()=>alumnoGestionActual&&cargarLineaTiempoV84(alumnoGestionActual));
     $('rep-v81-privacy-open')?.addEventListener('click',()=>{aplicarPrivacidadUIV81();$('rep-v81-privacy')?.classList.remove('hidden');$('rep-v81-privacy')?.scrollIntoView({behavior:'smooth',block:'center'});});
     $('rep-v81-privacy-close')?.addEventListener('click',()=> $('rep-v81-privacy')?.classList.add('hidden'));
     $('rep-v81-privacy-save')?.addEventListener('click',guardarPrivacidadV81);
@@ -20647,6 +20698,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       construirSeccionesV78();
       renderSectionTabsV78();
       render();
+      cargarResumenMensualV84();
     }catch(e){
       if(host)host.innerHTML=`<div class="rep-v76-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar la información.</strong><span>${esc(e?.message||'')}</span></div>`;
     }
@@ -20713,6 +20765,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
             <span><b>${Number(a.pendientes||0)}</b> pendientes</span>
             <span class="rep-v80-risk is-${riesgo}">${esc(a.riesgoFamilia||'VERDE')}</span>
             <span>${esc(comunicacion)}</span>
+            <span class="rep-v84-mini-case is-${String(a.estadoCaso||'SIN_INICIAR').toLowerCase().replace(/_/g,'-')}">${esc(etiquetaEstadoCasoV84(a.estadoCaso||'SIN_INICIAR'))}</span>
             <span>${esc(ultimoIngreso)}</span>
           </div>
           ${a.proximoCompromiso?`<div class="rep-v80-commitment ${a.compromisoVencido?'is-overdue':''}"><i class="fa-solid fa-calendar-check"></i> ${a.compromisoVencido?'Vencido · ':''}${esc(a.proximoCompromiso)} · ${esc(a.compromisoPendiente||'Seguimiento')}</div>`:''}
@@ -20782,7 +20835,11 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       : 'Seguimiento académico con representante.';
     $('rep-v80-commitment').value=a.compromisoPendiente||'';
     $('rep-v80-note').value=`Estado actual: ${Number(a.entregadas||0)} entregadas, ${Number(a.noEntregadas||0)} no entregadas y ${Number(a.pendientes||0)} pendientes.`;
-    await cargarHistorialFamiliaV80(id);
+    if($('rep-v84-case-state'))$('rep-v84-case-state').value=(a.estadoCaso&&a.estadoCaso!=='SIN_INICIAR')?a.estadoCaso:'EN_SEGUIMIENTO';
+    if($('rep-v84-escalate-to'))$('rep-v84-escalate-to').value=a.escaladoA||'';
+    if($('rep-v84-case-result'))$('rep-v84-case-result').value=a.resultadoCaso||'';
+    actualizarBadgeCasoV84(a.estadoCaso||'SIN_INICIAR');
+    await Promise.all([cargarHistorialFamiliaV80(id),cargarLineaTiempoV84(id)]);
     box.scrollIntoView({behavior:'smooth',block:'center'});
   }
 
@@ -20939,6 +20996,20 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     return new Date().toISOString().slice(0,10);
   }
 
+
+  function etiquetaVencimientoV84(fecha){
+    if(!fecha)return 'Pendiente';
+    const hoy=new Date();hoy.setHours(0,0,0,0);
+    const f=new Date(`${fecha}T00:00:00`);
+    if(Number.isNaN(f.getTime()))return 'Pendiente';
+    const d=Math.round((f-hoy)/86400000);
+    if(d<0)return 'Vencido';
+    if(d===0)return 'Hoy';
+    if(d===1)return 'Mañana';
+    if(d<=7)return 'Esta semana';
+    return 'Pendiente';
+  }
+
   function renderSeguimientoSemanalV83(base){
     const contacted=base.filter(a=>String(a.estadoComunicacion||'').toUpperCase()!=='SIN_CONTACTAR').length;
     const uncontacted=base.filter(a=>String(a.estadoComunicacion||'').toUpperCase()==='SIN_CONTACTAR').length;
@@ -20968,7 +21039,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <strong>${esc(a.alumno||'Estudiante')}</strong>
           <small>${esc(a.compromisoPendiente||'Seguimiento con representante')}</small>
         </span>
-        <span class="rep-v83-state">${a.compromisoVencido?'Vencido':'Pendiente'}</span>
+        <span class="rep-v83-state">${esc(etiquetaVencimientoV84(a.proximoCompromiso))}</span>
       </button>`).join('');
 
     host.querySelectorAll('[data-rep-v83-open]').forEach(b=>b.addEventListener('click',()=>{
@@ -21035,6 +21106,91 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1500);
     mostrarToast?.('Reporte CSV generado.','success','Seguimiento familiar');
+  }
+
+
+  function etiquetaEstadoCasoV84(estado){
+    const e=String(estado||'SIN_INICIAR').toUpperCase();
+    return e==='RESUELTO'?'Resuelto':e==='SIN_RESPUESTA'?'Sin respuesta':e==='ESCALADO'?'Escalado':e==='EN_SEGUIMIENTO'?'En seguimiento':'Sin iniciar';
+  }
+
+  function actualizarBadgeCasoV84(estado){
+    const el=$('rep-v84-current-case');if(!el)return;
+    const e=String(estado||'SIN_INICIAR').toUpperCase();
+    el.textContent=etiquetaEstadoCasoV84(e);
+    el.className=`rep-v84-case-badge is-${e.toLowerCase().replace(/_/g,'-')}`;
+  }
+
+  async function guardarEstadoCasoV84(){
+    const a=alumnoV80(alumnoGestionActual);if(!a)return;
+    const estado=$('rep-v84-case-state')?.value||'EN_SEGUIMIENTO';
+    const escaladoA=String($('rep-v84-escalate-to')?.value||'').trim();
+    const resultado=String($('rep-v84-case-result')?.value||'').trim();
+    if((estado==='RESUELTO'||estado==='SIN_RESPUESTA'||estado==='ESCALADO')&&!resultado){
+      mostrarToast?.('Describe brevemente el resultado o motivo del estado.','warning','Falta información');
+      return;
+    }
+    try{
+      const r=await apiRequest('guardarEstadoCasoFamiliar',{
+        idAlumno:a.idAlumno,ano:a.ano,seccion:a.seccion,turno:a.turno,
+        estadoCaso:estado,resultado,escaladoA,
+        observacion:String($('rep-v80-note')?.value||'').trim()
+      });
+      actualizarBadgeCasoV84(estado);
+      mostrarToast?.(r?.message||'Estado del caso actualizado.','success','Seguimiento familiar');
+      await cargar();
+      alumnoGestionActual=a.idAlumno;
+      await cargarLineaTiempoV84(a.idAlumno);
+      await cargarResumenMensualV84();
+    }catch(e){
+      mostrarToast?.(e?.message||'No se pudo actualizar el caso.','error','Error');
+    }
+  }
+
+  async function cargarLineaTiempoV84(id){
+    const host=$('rep-v84-timeline');if(!host)return;
+    host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando línea de tiempo…</div>';
+    try{
+      const r=await apiRequest('obtenerLineaTiempoFamiliar',{idAlumno:id});
+      const eventos=Array.isArray(r?.eventos)?r.eventos:[];
+      if(!eventos.length){
+        host.innerHTML='<div class="rep-v76-empty">Todavía no hay eventos de seguimiento para este estudiante.</div>';
+        return;
+      }
+      const iconos={CONTACTO:'fa-phone',COMPROMISO:'fa-handshake',ESTADO_CASO:'fa-circle-check',ALERTA_ACADEMICA:'fa-triangle-exclamation'};
+      host.innerHTML=eventos.map(ev=>`
+        <article class="rep-v84-event is-${String(ev.tipo||'').toLowerCase()}">
+          <div class="rep-v84-event-icon"><i class="fa-solid ${iconos[ev.tipo]||'fa-circle'}"></i></div>
+          <div class="rep-v84-event-main">
+            <div><strong>${esc(ev.titulo||'Seguimiento')}</strong><span>${esc(ev.fecha||'Sin fecha')}</span></div>
+            ${ev.detalle?`<p>${esc(ev.detalle)}</p>`:''}
+            ${ev.medio?`<small>${esc(ev.medio)}</small>`:''}
+            ${ev.compromiso?`<small>Compromiso/fecha: ${esc(ev.compromiso)}</small>`:''}
+          </div>
+        </article>`).join('');
+    }catch(e){
+      host.innerHTML=`<div class="rep-v76-empty is-error">${esc(e?.message||'No se pudo cargar la línea de tiempo.')}</div>`;
+    }
+  }
+
+  async function cargarResumenMensualV84(){
+    const sec=seccionesDisponibles.find(s=>s.key===seccionActual);
+    if(!sec)return;
+    const mes=$('rep-v84-month')?.value||new Date().toISOString().slice(0,7);
+    try{
+      const r=await apiRequest('obtenerResumenMensualFamilias',{
+        mes,ano:sec.ano,seccion:sec.seccion,turno:sec.turno
+      });
+      const x=r?.resumen||{};
+      if($('rep-v84-contacts'))$('rep-v84-contacts').textContent=Number(x.contactos||0);
+      if($('rep-v84-families'))$('rep-v84-families').textContent=Number(x.familiasContactadas||0);
+      if($('rep-v84-resolved'))$('rep-v84-resolved').textContent=Number(x.resueltos||0);
+      if($('rep-v84-no-response'))$('rep-v84-no-response').textContent=Number(x.sinRespuesta||0);
+      if($('rep-v84-escalated'))$('rep-v84-escalated').textContent=Number(x.escalados||0);
+      if($('rep-v84-following'))$('rep-v84-following').textContent=Number(x.enSeguimiento||0);
+    }catch(e){
+      console.warn('Resumen mensual familiar:',e);
+    }
   }
 
   function prioridadNumeroV82(a){
