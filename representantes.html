@@ -12,18 +12,21 @@
   <main class="rep-public-app">
     <header class="rep-public-brand">
       <div class="brand-mark">EG</div>
-      <div><strong>EduGestión</strong><span>Portal de Representantes</span></div>
+      <div>
+        <strong>EduGestión</strong>
+        <span>Portal de Representantes</span>
+      </div>
     </header>
 
     <section id="rep-login-view" class="rep-login-layout">
       <div class="rep-welcome">
         <span class="eyebrow">Familia y escuela conectadas</span>
         <h1>Consulta el progreso académico de tu estudiante</h1>
-        <p>Revisa actividades corregidas, trabajos entregados y pendientes, calificaciones, asistencia y compromisos académicos desde un solo lugar.</p>
+        <p>Revisa calificaciones, trabajos entregados y pendientes, asistencia, recuperaciones y compromisos académicos desde un solo lugar.</p>
         <div class="rep-welcome-points">
-          <span>✓ Información académica actualizada</span>
-          <span>✓ Acceso individual protegido</span>
-          <span>✓ Consulta desde celular o computadora</span>
+          <span>✓ Información académica actualizada por el docente</span>
+          <span>✓ Acceso privado mediante cédula + código</span>
+          <span>✓ Funciona desde celular, tableta o computadora</span>
         </div>
       </div>
 
@@ -40,20 +43,28 @@
         </label>
         <button id="rep-login-btn" type="submit">Consultar información</button>
         <div id="rep-login-error" class="rep-error hidden"></div>
-        <small>Por seguridad, no compartas tu código con terceros.</small>
+        <small>Este código es personal. No lo compartas con terceros.</small>
       </form>
     </section>
 
     <section id="rep-dashboard" class="hidden">
       <div class="rep-student-header">
-        <div>
-          <span class="eyebrow">Expediente académico familiar</span>
-          <h1 id="rep-student-name">Estudiante</h1>
-          <p id="rep-student-meta"></p>
-          <p id="rep-representative"></p>
+        <div class="rep-student-main">
+          <div class="rep-student-avatar" id="rep-student-avatar">E</div>
+          <div>
+            <span class="eyebrow">Expediente académico familiar</span>
+            <h1 id="rep-student-name">Estudiante</h1>
+            <p id="rep-student-meta"></p>
+            <p id="rep-representative"></p>
+          </div>
         </div>
-        <button id="rep-logout" type="button">Salir</button>
+        <div class="rep-header-actions">
+          <button id="rep-print" type="button">🖨 Imprimir resumen</button>
+          <button id="rep-logout" type="button">Salir</button>
+        </div>
       </div>
+
+      <div id="rep-alert-banner" class="rep-alert-banner hidden"></div>
 
       <div class="rep-summary-grid">
         <article><span>Materias</span><strong id="rep-kpi-subjects">0</strong></article>
@@ -64,38 +75,75 @@
         <article><span>Asistencia</span><strong id="rep-kpi-attendance">0%</strong></article>
       </div>
 
+      <section class="rep-filterbar">
+        <label>
+          <span>Materia</span>
+          <select id="rep-filter-subject"><option value="">Todas las materias</option></select>
+        </label>
+        <label>
+          <span>Lapso</span>
+          <select id="rep-filter-period"><option value="">Todos los lapsos</option></select>
+        </label>
+        <div class="rep-last-update">
+          <span>Consulta realizada</span>
+          <strong id="rep-last-update">—</strong>
+        </div>
+      </section>
+
       <nav class="rep-tabs">
         <button class="active" data-view="resumen">Resumen</button>
-        <button data-view="actividades">Actividades y notas</button>
+        <button data-view="actividades">Actividades</button>
+        <button data-view="pendientes">Pendientes</button>
+        <button data-view="calificaciones">Calificaciones</button>
         <button data-view="asistencia">Asistencia</button>
         <button data-view="compromisos">Compromisos</button>
       </nav>
 
       <section id="rep-view-resumen" class="rep-view">
-        <div class="rep-section-title"><div><span>Rendimiento</span><h2>Resumen por materia</h2></div></div>
+        <div class="rep-section-title">
+          <div><span>Rendimiento</span><h2>Resumen por materia</h2></div>
+        </div>
         <div id="rep-subjects" class="rep-subject-grid"></div>
       </section>
 
       <section id="rep-view-actividades" class="rep-view hidden">
         <div class="rep-section-title">
           <div><span>Evaluaciones</span><h2>Actividades, entregas y calificaciones</h2></div>
-          <input id="rep-activity-search" placeholder="Buscar actividad o materia">
+          <input id="rep-activity-search" placeholder="Buscar actividad">
         </div>
         <div class="rep-table-wrap">
           <table>
-            <thead><tr><th>Materia</th><th>Actividad</th><th>Fecha</th><th>Entrega</th><th>Nota</th><th>Recuperación</th></tr></thead>
+            <thead><tr><th>Materia</th><th>Actividad</th><th>Fecha</th><th>Entrega</th><th>Puntuación</th><th>Recuperación</th></tr></thead>
             <tbody id="rep-activities-body"></tbody>
           </table>
         </div>
       </section>
 
+      <section id="rep-view-pendientes" class="rep-view hidden">
+        <div class="rep-section-title">
+          <div><span>Atención</span><h2>Actividades pendientes o no entregadas</h2></div>
+        </div>
+        <div id="rep-pending-list" class="rep-pending-list"></div>
+      </section>
+
+      <section id="rep-view-calificaciones" class="rep-view hidden">
+        <div class="rep-section-title">
+          <div><span>Notas</span><h2>Resumen de calificaciones</h2></div>
+        </div>
+        <div id="rep-grades-grid" class="rep-grade-grid"></div>
+      </section>
+
       <section id="rep-view-asistencia" class="rep-view hidden">
-        <div class="rep-section-title"><div><span>Asistencia</span><h2>Resumen por materia</h2></div></div>
+        <div class="rep-section-title">
+          <div><span>Asistencia</span><h2>Resumen por materia</h2></div>
+        </div>
         <div id="rep-attendance-subjects" class="rep-subject-grid"></div>
       </section>
 
       <section id="rep-view-compromisos" class="rep-view hidden">
-        <div class="rep-section-title"><div><span>Seguimiento</span><h2>Compromisos académicos</h2></div></div>
+        <div class="rep-section-title">
+          <div><span>Seguimiento</span><h2>Compromisos académicos</h2></div>
+        </div>
         <div id="rep-commitments" class="rep-commitments"></div>
       </section>
 
