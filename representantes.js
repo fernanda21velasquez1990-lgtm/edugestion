@@ -75,6 +75,29 @@
     $('rep-kpi-missing').textContent=r.noEntregadas||0;
     $('rep-kpi-pending').textContent=r.pendientes||0;
     $('rep-kpi-attendance').textContent=`${as.porcentaje||0}%`;
+
+    const materias=data?.materias||[];
+    const puntosObtenidos=Math.round(materias.reduce((s,m)=>s+Number(m.puntosObtenidos||0),0)*100)/100;
+    const puntosPlanificados=Math.round(materias.reduce((s,m)=>s+Number(m.puntosPlanificados||0),0)*100)/100;
+    const proximo=(data?.compromisos||[])
+      .filter(c=>String(c.estado||'').toUpperCase()==='PENDIENTE'&&c.fechaCompromiso)
+      .sort((x,y)=>String(x.fechaCompromiso).localeCompare(String(y.fechaCompromiso)))[0];
+
+    $('rep-family-delivered').textContent=r.entregadas||0;
+    $('rep-family-pending').textContent=r.pendientes||0;
+    $('rep-family-missing').textContent=r.noEntregadas||0;
+    $('rep-family-points').textContent=puntosPlanificados?`${puntosObtenidos}/${puntosPlanificados}`:'—';
+    $('rep-family-attendance').textContent=`${as.porcentaje||0}%`;
+    $('rep-family-next').textContent=proximo?.fechaCompromiso||'Sin fecha';
+
+    const status=$('rep-family-status-text');
+    if(status){
+      if(Number(r.noEntregadas||0)>=3)status.textContent='Requiere atención inmediata: existen varias actividades sin entregar.';
+      else if(Number(r.noEntregadas||0)>=2)status.textContent='Requiere seguimiento: existen 2 o más actividades sin entregar.';
+      else if(Number(r.pendientes||0)>0)status.textContent='Tiene actividades pendientes de entrega o corrección.';
+      else status.textContent='Sin alertas académicas importantes en este momento.';
+    }
+
     $('rep-last-update').textContent=new Date().toLocaleString('es-VE',{dateStyle:'short',timeStyle:'short'});
     renderAlert();
   }

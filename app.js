@@ -20270,6 +20270,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   let filtroTexto='';
   let seccionActual='';
   let seccionesDisponibles=[];
+  let filtroFamilias='todos';
+  let alumnoGestionActual='';
 
   function rolPermitido(){
     const rol=String(window.profesorActual?.rol||'docente').toLowerCase();
@@ -20341,10 +20343,18 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <button type="button" id="rep-v76-copy-link"><i class="fa-solid fa-link"></i> Copiar enlace del portal</button>
         </section>
 
-        <section class="rep-v76-summary">
+        <section class="rep-v76-summary rep-v80-summary">
           <article><i class="fa-solid fa-users"></i><div><b id="rep-v76-total">0</b><small>Estudiantes</small></div></article>
           <article><i class="fa-solid fa-key"></i><div><b id="rep-v76-configured">0</b><small>Accesos activos</small></div></article>
           <article><i class="fa-solid fa-id-card"></i><div><b id="rep-v76-no-id">0</b><small>Sin cédula</small></div></article>
+          <article class="rep-v80-attention-card"><i class="fa-solid fa-bell"></i><div><b id="rep-v80-attention">0</b><small>Familias por atender</small></div></article>
+          <article><i class="fa-solid fa-right-to-bracket"></i><div><b id="rep-v80-no-login">0</b><small>Aún no ingresan</small></div></article>
+        </section>
+
+        <section class="rep-v80-family-filters">
+          <button type="button" class="is-active" data-rep-family-filter="todos"><i class="fa-solid fa-users"></i> Todos</button>
+          <button type="button" data-rep-family-filter="atencion"><i class="fa-solid fa-triangle-exclamation"></i> Familias por atender</button>
+          <button type="button" data-rep-family-filter="sin-ingreso"><i class="fa-solid fa-right-to-bracket"></i> Aún no ingresan</button>
         </section>
 
         <section class="rep-v76-list-card">
@@ -20371,6 +20381,27 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
             <button type="button" id="rep-v76-print-credential"><i class="fa-solid fa-print"></i> Imprimir</button>
             <a id="rep-v76-go-public" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> Probar portal</a>
           </div>
+        </section>
+
+        <section class="rep-v80-management hidden" id="rep-v80-management">
+          <div class="rep-v80-management-head">
+            <div><span>Comunicación familiar</span><strong id="rep-v80-management-name">Estudiante</strong></div>
+            <button type="button" id="rep-v80-management-close"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="rep-v80-management-grid">
+            <label><span>Medio</span><select id="rep-v80-medium"><option>WhatsApp</option><option>Teléfono</option><option>Presencial</option><option>Correo</option><option>Otro</option></select></label>
+            <label><span>Próxima fecha de seguimiento</span><input id="rep-v80-due" type="date"></label>
+            <label class="is-wide"><span>Motivo</span><textarea id="rep-v80-reason" rows="2"></textarea></label>
+            <label class="is-wide"><span>Compromiso acordado</span><textarea id="rep-v80-commitment" rows="2"></textarea></label>
+            <label class="is-wide"><span>Observación</span><textarea id="rep-v80-note" rows="2"></textarea></label>
+          </div>
+          <div class="rep-v80-management-actions">
+            <button type="button" id="rep-v80-save-contact"><i class="fa-solid fa-floppy-disk"></i> Guardar contacto</button>
+            <button type="button" id="rep-v80-whatsapp"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
+            <button type="button" id="rep-v80-copy-message"><i class="fa-solid fa-copy"></i> Copiar mensaje</button>
+            <button type="button" id="rep-v80-view-file"><i class="fa-solid fa-folder-open"></i> Ver expediente</button>
+          </div>
+          <div id="rep-v80-history" class="rep-v80-history"></div>
         </section>`;
       main.appendChild(sec);
     }
@@ -20418,6 +20449,20 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
         render();
       });
     }
+    document.querySelectorAll('[data-rep-family-filter]').forEach(b=>{
+      if(b.dataset.bound)return;
+      b.dataset.bound='1';
+      b.addEventListener('click',()=>{
+        filtroFamilias=b.dataset.repFamilyFilter||'todos';
+        document.querySelectorAll('[data-rep-family-filter]').forEach(x=>x.classList.toggle('is-active',x===b));
+        render();
+      });
+    });
+    $('rep-v80-management-close')?.addEventListener('click',()=> $('rep-v80-management')?.classList.add('hidden'));
+    $('rep-v80-save-contact')?.addEventListener('click',guardarContactoV80);
+    $('rep-v80-whatsapp')?.addEventListener('click',abrirWhatsAppV80);
+    $('rep-v80-copy-message')?.addEventListener('click',copiarMensajeV80);
+    $('rep-v80-view-file')?.addEventListener('click',verExpedienteV80);
     $('rep-v76-refresh')?.addEventListener('click',cargar);
     $('rep-v76-copy-link')?.addEventListener('click',async()=>{
       try{await navigator.clipboard.writeText(portalUrl());mostrarToast?.('Enlace del portal copiado.','success','Portal de Representantes');}
@@ -20526,48 +20571,231 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const total=base.length;
     const configured=base.filter(a=>a.accesoConfigurado).length;
     const noId=base.filter(a=>!String(a.cedula||'').trim()).length;
+    const attention=base.filter(a=>a.requiereAtencion).length;
+    const noLogin=base.filter(a=>a.accesoConfigurado&&!a.ultimoAcceso).length;
+
     if($('rep-v76-total'))$('rep-v76-total').textContent=total;
     if($('rep-v76-configured'))$('rep-v76-configured').textContent=configured;
     if($('rep-v76-no-id'))$('rep-v76-no-id').textContent=noId;
+    if($('rep-v80-attention'))$('rep-v80-attention').textContent=attention;
+    if($('rep-v80-no-login'))$('rep-v80-no-login').textContent=noLogin;
 
     const sec=seccionesDisponibles.find(s=>s.key===seccionActual);
     if($('rep-v78-list-title'))$('rep-v78-list-title').textContent=sec?`Estudiantes · ${etiquetaSeccionV78(sec)}`:'Estudiantes de la sección';
-    if($('rep-v78-list-note'))$('rep-v78-list-note').textContent=sec?`${configured} accesos activos · ${noId} sin cédula · ${total} estudiantes`:'Selecciona una sección';
+    if($('rep-v78-list-note'))$('rep-v78-list-note').textContent=sec?`${configured} accesos · ${attention} por atender · ${noLogin} sin ingresar · ${total} estudiantes`:'Selecciona una sección';
 
     const host=$('rep-v76-list');if(!host)return;
     const list=base.filter(a=>{
+      if(filtroFamilias==='atencion'&&!a.requiereAtencion)return false;
+      if(filtroFamilias==='sin-ingreso'&&!(a.accesoConfigurado&&!a.ultimoAcceso))return false;
       if(!filtroTexto)return true;
       return `${a.alumno} ${a.cedula} ${a.representante}`.toLowerCase().includes(filtroTexto);
     });
+
     if(!list.length){
-      host.innerHTML='<div class="rep-v76-empty">No hay estudiantes que coincidan con la búsqueda.</div>';
+      host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-circle-check"></i>No hay estudiantes que coincidan con este filtro.</div>';
       return;
     }
 
     host.innerHTML=list.map(a=>{
       const hasId=Boolean(String(a.cedula||'').trim());
-      return `<article class="rep-v76-student">
+      const hasPhone=Boolean(String(a.telefonoRepresentante||'').replace(/\D/g,''));
+      const riesgo=String(a.riesgoFamilia||'VERDE').toLowerCase();
+      const comunicacion=a.estadoComunicacion==='COMPROMISO'?'Compromiso activo':a.estadoComunicacion==='CONTACTADO'?'Contactado':'Sin contactar';
+      const ultimoIngreso=a.ultimoAcceso?`Último ingreso: ${esc(String(a.ultimoAcceso).slice(0,16).replace('T',' '))}`:(a.accesoConfigurado?'Aún no ha ingresado':'Sin acceso');
+      return `<article class="rep-v76-student rep-v80-student is-${riesgo}">
         <div class="rep-v76-student-avatar">${esc((a.alumno||'E')[0])}</div>
         <div class="rep-v76-student-main">
           <strong>${esc(a.alumno||'Estudiante')}</strong>
           <span>${esc(a.ano||'')} · Sección ${esc(a.seccion||'')} · ${esc(a.turno==='Manana'?'Mañana':a.turno||'')}</span>
-          <small>C.I.: ${esc(a.cedula||'Sin cédula')} · Representante: ${esc(a.representante||'No registrado')}</small>
+          <small>C.I.: ${esc(a.cedula||'Sin cédula')} · Representante: ${esc(a.representante||'No registrado')} ${a.telefonoRepresentante?`· ${esc(a.telefonoRepresentante)}`:''}</small>
+          <div class="rep-v80-mini">
+            <span><b>${Number(a.noEntregadas||0)}</b> no entregadas</span>
+            <span><b>${Number(a.pendientes||0)}</b> pendientes</span>
+            <span class="rep-v80-risk is-${riesgo}">${esc(a.riesgoFamilia||'VERDE')}</span>
+            <span>${esc(comunicacion)}</span>
+            <span>${esc(ultimoIngreso)}</span>
+          </div>
+          ${a.proximoCompromiso?`<div class="rep-v80-commitment ${a.compromisoVencido?'is-overdue':''}"><i class="fa-solid fa-calendar-check"></i> ${a.compromisoVencido?'Vencido · ':''}${esc(a.proximoCompromiso)} · ${esc(a.compromisoPendiente||'Seguimiento')}</div>`:''}
         </div>
         <div class="rep-v76-access-state ${a.accesoConfigurado?'is-active':'is-inactive'}">
           <i class="fa-solid ${a.accesoConfigurado?'fa-circle-check':'fa-circle-minus'}"></i>
           ${a.accesoConfigurado?'Acceso activo':'Sin acceso'}
         </div>
-        <div class="rep-v76-actions">
-          <button type="button" data-rep-generate="${esc(a.idAlumno)}" ${hasId?'':'disabled'}>
-            <i class="fa-solid fa-key"></i> ${a.accesoConfigurado?'Regenerar código':'Generar acceso'}
-          </button>
+        <div class="rep-v76-actions rep-v80-actions">
+          <button type="button" data-rep-manage="${esc(a.idAlumno)}"><i class="fa-solid fa-phone"></i> Registrar contacto</button>
+          <button type="button" data-rep-whatsapp="${esc(a.idAlumno)}" ${hasPhone?'':'disabled'}><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
+          <button type="button" data-rep-file="${esc(a.idAlumno)}"><i class="fa-solid fa-folder-open"></i> Expediente</button>
+          <button type="button" data-rep-generate="${esc(a.idAlumno)}" ${hasId?'':'disabled'}><i class="fa-solid fa-key"></i> ${a.accesoConfigurado?'Regenerar':'Generar acceso'}</button>
           ${a.accesoConfigurado?`<button type="button" class="is-danger" data-rep-disable="${esc(a.idAlumno)}"><i class="fa-solid fa-lock"></i> Desactivar</button>`:''}
+          ${(!hasId||!a.representante)?`<button type="button" data-rep-student-edit="${esc(a.idAlumno)}"><i class="fa-solid fa-user-pen"></i> Completar datos</button>`:''}
         </div>
       </article>`;
     }).join('');
 
     host.querySelectorAll('[data-rep-generate]').forEach(b=>b.addEventListener('click',()=>generar(b.dataset.repGenerate)));
     host.querySelectorAll('[data-rep-disable]').forEach(b=>b.addEventListener('click',()=>desactivar(b.dataset.repDisable)));
+    host.querySelectorAll('[data-rep-manage]').forEach(b=>b.addEventListener('click',()=>abrirGestionV80(b.dataset.repManage)));
+    host.querySelectorAll('[data-rep-whatsapp]').forEach(b=>b.addEventListener('click',()=>abrirWhatsAppDirectoV80(b.dataset.repWhatsapp)));
+    host.querySelectorAll('[data-rep-file]').forEach(b=>b.addEventListener('click',()=>verExpedienteAlumnoV80(b.dataset.repFile)));
+    host.querySelectorAll('[data-rep-student-edit]').forEach(b=>b.addEventListener('click',()=>abrirRegistroEstudianteV80(b.dataset.repStudentEdit)));
+  }
+
+
+  function lapsoActualV80(){
+    const m=new Date().getMonth()+1;
+    if(m>=9)return '1er Lapso';
+    if(m<=4)return '2do Lapso';
+    return '3er Lapso';
+  }
+
+  function alumnoV80(id){
+    return alumnos.find(x=>String(x.idAlumno)===String(id))||null;
+  }
+
+  function mensajeRepresentanteV80(a){
+    const faltan=Number(a?.noEntregadas||0);
+    const pendientes=Number(a?.pendientes||0);
+    let detalle='';
+    if(faltan>=2)detalle=`Actualmente registra ${faltan} actividades sin entregar${pendientes?` y ${pendientes} pendiente(s)`:''}. `;
+    else if(pendientes)detalle=`Actualmente registra ${pendientes} actividad(es) pendiente(s). `;
+    else detalle='Actualmente no presenta alertas de actividades sin entregar. ';
+    return `Buenos días. Le escribo en relación con ${a?.alumno||'su representado/a'}, estudiante de ${a?.ano||''} Sección ${a?.seccion||''}. ${detalle}Agradecemos revisar su Portal de Representantes y mantener comunicación con el docente para el seguimiento académico correspondiente.`;
+  }
+
+  function abrirWhatsAppDirectoV80(id){
+    const a=alumnoV80(id);if(!a)return;
+    const tel=String(a.telefonoRepresentante||'').replace(/\D/g,'');
+    if(!tel){mostrarToast?.('Este estudiante no tiene teléfono del representante registrado.','warning','Sin teléfono');return;}
+    window.open(`https://wa.me/${tel}?text=${encodeURIComponent(mensajeRepresentanteV80(a))}`,'_blank','noopener');
+  }
+
+  async function abrirGestionV80(id){
+    const a=alumnoV80(id);if(!a)return;
+    alumnoGestionActual=id;
+    const box=$('rep-v80-management');if(!box)return;
+    box.classList.remove('hidden');
+    $('rep-v80-management-name').textContent=`${a.alumno} · ${a.ano} ${a.seccion}`;
+    const due=new Date();due.setDate(due.getDate()+7);
+    $('rep-v80-due').value=due.toISOString().slice(0,10);
+    $('rep-v80-reason').value=Number(a.noEntregadas||0)>=2
+      ? `Seguimiento por ${Number(a.noEntregadas||0)} actividades sin entregar.`
+      : 'Seguimiento académico con representante.';
+    $('rep-v80-commitment').value=a.compromisoPendiente||'';
+    $('rep-v80-note').value=`Estado actual: ${Number(a.entregadas||0)} entregadas, ${Number(a.noEntregadas||0)} no entregadas y ${Number(a.pendientes||0)} pendientes.`;
+    await cargarHistorialFamiliaV80(id);
+    box.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  async function cargarHistorialFamiliaV80(id){
+    const a=alumnoV80(id),host=$('rep-v80-history');if(!a||!host)return;
+    host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial…</div>';
+    try{
+      const r=await apiRequest('obtenerSeguimientoAcademico',{
+        ano:a.ano,seccion:a.seccion,turno:a.turno,lapso:lapsoActualV80(),idAlumno:id
+      });
+      const items=Array.isArray(r?.seguimiento)?r.seguimiento:[];
+      host.innerHTML=items.length?`<h4>Historial de comunicación</h4>${items.slice(0,20).map(x=>`
+        <div class="rep-v80-history-row">
+          <span><strong>${esc(x.fecha||'')}</strong><small>${esc(x.medio||x.tipo||'Seguimiento')}</small></span>
+          <span>${esc(x.motivo||'')}</span>
+          <span>${esc(x.compromiso||x.observacion||'')}</span>
+        </div>`).join('')}`:'<div class="rep-v76-empty">No hay contactos previos registrados para este estudiante.</div>';
+    }catch(e){
+      host.innerHTML='<div class="rep-v76-empty">No se pudo cargar el historial.</div>';
+    }
+  }
+
+  async function guardarContactoV80(){
+    const a=alumnoV80(alumnoGestionActual);if(!a)return;
+    const medio=$('rep-v80-medium')?.value||'WhatsApp';
+    const fecha=new Date().toISOString().slice(0,10);
+    const fechaCompromiso=$('rep-v80-due')?.value||'';
+    const motivo=String($('rep-v80-reason')?.value||'').trim();
+    const compromiso=String($('rep-v80-commitment')?.value||'').trim();
+    const observacion=String($('rep-v80-note')?.value||'').trim();
+    if(!motivo){mostrarToast?.('Escribe el motivo del contacto.','warning','Falta motivo');return;}
+    try{
+      await apiRequest('registrarSeguimientoAcademico',{
+        idAlumno:a.idAlumno,ano:a.ano,seccion:a.seccion,turno:a.turno,lapso:lapsoActualV80(),
+        tipo:'CONTACTO_REPRESENTANTE',fecha,motivo,medio,representante:a.representante||'',compromiso,observacion
+      });
+      if(fechaCompromiso&&compromiso){
+        await apiRequest('guardarCompromisoAcademico',{
+          idAlumno:a.idAlumno,ano:a.ano,seccion:a.seccion,turno:a.turno,lapso:lapsoActualV80(),
+          fechaRegistro:fecha,fechaCompromiso,tipo:'SEGUIMIENTO_REPRESENTANTE',
+          representante:a.representante||'',medio,compromiso
+        });
+      }
+      mostrarToast?.('Contacto y compromiso registrados correctamente.','success','Seguimiento familiar');
+      await cargar();
+      alumnoGestionActual=a.idAlumno;
+      await cargarHistorialFamiliaV80(a.idAlumno);
+    }catch(e){
+      mostrarToast?.(e?.message||'No se pudo registrar el contacto.','error','Error');
+    }
+  }
+
+  function abrirWhatsAppV80(){
+    if(alumnoGestionActual)abrirWhatsAppDirectoV80(alumnoGestionActual);
+  }
+
+  async function copiarMensajeV80(){
+    const a=alumnoV80(alumnoGestionActual);if(!a)return;
+    const msg=mensajeRepresentanteV80(a);
+    try{await navigator.clipboard.writeText(msg);mostrarToast?.('Mensaje copiado.','success','Comunicación familiar');}
+    catch(_){window.prompt('Copia el mensaje:',msg);}
+  }
+
+  async function verExpedienteAlumnoV80(id){
+    alumnoGestionActual=id;
+    const a=alumnoV80(id);if(!a)return;
+    const box=$('rep-v80-management');
+    if(box){
+      box.classList.remove('hidden');
+      $('rep-v80-management-name').textContent=`Expediente · ${a.alumno}`;
+      box.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+    await verExpedienteV80();
+  }
+
+  async function verExpedienteV80(){
+    const a=alumnoV80(alumnoGestionActual);if(!a)return;
+    const host=$('rep-v80-history');if(!host)return;
+    host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente…</div>';
+    try{
+      const r=await apiRequest('obtenerExpedienteIntegralV70',{
+        ano:a.ano,seccion:a.seccion,turno:a.turno,lapso:lapsoActualV80(),idAlumno:a.idAlumno
+      });
+      const i=r?.indicadores||{},s=r?.resumen||{};
+      host.innerHTML=`<div class="rep-v80-file">
+        <h4>Resumen académico del estudiante</h4>
+        <div class="rep-v80-file-kpis">
+          <span><b>${Number(s.puntosAcumulados||0)}/${Number(s.puntosPlanificados||0)}</b><small>Puntos</small></span>
+          <span><b>${Number(s.porcentajeAcademico||0)}%</b><small>Rendimiento</small></span>
+          <span><b>${Number(i.porcentajeAsistencia||0)}%</b><small>Asistencia</small></span>
+          <span><b>${Number(i.noEntregadas||0)}</b><small>No entregadas</small></span>
+          <span><b>${Number(i.compromisosPendientes||0)}</b><small>Compromisos</small></span>
+          <span><b>${esc(i.riesgoIntegral||'VERDE')}</b><small>Riesgo integral</small></span>
+        </div>
+      </div>`;
+    }catch(e){
+      host.innerHTML=`<div class="rep-v76-empty is-error">${esc(e?.message||'No se pudo cargar el expediente.')}</div>`;
+    }
+  }
+
+  function abrirRegistroEstudianteV80(id){
+    const a=alumnoV80(id);if(!a)return;
+    const tab=document.getElementById('tab-registro');
+    if(tab)tab.click();
+    setTimeout(()=>{
+      const sel=document.getElementById('reg-estudiante-existente');
+      if(sel){
+        sel.value=id;
+        sel.dispatchEvent(new Event('change'));
+      }
+      mostrarToast?.(`Completa la cédula, representante y teléfono de ${a.alumno}.`,'info','Ficha del estudiante');
+    },300);
   }
 
   async function generar(id){

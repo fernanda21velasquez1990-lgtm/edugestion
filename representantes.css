@@ -28,3 +28,53 @@
 .rep-grade-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.rep-grade-card{border:1px solid #e0e8ef;border-radius:14px;padding:13px;background:#fbfdff}.rep-grade-top{display:flex;justify-content:space-between;gap:12px;align-items:center}.rep-grade-top span,.rep-grade-top strong{display:block}.rep-grade-top span{font-size:9px;text-transform:uppercase;font-weight:900;color:#7f8e9d}.rep-grade-top strong{font-size:11px;color:#34516e;margin-top:3px}.rep-grade-top>b{font-size:20px;color:#245f91}.rep-grade-card>small{display:block;margin-top:7px;color:#8190a0;font-size:8px;font-weight:800}
 @media(max-width:850px){.rep-filterbar{grid-template-columns:1fr 1fr}.rep-last-update{grid-column:1/-1}.rep-pending-list,.rep-grade-grid{grid-template-columns:1fr}}
 @media(max-width:600px){.rep-student-main{align-items:flex-start}.rep-student-avatar{width:46px;height:46px}.rep-header-actions{width:100%;justify-content:flex-start}.rep-filterbar{grid-template-columns:1fr}.rep-last-update{grid-column:auto}.rep-tabs button{flex:1 1 calc(50% - 7px)}}
+
+/* V8.0 · Situación actual del estudiante */
+.rep-family-status{
+  margin:14px 0;
+  border:1px solid #dfe8ef;
+  border-radius:18px;
+  background:#fff;
+  padding:14px;
+}
+.rep-family-status>div:first-child>span{
+  display:block;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  color:#8392a2;
+  font-weight:900;
+}
+.rep-family-status>div:first-child>strong{
+  display:block;
+  margin-top:4px;
+  color:#2c4966;
+  font-size:13px;
+}
+.rep-family-status-grid{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:8px;
+  margin-top:12px;
+}
+.rep-family-status-grid span{
+  border:1px solid #e3eaf0;
+  border-radius:11px;
+  background:#fbfdff;
+  padding:9px;
+  text-align:center;
+}
+.rep-family-status-grid b{
+  display:block;
+  color:#245b88;
+  font-size:15px;
+}
+.rep-family-status-grid small{
+  display:block;
+  margin-top:3px;
+  color:#7f8f9f;
+  font-size:7px;
+  font-weight:900;
+}
+@media(max-width:850px){.rep-family-status-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.rep-family-status-grid{grid-template-columns:repeat(2,1fr)}}
