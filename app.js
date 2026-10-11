@@ -20401,6 +20401,32 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           </div>
         </section>
 
+        <section class="rep-v83-weekly">
+          <div class="rep-v83-weekly-head">
+            <div>
+              <span>Seguimiento semanal</span>
+              <strong>Control de comunicación con las familias</strong>
+            </div>
+            <div class="rep-v83-weekly-actions">
+              <button type="button" id="rep-v83-print-week"><i class="fa-solid fa-print"></i> Imprimir seguimiento</button>
+              <button type="button" id="rep-v83-export-csv"><i class="fa-solid fa-file-csv"></i> Exportar CSV</button>
+            </div>
+          </div>
+          <div class="rep-v83-weekly-grid">
+            <article><b id="rep-v83-contacted">0</b><span>Contactados</span><small>Con registro de seguimiento</small></article>
+            <article><b id="rep-v83-uncontacted">0</b><span>Sin contactar</span><small>Requieren primer contacto</small></article>
+            <article><b id="rep-v83-active-commitments">0</b><span>Compromisos activos</span><small>Con próxima fecha</small></article>
+            <article class="is-alert"><b id="rep-v83-overdue">0</b><span>Compromisos vencidos</span><small>Atención inmediata</small></article>
+          </div>
+          <div class="rep-v83-agenda">
+            <div class="rep-v83-agenda-head">
+              <strong>Agenda próxima</strong>
+              <span>Compromisos familiares ordenados por fecha</span>
+            </div>
+            <div id="rep-v83-agenda-list" class="rep-v83-agenda-list"></div>
+          </div>
+        </section>
+
         <section class="rep-v76-list-card">
           <div class="rep-v76-list-head">
             <div><span>Accesos familiares</span><strong id="rep-v78-list-title">Estudiantes de la sección</strong></div>
@@ -20509,6 +20535,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       });
     });
     $('rep-v81-print-pending')?.addEventListener('click',imprimirPendientesFamiliasV81);
+    $('rep-v83-print-week')?.addEventListener('click',imprimirSeguimientoSemanalV83);
+    $('rep-v83-export-csv')?.addEventListener('click',exportarSeguimientoCSVV83);
     $('rep-v81-privacy-open')?.addEventListener('click',()=>{aplicarPrivacidadUIV81();$('rep-v81-privacy')?.classList.remove('hidden');$('rep-v81-privacy')?.scrollIntoView({behavior:'smooth',block:'center'});});
     $('rep-v81-privacy-close')?.addEventListener('click',()=> $('rep-v81-privacy')?.classList.add('hidden'));
     $('rep-v81-privacy-save')?.addEventListener('click',guardarPrivacidadV81);
@@ -20642,6 +20670,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if($('rep-v82-no-access'))$('rep-v82-no-access').textContent=noAccess;
     if($('rep-v82-no-login'))$('rep-v82-no-login').textContent=noLogin;
     renderPrioridadV82(base);
+    renderSeguimientoSemanalV83(base);
 
     if($('rep-v76-total'))$('rep-v76-total').textContent=total;
     if($('rep-v76-configured'))$('rep-v76-configured').textContent=configured;
@@ -20904,6 +20933,109 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     w.document.close();
   }
 
+
+
+  function fechaHoyISO83(){
+    return new Date().toISOString().slice(0,10);
+  }
+
+  function renderSeguimientoSemanalV83(base){
+    const contacted=base.filter(a=>String(a.estadoComunicacion||'').toUpperCase()!=='SIN_CONTACTAR').length;
+    const uncontacted=base.filter(a=>String(a.estadoComunicacion||'').toUpperCase()==='SIN_CONTACTAR').length;
+    const active=base.filter(a=>Boolean(a.proximoCompromiso)).length;
+    const overdue=base.filter(a=>Boolean(a.compromisoVencido)).length;
+
+    if($('rep-v83-contacted'))$('rep-v83-contacted').textContent=contacted;
+    if($('rep-v83-uncontacted'))$('rep-v83-uncontacted').textContent=uncontacted;
+    if($('rep-v83-active-commitments'))$('rep-v83-active-commitments').textContent=active;
+    if($('rep-v83-overdue'))$('rep-v83-overdue').textContent=overdue;
+
+    const host=$('rep-v83-agenda-list');if(!host)return;
+    const agenda=[...base]
+      .filter(a=>a.proximoCompromiso)
+      .sort((a,b)=>String(a.proximoCompromiso||'9999-12-31').localeCompare(String(b.proximoCompromiso||'9999-12-31')))
+      .slice(0,8);
+
+    if(!agenda.length){
+      host.innerHTML='<div class="rep-v83-agenda-empty"><i class="fa-solid fa-calendar-check"></i> No hay compromisos familiares programados en esta sección.</div>';
+      return;
+    }
+
+    host.innerHTML=agenda.map(a=>`
+      <button type="button" data-rep-v83-open="${esc(a.idAlumno)}" class="${a.compromisoVencido?'is-overdue':''}">
+        <span class="rep-v83-date">${esc(a.proximoCompromiso||'')}</span>
+        <span class="rep-v83-agenda-main">
+          <strong>${esc(a.alumno||'Estudiante')}</strong>
+          <small>${esc(a.compromisoPendiente||'Seguimiento con representante')}</small>
+        </span>
+        <span class="rep-v83-state">${a.compromisoVencido?'Vencido':'Pendiente'}</span>
+      </button>`).join('');
+
+    host.querySelectorAll('[data-rep-v83-open]').forEach(b=>b.addEventListener('click',()=>{
+      abrirGestionV80(b.dataset.repV83Open);
+    }));
+  }
+
+  function seguimientoSeccionV83(){
+    return alumnosSeccionActualV78();
+  }
+
+  function filasSeguimientoV83(){
+    return seguimientoSeccionV83().map(a=>({
+      alumno:a.alumno||'',
+      cedula:a.cedula||'',
+      representante:a.representante||'',
+      telefono:a.telefonoRepresentante||'',
+      riesgo:a.riesgoFamilia||'VERDE',
+      comunicacion:a.estadoComunicacion==='COMPROMISO'?'Compromiso activo':a.estadoComunicacion==='CONTACTADO'?'Contactado':'Sin contactar',
+      ultimoContacto:a.ultimoContactoFecha||'',
+      proximoCompromiso:a.proximoCompromiso||'',
+      compromiso:a.compromisoPendiente||'',
+      vencido:a.compromisoVencido?'SI':'NO',
+      noEntregadas:Number(a.noEntregadas||0),
+      pendientes:Number(a.pendientes||0),
+      acceso:a.accesoConfigurado?'Activo':'Sin acceso',
+      ultimoIngreso:a.ultimoAcceso||''
+    }));
+  }
+
+  function imprimirSeguimientoSemanalV83(){
+    const sec=seccionesDisponibles.find(s=>s.key===seccionActual);
+    const filas=filasSeguimientoV83();
+    const w=window.open('','_blank');if(!w)return;
+    const rows=filas.map((r,i)=>`<tr>
+      <td>${i+1}</td><td>${esc(r.alumno)}</td><td>${esc(r.representante||'—')}</td>
+      <td>${esc(r.telefono||'—')}</td><td>${esc(r.riesgo)}</td><td>${esc(r.comunicacion)}</td>
+      <td>${esc(r.ultimoContacto||'—')}</td><td>${esc(r.proximoCompromiso||'—')}</td>
+      <td>${esc(r.vencido)}</td><td>${r.noEntregadas}</td><td>${esc(r.acceso)}</td>
+    </tr>`).join('');
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Seguimiento familiar</title>
+      <style>body{font-family:Arial;padding:24px;color:#223}h1{font-size:20px;margin:0}p{font-size:11px;color:#667;margin:4px 0 15px}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #bbb;padding:6px;text-align:left}th{background:#f1f4f7}small{color:#778}</style></head>
+      <body><h1>EduGestión · Seguimiento familiar semanal</h1>
+      <p>${esc(sec?etiquetaSeccionV78(sec):'Sección')} · ${esc(window.profesorActual?.materia||'')} · ${esc(window.profesorActual?.nombre||'Docente')}</p>
+      <table><thead><tr><th>#</th><th>Estudiante</th><th>Representante</th><th>Teléfono</th><th>Riesgo</th><th>Comunicación</th><th>Último contacto</th><th>Próximo compromiso</th><th>Vencido</th><th>No entregadas</th><th>Acceso</th></tr></thead><tbody>${rows}</tbody></table>
+      <script>window.onload=()=>window.print();<\/script></body></html>`);
+    w.document.close();
+  }
+
+  function exportarSeguimientoCSVV83(){
+    const sec=seccionesDisponibles.find(s=>s.key===seccionActual);
+    const encabezados=['Estudiante','Cedula','Representante','Telefono','Riesgo','Estado comunicacion','Ultimo contacto','Proximo compromiso','Compromiso','Vencido','No entregadas','Pendientes','Acceso','Ultimo ingreso'];
+    const limpiar=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+    const filas=filasSeguimientoV83().map(r=>[
+      r.alumno,r.cedula,r.representante,r.telefono,r.riesgo,r.comunicacion,r.ultimoContacto,
+      r.proximoCompromiso,r.compromiso,r.vencido,r.noEntregadas,r.pendientes,r.acceso,r.ultimoIngreso
+    ].map(limpiar).join(','));
+    const csv='\uFEFF'+encabezados.map(limpiar).join(',')+'\n'+filas.join('\n');
+    const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`seguimiento_familiar_${String(sec?.ano||'seccion').replace(/\s+/g,'_')}_${String(sec?.seccion||'').replace(/\s+/g,'_')}.csv`;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    mostrarToast?.('Reporte CSV generado.','success','Seguimiento familiar');
+  }
 
   function prioridadNumeroV82(a){
     const r=String(a?.riesgoFamilia||'VERDE').toUpperCase();
