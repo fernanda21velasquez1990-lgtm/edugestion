@@ -20272,6 +20272,8 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   let seccionesDisponibles=[];
   let filtroFamilias='todos';
   let alumnoGestionActual='';
+  let ordenFamilias='prioridad';
+  let privacidadPortalV81={mostrarNotas:true,mostrarAsistencia:true,mostrarPendientes:true,mostrarCompromisos:true,mostrarRecuperaciones:true};
 
   function rolPermitido(){
     const rol=String(window.profesorActual?.rol||'docente').toLowerCase();
@@ -20355,6 +20357,48 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <button type="button" class="is-active" data-rep-family-filter="todos"><i class="fa-solid fa-users"></i> Todos</button>
           <button type="button" data-rep-family-filter="atencion"><i class="fa-solid fa-triangle-exclamation"></i> Familias por atender</button>
           <button type="button" data-rep-family-filter="sin-ingreso"><i class="fa-solid fa-right-to-bracket"></i> Aún no ingresan</button>
+          <button type="button" id="rep-v81-print-pending"><i class="fa-solid fa-print"></i> Reporte pendientes</button>
+          <button type="button" id="rep-v81-privacy-open"><i class="fa-solid fa-sliders"></i> Configurar portal</button>
+        </section>
+
+        <section class="rep-v81-privacy hidden" id="rep-v81-privacy">
+          <div class="rep-v81-privacy-head">
+            <div><span>Privacidad del portal familiar</span><strong>Elige qué información puede ver el representante</strong></div>
+            <button type="button" id="rep-v81-privacy-close"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="rep-v81-privacy-grid">
+            <label><input id="rep-v81-show-grades" type="checkbox" checked><span><b>Calificaciones</b><small>Puntuaciones y nota final de las actividades.</small></span></label>
+            <label><input id="rep-v81-show-attendance" type="checkbox" checked><span><b>Asistencia</b><small>Resumen de presentes, ausentes, tardanzas y justificadas.</small></span></label>
+            <label><input id="rep-v81-show-pending" type="checkbox" checked><span><b>Entregas y pendientes</b><small>Entregó, no entregó y actividades pendientes.</small></span></label>
+            <label><input id="rep-v81-show-commitments" type="checkbox" checked><span><b>Compromisos</b><small>Seguimientos y fechas acordadas con la familia.</small></span></label>
+            <label><input id="rep-v81-show-recovery" type="checkbox" checked><span><b>Recuperaciones</b><small>Resultados de recuperación cuando existan.</small></span></label>
+          </div>
+          <div class="rep-v81-privacy-actions"><button id="rep-v81-privacy-save" type="button"><i class="fa-solid fa-floppy-disk"></i> Guardar configuración</button></div>
+        </section>
+
+        <section class="rep-v82-section-dashboard">
+          <div class="rep-v82-dashboard-head">
+            <div><span>Resumen de la sección</span><strong>Prioridades de seguimiento familiar</strong></div>
+            <label><span>Ordenar alumnos</span>
+              <select id="rep-v82-sort">
+                <option value="prioridad">Mayor prioridad</option>
+                <option value="nombre">Nombre A–Z</option>
+                <option value="no-entregadas">Más no entregadas</option>
+                <option value="sin-ingreso">Sin ingreso primero</option>
+              </select>
+            </label>
+          </div>
+          <div class="rep-v82-kpis">
+            <article class="is-red"><b id="rep-v82-red">0</b><span>Riesgo rojo</span></article>
+            <article class="is-yellow"><b id="rep-v82-yellow">0</b><span>Riesgo amarillo</span></article>
+            <article class="is-green"><b id="rep-v82-green">0</b><span>Sin alerta</span></article>
+            <article><b id="rep-v82-no-access">0</b><span>Sin acceso</span></article>
+            <article><b id="rep-v82-no-login">0</b><span>No han ingresado</span></article>
+          </div>
+          <div class="rep-v82-priority">
+            <div class="rep-v82-priority-head"><strong>Atención prioritaria</strong><span>Casos que conviene revisar primero</span></div>
+            <div id="rep-v82-priority-list" class="rep-v82-priority-list"></div>
+          </div>
         </section>
 
         <section class="rep-v76-list-card">
@@ -20378,6 +20422,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <p>Entrega esta información únicamente al representante autorizado. Si se genera un nuevo código, el anterior deja de funcionar.</p>
           <div class="rep-v76-credential-actions">
             <button type="button" id="rep-v76-copy-credential"><i class="fa-solid fa-copy"></i> Copiar credencial</button>
+            <button type="button" id="rep-v81-send-credential"><i class="fa-brands fa-whatsapp"></i> Enviar por WhatsApp</button>
             <button type="button" id="rep-v76-print-credential"><i class="fa-solid fa-print"></i> Imprimir</button>
             <a id="rep-v76-go-public" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> Probar portal</a>
           </div>
@@ -20449,6 +20494,11 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
         render();
       });
     }
+    if($('rep-v82-sort') && !$('rep-v82-sort').dataset.bound){
+      $('rep-v82-sort').dataset.bound='1';
+      $('rep-v82-sort').value=ordenFamilias;
+      $('rep-v82-sort').addEventListener('change',e=>{ordenFamilias=e.target.value||'prioridad';render();});
+    }
     document.querySelectorAll('[data-rep-family-filter]').forEach(b=>{
       if(b.dataset.bound)return;
       b.dataset.bound='1';
@@ -20458,6 +20508,10 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
         render();
       });
     });
+    $('rep-v81-print-pending')?.addEventListener('click',imprimirPendientesFamiliasV81);
+    $('rep-v81-privacy-open')?.addEventListener('click',()=>{aplicarPrivacidadUIV81();$('rep-v81-privacy')?.classList.remove('hidden');$('rep-v81-privacy')?.scrollIntoView({behavior:'smooth',block:'center'});});
+    $('rep-v81-privacy-close')?.addEventListener('click',()=> $('rep-v81-privacy')?.classList.add('hidden'));
+    $('rep-v81-privacy-save')?.addEventListener('click',guardarPrivacidadV81);
     $('rep-v80-management-close')?.addEventListener('click',()=> $('rep-v80-management')?.classList.add('hidden'));
     $('rep-v80-save-contact')?.addEventListener('click',guardarContactoV80);
     $('rep-v80-whatsapp')?.addEventListener('click',abrirWhatsAppV80);
@@ -20556,8 +20610,12 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const host=$('rep-v76-list');
     if(host)host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes…</div>';
     try{
-      const r=await apiRequest('obtenerAccesosRepresentantes',{});
+      const [r,cfg] = await Promise.all([
+        apiRequest('obtenerAccesosRepresentantes',{}),
+        apiRequest('obtenerConfiguracionPortalRepresentantes',{}).catch(()=>null)
+      ]);
       alumnos=Array.isArray(r?.alumnos)?r.alumnos:[];
+      if(cfg?.configuracion) privacidadPortalV81={...privacidadPortalV81,...cfg.configuracion};
       construirSeccionesV78();
       renderSectionTabsV78();
       render();
@@ -20573,6 +20631,17 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const noId=base.filter(a=>!String(a.cedula||'').trim()).length;
     const attention=base.filter(a=>a.requiereAtencion).length;
     const noLogin=base.filter(a=>a.accesoConfigurado&&!a.ultimoAcceso).length;
+    const red=base.filter(a=>String(a.riesgoFamilia||'').toUpperCase()==='ROJO').length;
+    const yellow=base.filter(a=>String(a.riesgoFamilia||'').toUpperCase()==='AMARILLO').length;
+    const green=base.filter(a=>String(a.riesgoFamilia||'').toUpperCase()==='VERDE').length;
+    const noAccess=base.filter(a=>!a.accesoConfigurado).length;
+
+    if($('rep-v82-red'))$('rep-v82-red').textContent=red;
+    if($('rep-v82-yellow'))$('rep-v82-yellow').textContent=yellow;
+    if($('rep-v82-green'))$('rep-v82-green').textContent=green;
+    if($('rep-v82-no-access'))$('rep-v82-no-access').textContent=noAccess;
+    if($('rep-v82-no-login'))$('rep-v82-no-login').textContent=noLogin;
+    renderPrioridadV82(base);
 
     if($('rep-v76-total'))$('rep-v76-total').textContent=total;
     if($('rep-v76-configured'))$('rep-v76-configured').textContent=configured;
@@ -20585,12 +20654,13 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if($('rep-v78-list-note'))$('rep-v78-list-note').textContent=sec?`${configured} accesos · ${attention} por atender · ${noLogin} sin ingresar · ${total} estudiantes`:'Selecciona una sección';
 
     const host=$('rep-v76-list');if(!host)return;
-    const list=base.filter(a=>{
+    let list=base.filter(a=>{
       if(filtroFamilias==='atencion'&&!a.requiereAtencion)return false;
       if(filtroFamilias==='sin-ingreso'&&!(a.accesoConfigurado&&!a.ultimoAcceso))return false;
       if(!filtroTexto)return true;
       return `${a.alumno} ${a.cedula} ${a.representante}`.toLowerCase().includes(filtroTexto);
     });
+    list=[...list].sort(ordenarFamiliasV82);
 
     if(!list.length){
       host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-circle-check"></i>No hay estudiantes que coincidan con este filtro.</div>';
@@ -20798,6 +20868,99 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     },300);
   }
 
+
+  function aplicarPrivacidadUIV81(){
+    const map={
+      'rep-v81-show-grades':'mostrarNotas',
+      'rep-v81-show-attendance':'mostrarAsistencia',
+      'rep-v81-show-pending':'mostrarPendientes',
+      'rep-v81-show-commitments':'mostrarCompromisos',
+      'rep-v81-show-recovery':'mostrarRecuperaciones'
+    };
+    Object.entries(map).forEach(([id,key])=>{const el=$(id);if(el)el.checked=privacidadPortalV81[key]!==false;});
+  }
+
+  async function guardarPrivacidadV81(){
+    const payload={
+      mostrarNotas:Boolean($('rep-v81-show-grades')?.checked),
+      mostrarAsistencia:Boolean($('rep-v81-show-attendance')?.checked),
+      mostrarPendientes:Boolean($('rep-v81-show-pending')?.checked),
+      mostrarCompromisos:Boolean($('rep-v81-show-commitments')?.checked),
+      mostrarRecuperaciones:Boolean($('rep-v81-show-recovery')?.checked)
+    };
+    try{
+      const r=await apiRequest('guardarConfiguracionPortalRepresentantes',payload);
+      privacidadPortalV81={...payload,...(r?.configuracion||{})};
+      mostrarToast?.('La configuración de privacidad fue guardada.','success','Portal familiar');
+      $('rep-v81-privacy')?.classList.add('hidden');
+    }catch(e){mostrarToast?.(e?.message||'No se pudo guardar la configuración.','error','Error');}
+  }
+
+  function imprimirPendientesFamiliasV81(){
+    const base=alumnosSeccionActualV78().filter(a=>a.requiereAtencion || !a.accesoConfigurado || (a.accesoConfigurado&&!a.ultimoAcceso));
+    const sec=seccionesDisponibles.find(s=>s.key===seccionActual);
+    const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Familias pendientes</title><style>body{font-family:Arial;padding:28px;color:#222}h1{font-size:19px;margin-bottom:4px}p{font-size:11px;color:#555}table{width:100%;border-collapse:collapse;margin-top:14px;font-size:10px}th,td{border:1px solid #bbb;padding:7px;text-align:left}th{background:#f2f2f2}</style></head><body><h1>Familias pendientes de atención</h1><p>${esc(sec?etiquetaSeccionV78(sec):'Sección')} · ${esc(profesorActual?.materia||'')}</p><table><thead><tr><th>Estudiante</th><th>Representante</th><th>Teléfono</th><th>No entregadas</th><th>Acceso</th><th>Último ingreso</th><th>Seguimiento</th></tr></thead><tbody>${base.map(a=>`<tr><td>${esc(a.alumno||'')}</td><td>${esc(a.representante||'')}</td><td>${esc(a.telefonoRepresentante||'')}</td><td>${Number(a.noEntregadas||0)}</td><td>${a.accesoConfigurado?'Activo':'Sin acceso'}</td><td>${esc(a.ultimoAcceso||'No ha ingresado')}</td><td>${esc(a.proximoCompromiso||a.estadoComunicacion||'Sin contactar')}</td></tr>`).join('')}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);
+    w.document.close();
+  }
+
+
+  function prioridadNumeroV82(a){
+    const r=String(a?.riesgoFamilia||'VERDE').toUpperCase();
+    let p=r==='ROJO'?0:r==='AMARILLO'?1:2;
+    if(a?.compromisoVencido)p-=0.5;
+    if(!a?.accesoConfigurado)p+=0.15;
+    return p;
+  }
+
+  function ordenarFamiliasV82(a,b){
+    if(ordenFamilias==='nombre')return String(a.alumno||'').localeCompare(String(b.alumno||''),'es');
+    if(ordenFamilias==='no-entregadas'){
+      return Number(b.noEntregadas||0)-Number(a.noEntregadas||0) ||
+        String(a.alumno||'').localeCompare(String(b.alumno||''),'es');
+    }
+    if(ordenFamilias==='sin-ingreso'){
+      const ai=a.accesoConfigurado&&!a.ultimoAcceso?0:1;
+      const bi=b.accesoConfigurado&&!b.ultimoAcceso?0:1;
+      return ai-bi || prioridadNumeroV82(a)-prioridadNumeroV82(b) ||
+        String(a.alumno||'').localeCompare(String(b.alumno||''),'es');
+    }
+    return prioridadNumeroV82(a)-prioridadNumeroV82(b) ||
+      Number(b.noEntregadas||0)-Number(a.noEntregadas||0) ||
+      String(a.alumno||'').localeCompare(String(b.alumno||''),'es');
+  }
+
+  function renderPrioridadV82(base){
+    const host=$('rep-v82-priority-list');if(!host)return;
+    const casos=[...base]
+      .filter(a=>String(a.riesgoFamilia||'').toUpperCase()!=='VERDE' || a.compromisoVencido || (a.accesoConfigurado&&!a.ultimoAcceso))
+      .sort((a,b)=>prioridadNumeroV82(a)-prioridadNumeroV82(b) || Number(b.noEntregadas||0)-Number(a.noEntregadas||0))
+      .slice(0,5);
+    if(!casos.length){
+      host.innerHTML='<div class="rep-v82-priority-empty"><i class="fa-solid fa-circle-check"></i> No hay casos prioritarios en esta sección.</div>';
+      return;
+    }
+    host.innerHTML=casos.map(a=>{
+      const riesgo=String(a.riesgoFamilia||'VERDE').toLowerCase();
+      const motivo=a.compromisoVencido
+        ? 'Compromiso vencido'
+        : Number(a.noEntregadas||0)>=2
+          ? `${Number(a.noEntregadas||0)} actividades sin entregar`
+          : (a.accesoConfigurado&&!a.ultimoAcceso?'Representante aún no ha ingresado':'Requiere seguimiento');
+      return `<button type="button" data-rep-v82-open="${esc(a.idAlumno)}" class="is-${riesgo}">
+        <span class="rep-v82-dot"></span>
+        <span><strong>${esc(a.alumno||'Estudiante')}</strong><small>${esc(motivo)}</small></span>
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>`;
+    }).join('');
+    host.querySelectorAll('[data-rep-v82-open]').forEach(b=>b.addEventListener('click',()=>{
+      const id=b.dataset.repV82Open;
+      const card=document.querySelector(`[data-rep-manage="${CSS.escape(id)}"]`)?.closest('.rep-v76-student');
+      if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
+      else abrirGestionV80(id);
+    }));
+  }
+
   async function generar(id){
     const a=alumnos.find(x=>String(x.idAlumno)===String(id));if(!a)return;
     if(a.accesoConfigurado && !window.confirm(`Se generará un código nuevo para ${a.alumno}. El código anterior dejará de funcionar. ¿Continuar?`))return;
@@ -20829,6 +20992,17 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       try{await navigator.clipboard.writeText(texto);mostrarToast?.('Credencial copiada.','success','Portal de Representantes');}
       catch(_){window.prompt('Copia la credencial:',texto);}
     };
+    const alumnoAcceso=alumnos.find(x=>String(x.idAlumno)===String(r?.alumno?.idAlumno||''));
+    const btnWa=$('rep-v81-send-credential');
+    if(btnWa){
+      btnWa.disabled=!String(alumnoAcceso?.telefonoRepresentante||'').replace(/\D/g,'');
+      btnWa.onclick=()=>{
+        const tel=String(alumnoAcceso?.telefonoRepresentante||'').replace(/\D/g,'');
+        if(!tel){mostrarToast?.('No hay teléfono del representante registrado.','warning','Sin teléfono');return;}
+        const msg=`EduGestión · Acceso al Portal de Representantes\nEstudiante: ${r?.alumno?.nombre||''}\nCédula: ${r?.alumno?.cedula||''}\nCódigo: ${r?.codigo||''}\nPortal: ${portalUrl()}\n\nEsta credencial es personal. No la comparta con terceros.`;
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,'_blank','noopener');
+      };
+    }
     $('rep-v76-print-credential').onclick=()=>{
       const w=window.open('','_blank');if(!w)return;
       w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Acceso representante</title><style>body{font-family:Arial;padding:36px;color:#21354d}.card{max-width:520px;border:2px solid #1e5d96;border-radius:20px;padding:26px}h1{font-size:20px}.code{font-size:36px;font-weight:900;letter-spacing:.15em;margin:20px 0}.muted{color:#68798b;font-size:12px}</style></head><body><div class="card"><h1>EduGestión · Portal de Representantes</h1><p><b>Estudiante:</b> ${esc(r?.alumno?.nombre||'')}</p><p><b>Cédula:</b> ${esc(r?.alumno?.cedula||'')}</p><div class="code">${esc(r?.codigo||'')}</div><p class="muted">Ingrese en: ${esc(portalUrl())}</p><p class="muted">Esta credencial es personal. No la comparta con terceros.</p></div><script>window.onload=()=>window.print();<\/script></body></html>`);

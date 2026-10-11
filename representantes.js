@@ -98,8 +98,31 @@
       else status.textContent='Sin alertas académicas importantes en este momento.';
     }
 
+    renderNextActionsV82(r,as,proximo);
     $('rep-last-update').textContent=new Date().toLocaleString('es-VE',{dateStyle:'short',timeStyle:'short'});
     renderAlert();
+  }
+
+
+  function renderNextActionsV82(r,as,proximo){
+    const host=$('rep-next-actions-list');if(!host)return;
+    const items=[];
+    if(Number(r?.noEntregadas||0)>0){
+      items.push({icon:'⚠️',title:'Revisar actividades no entregadas',text:`Hay ${Number(r.noEntregadas||0)} actividad(es) sin entregar.`});
+    }
+    if(Number(r?.pendientes||0)>0){
+      items.push({icon:'📝',title:'Revisar actividades pendientes',text:`Hay ${Number(r.pendientes||0)} actividad(es) pendiente(s) de entrega o corrección.`});
+    }
+    if(Number(as?.porcentaje||0)>0 && Number(as.porcentaje)<80){
+      items.push({icon:'📅',title:'Atender la asistencia',text:`La asistencia registrada es ${Number(as.porcentaje||0)}%.`});
+    }
+    if(proximo?.fechaCompromiso){
+      items.push({icon:'🤝',title:'Próximo compromiso',text:`Fecha acordada: ${proximo.fechaCompromiso}.`});
+    }
+    if(!items.length){
+      items.push({icon:'✅',title:'Sin alertas prioritarias',text:'Mantenga la revisión periódica del portal y la comunicación con el docente.'});
+    }
+    host.innerHTML=items.slice(0,4).map(x=>`<article><span>${x.icon}</span><div><strong>${esc(x.title)}</strong><small>${esc(x.text)}</small></div></article>`).join('');
   }
 
   function renderSubjects(){
@@ -127,7 +150,7 @@
       <td>${esc(x.fechaPlanificada||'—')}</td>
       <td><span class="status ${estadoClass(x.estadoEntrega)}">${esc(x.estadoEntrega||'Pendiente')}</span></td>
       <td>${x.notaFinal===''||x.notaFinal==null?'Pendiente':`${esc(x.notaFinal)} / ${Number(x.puntos||0)}`}</td>
-      <td>${x.notaRecuperacion===''||x.notaRecuperacion==null?'—':esc(x.notaRecuperacion)}</td>
+      <td>${data?.visibilidad?.recuperaciones===false?'Oculto por el docente':(x.notaRecuperacion===''||x.notaRecuperacion==null?'—':esc(x.notaRecuperacion))}</td>
     </tr>`).join('')||'<tr><td colspan="6" class="rep-empty">No hay actividades para mostrar.</td></tr>';
   }
 
@@ -182,7 +205,29 @@
     </article>`).join('')||'<div class="rep-empty">No hay compromisos académicos registrados.</div>';
   }
 
+  function aplicarVisibilidadV81(){
+    const v=data?.visibilidad||{};
+    const map={
+      calificaciones:v.notas!==false,
+      asistencia:v.asistencia!==false,
+      pendientes:v.pendientes!==false,
+      compromisos:v.compromisos!==false
+    };
+    document.querySelectorAll('.rep-tabs button').forEach(b=>{
+      const key=b.dataset.view;
+      if(key==='calificaciones')b.classList.toggle('hidden',!map.calificaciones);
+      if(key==='asistencia')b.classList.toggle('hidden',!map.asistencia);
+      if(key==='pendientes')b.classList.toggle('hidden',!map.pendientes);
+      if(key==='compromisos')b.classList.toggle('hidden',!map.compromisos);
+    });
+    $('rep-view-calificaciones')?.classList.toggle('privacy-hidden',!map.calificaciones);
+    $('rep-view-asistencia')?.classList.toggle('privacy-hidden',!map.asistencia);
+    $('rep-view-pendientes')?.classList.toggle('privacy-hidden',!map.pendientes);
+    $('rep-view-compromisos')?.classList.toggle('privacy-hidden',!map.compromisos);
+  }
+
   function renderAll(){
+    aplicarVisibilidadV81();
     renderSummaryCards();
     renderSubjects();
     renderActivities();
