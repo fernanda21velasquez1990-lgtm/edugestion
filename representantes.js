@@ -6,6 +6,10 @@
   let data=null;
   let subjectFilter='';
   let periodFilter='';
+  let currentCedula='';
+  let currentCodigo='';
+  let autoRefreshTimer=null;
+  let gradeQuestionActivity=null;
 
   async function api(action,payload={}){
     if(!/^https:\/\/script\.google\.com\/macros\/s\/.+\/exec$/i.test(API_URL)) throw new Error('El portal todavía no está conectado con el servidor.');
@@ -142,6 +146,96 @@
     </article>`).join('')||'<div class="rep-empty">Todavía no hay evaluaciones registradas.</div>';
   }
 
+
+  function notaDisponible(x){
+    return !(x?.notaFinal===''||x?.notaFinal===null||x?.notaFinal===undefined);
+  }
+
+  function estadoConfirmacionNota(x){
+    const e=String(x?.confirmacionNota?.estado||'').toUpperCase();
+    if(e==='VISTA_CONFIRMADA')return '<span class="rep-grade-read is-confirmed">✓ Nota vista por el representante</span>';
+    if(e==='CONSULTA')return '<span class="rep-grade-read is-question">? Consulta enviada al docente</span>';
+    return '';
+  }
+
+  function accionesNotaHTML(x){
+    if(!notaDisponible(x)||!x?.claveEvaluacion)return '';
+    const est=String(x?.confirmacionNota?.estado||'').toUpperCase();
+    return `<div class="rep-grade-actions">
+      <button type="button" class="rep-grade-confirm ${est==='VISTA_CONFIRMADA'?'is-done':''}" data-grade-confirm="${esc(x.claveEvaluacion)}" ${est==='VISTA_CONFIRMADA'?'disabled':''}>${est==='VISTA_CONFIRMADA'?'✓ Confirmado':'✓ Confirmo que vi la nota'}</button>
+      <button type="button" class="rep-grade-question" data-grade-question="${esc(x.claveEvaluacion)}">💬 Tengo una duda con esta nota</button>
+      ${estadoConfirmacionNota(x)}
+    </div>`;
+  }
+
+  function buscarActividadPorClave(clave){
+    return (data?.actividades||[]).find(x=>String(x.claveEvaluacion||'')===String(clave||''));
+  }
+
+  async function confirmarVistaNota(clave){
+    const x=buscarActividadPorClave(clave);if(!x)return;
+    try{
+      const r=await api('confirmarVistaNotaRepresentante',{cedula:currentCedula,codigo:currentCodigo,claveEvaluacion:clave});
+      x.confirmacionNota={estado:'VISTA_CONFIRMADA',actualizadoEn:r.actualizadoEn||'',problema:''};
+      renderActivities();
+    }catch(e){window.alert(e?.message||'No fue posible confirmar la lectura de la nota.');}
+  }
+
+  function abrirConsultaNota(clave){
+    const x=buscarActividadPorClave(clave);if(!x)return;
+    gradeQuestionActivity=x;
+    $('rep-grade-question-info').innerHTML=`<strong>${esc(data?.alumno?.nombre||'Estudiante')}</strong><span>${esc(x.materia||'')} · ${esc(x.actividad||'Evaluación')}</span><span>Nota: <b>${esc(x.notaFinal)} / ${Number(x.puntos||0)}</b></span><span>Docente: ${esc(x.docente||'')}</span>`;
+    $('rep-grade-question-text').value=x?.confirmacionNota?.problema||'';
+    $('rep-grade-question-modal').classList.remove('hidden');
+    setTimeout(()=>$('rep-grade-question-text')?.focus(),50);
+  }
+
+  function cerrarConsultaNota(){
+    $('rep-grade-question-modal')?.classList.add('hidden');
+    gradeQuestionActivity=null;
+  }
+
+  function whatsappNumero(raw){
+    let d=String(raw||'').replace(/\D/g,'');
+    if(/^0\d{10}$/.test(d))d='58'+d.slice(1);
+    return d;
+  }
+
+  async function registrarConsultaNota(){
+    const x=gradeQuestionActivity;if(!x)return;
+    const problema=String($('rep-grade-question-text')?.value||'').trim();
+    if(!problema){window.alert('Escribe brevemente cuál es la duda o problema con la calificación.');return;}
+    const btn=$('rep-grade-question-whatsapp');
+    btn.disabled=true;btn.textContent='Registrando…';
+    try{
+      const r=await api('registrarConsultaNotaRepresentante',{cedula:currentCedula,codigo:currentCodigo,claveEvaluacion:x.claveEvaluacion,problema});
+      x.confirmacionNota={estado:'CONSULTA',actualizadoEn:r.actualizadoEn||'',problema};
+      const w=r?.whatsapp||{};
+      const mensaje=[
+        'Buenas. Soy el representante de '+String(w.alumno||data?.alumno?.nombre||'el estudiante')+'.',
+        'Tengo una consulta sobre una evaluación de '+String(w.materia||x.materia||'')+'.',
+        'Evaluación: '+String(w.actividad||x.actividad||''),
+        'Nota registrada: '+String(w.nota??x.notaFinal)+' / '+String(w.puntos??x.puntos),
+        'Mi duda o problema: '+problema,
+        'Agradezco por favor indicarme el motivo de esta calificación y la orientación correspondiente.'
+      ].join('\n');
+      const numero=whatsappNumero(w.telefono||x.telefonoDocente||'');
+      cerrarConsultaNota();
+      renderActivities();
+      if(numero){window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`,'_blank','noopener');}
+      else{
+        try{await navigator.clipboard.writeText(mensaje);}catch(_){}
+        window.alert('La consulta quedó registrada, pero el docente no tiene un número de WhatsApp registrado en EduGestión. El mensaje fue preparado para copiarlo y enviarlo por otro medio.');
+      }
+    }catch(e){window.alert(e?.message||'No fue posible registrar la consulta.');}
+    finally{if(btn){btn.disabled=false;btn.textContent='Registrar y abrir WhatsApp';}}
+  }
+
+  function bindGradeActions(){
+    document.querySelectorAll('[data-grade-confirm]').forEach(b=>b.addEventListener('click',()=>confirmarVistaNota(b.dataset.gradeConfirm)));
+    document.querySelectorAll('[data-grade-question]').forEach(b=>b.addEventListener('click',()=>abrirConsultaNota(b.dataset.gradeQuestion)));
+  }
+
   function renderActivities(){
     const rows=filteredActivities();
     $('rep-activities-body').innerHTML=rows.map(x=>`<tr>
@@ -149,9 +243,10 @@
       <td>${esc(x.actividad)}</td>
       <td>${esc(x.fechaPlanificada||'—')}</td>
       <td><span class="status ${estadoClass(x.estadoEntrega)}">${esc(x.estadoEntrega||'Pendiente')}</span></td>
-      <td>${x.notaFinal===''||x.notaFinal==null?'Pendiente':`${esc(x.notaFinal)} / ${Number(x.puntos||0)}`}</td>
+      <td><div class="rep-grade-cell"><strong>${x.notaFinal===''||x.notaFinal==null?'Pendiente':`${esc(x.notaFinal)} / ${Number(x.puntos||0)}`}</strong>${accionesNotaHTML(x)}</div></td>
       <td>${data?.visibilidad?.recuperaciones===false?'Oculto por el docente':(x.notaRecuperacion===''||x.notaRecuperacion==null?'—':esc(x.notaRecuperacion))}</td>
     </tr>`).join('')||'<tr><td colspan="6" class="rep-empty">No hay actividades para mostrar.</td></tr>';
+    bindGradeActions();
   }
 
   function renderPending(){
@@ -192,6 +287,14 @@
         <div class="rep-subject-stats"><div><b>${m.presentes||0}</b><small>Presentes</small></div><div><b>${m.ausentes||0}</b><small>Ausentes</small></div><div><b>${m.tardanzas||0}</b><small>Tardanzas</small></div><div><b>${m.justificadas||0}</b><small>Justificadas</small></div></div>
         <div class="rep-progress"><span style="width:${pct}%"></span></div></article>`;
     }).join('')||'<div class="rep-empty">Todavía no hay asistencia registrada.</div>';
+
+    let detalle=(data?.asistenciaDetalle||[]);
+    if(subjectFilter)detalle=detalle.filter(x=>x.materia===subjectFilter);
+    const body=$('rep-attendance-detail');
+    if(body)body.innerHTML=detalle.map(x=>`<tr>
+      <td>${esc(x.fecha||'—')}</td><td><strong>${esc(x.materia||'')}</strong></td><td>${esc(x.docente||'')}</td>
+      <td><span class="status ${estadoClass(x.estado)}">${esc(x.estado||'')}</span></td>
+    </tr>`).join('')||'<tr><td colspan="4" class="rep-empty">No hay registros de asistencia para mostrar.</td></tr>';
   }
 
   function renderCommitments(){
@@ -247,6 +350,23 @@
     w.document.close();
   }
 
+
+  async function refrescarPortal(silencioso=false){
+    if(!currentCedula||!currentCodigo)return;
+    try{
+      const nuevo=await api('consultaRepresentantePublica',{cedula:currentCedula,codigo:currentCodigo});
+      data=nuevo;
+      buildFilters();
+      renderAll();
+      if(!silencioso)window.alert('Información académica actualizada.');
+    }catch(e){if(!silencioso)window.alert(e?.message||'No se pudo actualizar la información.');}
+  }
+
+  function iniciarActualizacionAutomatica(){
+    if(autoRefreshTimer)clearInterval(autoRefreshTimer);
+    autoRefreshTimer=setInterval(()=>refrescarPortal(true),60000);
+  }
+
   $('rep-login-form')?.addEventListener('submit',async e=>{
     e.preventDefault();
     const cedula=String($('rep-cedula').value||'').trim();
@@ -256,6 +376,8 @@
     btn.disabled=true;btn.textContent='Consultando…';
     try{
       data=await api('consultaRepresentantePublica',{cedula,codigo});
+      currentCedula=cedula;currentCodigo=codigo;
+      iniciarActualizacionAutomatica();
       subjectFilter='';periodFilter='';
       $('rep-login-view').classList.add('hidden');
       $('rep-dashboard').classList.remove('hidden');
@@ -277,8 +399,14 @@
   $('rep-filter-subject')?.addEventListener('change',e=>{subjectFilter=e.target.value;renderAll();});
   $('rep-filter-period')?.addEventListener('change',e=>{periodFilter=e.target.value;renderAll();});
   $('rep-print')?.addEventListener('click',printSummary);
+  $('rep-refresh')?.addEventListener('click',()=>refrescarPortal(false));
+  $('rep-grade-question-close')?.addEventListener('click',cerrarConsultaNota);
+  $('rep-grade-question-cancel')?.addEventListener('click',cerrarConsultaNota);
+  $('rep-grade-question-whatsapp')?.addEventListener('click',registrarConsultaNota);
+  $('rep-grade-question-modal')?.addEventListener('click',e=>{if(e.target===e.currentTarget)cerrarConsultaNota();});
+
   $('rep-logout')?.addEventListener('click',()=>{
-    data=null;subjectFilter='';periodFilter='';
+    data=null;subjectFilter='';periodFilter='';currentCedula='';currentCodigo='';if(autoRefreshTimer){clearInterval(autoRefreshTimer);autoRefreshTimer=null;}
     $('rep-dashboard').classList.add('hidden');
     $('rep-login-view').classList.remove('hidden');
     $('rep-codigo').value='';

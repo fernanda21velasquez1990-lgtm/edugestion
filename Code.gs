@@ -38,7 +38,8 @@ var EG = Object.freeze({
     ESTADO_ACTIVIDADES_EVALUACION: 'EstadoActividadesEvaluacion',
     CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico',
     COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos',
-    ACCESO_REPRESENTANTES: 'AccesoRepresentantes'
+    ACCESO_REPRESENTANTES: 'AccesoRepresentantes',
+    CONFIRMACION_NOTAS_REPRESENTANTES: 'ConfirmacionNotasRepresentantes'
   }),
   HEADERS: Object.freeze({
     Docentes: [
@@ -138,6 +139,11 @@ var EG = Object.freeze({
     AccesoRepresentantes: [
       'id', 'cedulaAlumno', 'alumno', 'salt', 'codigoHash', 'activo',
       'creadoPorIdProfesor', 'creadoPor', 'creadoEn', 'actualizadoEn', 'ultimoAcceso'
+    ],
+    ConfirmacionNotasRepresentantes: [
+      'id', 'cedulaAlumno', 'idProfesor', 'docente', 'materia',
+      'claveEvaluacion', 'idAlumno', 'alumno', 'actividad', 'nota', 'puntos',
+      'estado', 'problema', 'creadoEn', 'actualizadoEn'
     ]
   })
 });
@@ -420,6 +426,14 @@ function doPost(e) {
     // Requiere cédula del alumno + código de acceso de 6 dígitos.
     if (action === 'consultaRepresentantePublica') {
       return json_(consultaRepresentantePublica_(payload));
+    }
+
+    // V8.5 · Confirmación y consulta de calificaciones por representantes.
+    if (action === 'confirmarVistaNotaRepresentante') {
+      return json_(confirmarVistaNotaRepresentante_(payload));
+    }
+    if (action === 'registrarConsultaNotaRepresentante') {
+      return json_(registrarConsultaNotaRepresentante_(payload));
     }
 
     // Acciones exclusivas del bot de Telegram. Se autentican con
@@ -6835,6 +6849,7 @@ var EG = Object.freeze({
     CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico',
     COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos',
     ACCESO_REPRESENTANTES: 'AccesoRepresentantes',
+    CONFIRMACION_NOTAS_REPRESENTANTES: 'ConfirmacionNotasRepresentantes',
     PORTAL_REPRESENTANTES_CONFIG: 'PortalRepresentantesConfig',
     SEGUIMIENTO_FAMILIAR_CASOS: 'SeguimientoFamiliarCasos'
   }),
@@ -6936,6 +6951,11 @@ var EG = Object.freeze({
     AccesoRepresentantes: [
       'id', 'cedulaAlumno', 'alumno', 'salt', 'codigoHash', 'activo',
       'creadoPorIdProfesor', 'creadoPor', 'creadoEn', 'actualizadoEn', 'ultimoAcceso'
+    ],
+    ConfirmacionNotasRepresentantes: [
+      'id', 'cedulaAlumno', 'idProfesor', 'docente', 'materia',
+      'claveEvaluacion', 'idAlumno', 'alumno', 'actividad', 'nota', 'puntos',
+      'estado', 'problema', 'creadoEn', 'actualizadoEn'
     ],
     PortalRepresentantesConfig: [
       'idProfesor', 'mostrarNotas', 'mostrarAsistencia', 'mostrarPendientes',
@@ -7227,6 +7247,14 @@ function doPost(e) {
     // Requiere cédula del alumno + código de acceso de 6 dígitos.
     if (action === 'consultaRepresentantePublica') {
       return json_(consultaRepresentantePublica_(payload));
+    }
+
+    // V8.5 · Confirmación y consulta de calificaciones por representantes.
+    if (action === 'confirmarVistaNotaRepresentante') {
+      return json_(confirmarVistaNotaRepresentante_(payload));
+    }
+    if (action === 'registrarConsultaNotaRepresentante') {
+      return json_(registrarConsultaNotaRepresentante_(payload));
     }
 
     // Acciones exclusivas del bot de Telegram. Se autentican con
@@ -13412,6 +13440,19 @@ function consultaRepresentantePublica_(payload) {
     };
   }
 
+  asegurarConfirmacionNotasRepresentantes_();
+  var confirmaciones = leerObjetos_(EG.SHEETS.CONFIRMACION_NOTAS_REPRESENTANTES).objetos.filter(function(r) {
+    return normalizarCedulaRepresentante_(r.cedulaAlumno) === cedula;
+  });
+  var confirmacionPorClave = {};
+  confirmaciones.forEach(function(r) {
+    var k = String(r.claveEvaluacion || '');
+    if (!k) return;
+    if (!confirmacionPorClave[k] || String(r.actualizadoEn || r.creadoEn || '') > String(confirmacionPorClave[k].actualizadoEn || confirmacionPorClave[k].creadoEn || '')) {
+      confirmacionPorClave[k] = r;
+    }
+  });
+
   var evaluaciones = leerObjetos_(EG.SHEETS.EVALUACION_SEGUIMIENTO).objetos.filter(function(r) {
     return ids[String(r.idAlumno || '')];
   });
@@ -13470,9 +13511,14 @@ function consultaRepresentantePublica_(payload) {
       if (notaFinal !== '') m.puntosObtenidos += Number(notaFinal || 0);
     }
 
+    var claveEvaluacion = 'EV|' + String(r.idProfesor || '') + '|' + String(r.idAlumno || '') + '|' + String(r.idActividad || r.id || '');
+    var conf = confirmacionPorClave[claveEvaluacion] || null;
     return {
+      claveEvaluacion: claveEvaluacion,
+      idProfesor: String(r.idProfesor || ''),
       materia: materia,
       docente: String(((docentes[String(r.idProfesor || '')] || {}).nombre) || ''),
+      telefonoDocente: String((((docentesTabla.objetos.filter(function(d){ return String(d.id || '') === String(r.idProfesor || ''); })[0]) || {}).telefono) || ''),
       lapso: String(r.lapso || ''),
       actividad: String(r.actividad || 'Actividad evaluativa'),
       fechaPlanificada: String(serializarValor_(r.fechaPlanificada, 'fecha') || ''),
@@ -13482,7 +13528,12 @@ function consultaRepresentantePublica_(payload) {
       notaOriginal: privacidad.mostrarNotas ? notaOriginal : '',
       notaRecuperacion: (privacidad.mostrarNotas && privacidad.mostrarRecuperaciones && rec && rec.notaRecuperacion !== '' && rec.notaRecuperacion !== null && rec.notaRecuperacion !== undefined)
         ? Number(rec.notaRecuperacion) : '',
-      notaFinal: privacidad.mostrarNotas ? notaFinal : ''
+      notaFinal: privacidad.mostrarNotas ? notaFinal : '',
+      confirmacionNota: conf ? {
+        estado: String(conf.estado || ''),
+        problema: String(conf.problema || ''),
+        actualizadoEn: String(conf.actualizadoEn || conf.creadoEn || '')
+      } : null
     };
   }).sort(function(a,b) {
     return String(b.fechaPlanificada || '').localeCompare(String(a.fechaPlanificada || ''));
@@ -13507,9 +13558,14 @@ function consultaRepresentantePublica_(payload) {
 
     var nota = r.nota === '' || r.nota === null || r.nota === undefined ? '' : Number(r.nota);
     var max = Number(r.notaMaxima || 20);
+    var claveHist = 'CAL|' + String(r.idProfesor || '') + '|' + String(r.idAlumno || '') + '|' + String(r.id || '');
+    var confHist = confirmacionPorClave[claveHist] || null;
     actividadesPublicas.push({
+      claveEvaluacion: claveHist,
+      idProfesor: String(r.idProfesor || ''),
       materia: materia,
       docente: String(((docentes[String(r.idProfesor || '')] || {}).nombre) || ''),
+      telefonoDocente: String((((docentesTabla.objetos.filter(function(d){ return String(d.id || '') === String(r.idProfesor || ''); })[0]) || {}).telefono) || ''),
       lapso: String(r.periodo || ''),
       actividad: actividad,
       fechaPlanificada: fecha,
@@ -13518,7 +13574,12 @@ function consultaRepresentantePublica_(payload) {
       puntos: max,
       notaOriginal: nota,
       notaRecuperacion: '',
-      notaFinal: nota
+      notaFinal: nota,
+      confirmacionNota: confHist ? {
+        estado: String(confHist.estado || ''),
+        problema: String(confHist.problema || ''),
+        actualizadoEn: String(confHist.actualizadoEn || confHist.creadoEn || '')
+      } : null
     });
 
     if (!materias[materia]) {
@@ -13554,6 +13615,17 @@ function consultaRepresentantePublica_(payload) {
     else { obj.presentes++; totales.presentes++; }
   });
   totales.porcentaje = totales.total ? Math.round(((totales.presentes + totales.tardanzas) / totales.total) * 100) : 0;
+
+  var asistenciaDetalle = asistencia.map(function(r) {
+    return {
+      materia: materiaKey_(r),
+      docente: String(((docentes[String(r.idProfesor || '')] || {}).nombre) || ''),
+      fecha: String(serializarValor_(r.fecha, 'fecha') || ''),
+      estado: normalizarEstadoAsistencia_(r.estado)
+    };
+  }).sort(function(a,b) {
+    return String(b.fecha || '').localeCompare(String(a.fecha || ''));
+  }).slice(0, 120);
 
   var materiasLista = Object.keys(materias).map(function(k) {
     var m = materias[k];
@@ -13611,6 +13683,7 @@ function consultaRepresentantePublica_(payload) {
     materias: materiasLista,
     actividades: actividadesPublicas,
     asistenciaPorMateria: Object.keys(asistenciaResumen).map(function(k){ return asistenciaResumen[k]; }),
+    asistenciaDetalle: asistenciaDetalle,
     compromisos: compromisosPublicos,
     visibilidad: {
       notas: algunoPermite_('mostrarNotas'),
@@ -13625,6 +13698,129 @@ function consultaRepresentantePublica_(payload) {
 }
 /* EDUGESTION_PORTAL_REPRESENTANTES_V76_END */
 
+
+
+/* =========================================================
+ * EduGestión · V8.5
+ * CONFIRMACIÓN DE LECTURA Y CONSULTA DE CALIFICACIONES
+ * ========================================================= */
+function asegurarConfirmacionNotasRepresentantes_() {
+  return asegurarHoja_(getDb_(), EG.SHEETS.CONFIRMACION_NOTAS_REPRESENTANTES, EG.HEADERS.ConfirmacionNotasRepresentantes);
+}
+
+function claveEvaluacionRepresentante_(tipo, r) {
+  if (tipo === 'EV') {
+    return 'EV|' + String(r.idProfesor || '') + '|' + String(r.idAlumno || '') + '|' + String(r.idActividad || r.id || '');
+  }
+  return 'CAL|' + String(r.idProfesor || '') + '|' + String(r.idAlumno || '') + '|' + String(r.id || '');
+}
+
+function buscarEvaluacionRepresentante_(cedula, claveEvaluacion) {
+  var alumnos = leerObjetos_(EG.SHEETS.ALUMNOS).objetos.filter(function(a) {
+    return normalizarCedulaRepresentante_(a.cedula) === cedula;
+  });
+  var ids = {};
+  alumnos.forEach(function(a){ ids[String(a.id || '')] = a; });
+  var clave = String(claveEvaluacion || '').trim();
+  if (!clave) lanzar_('Falta identificar la evaluación.', 'BAD_REQUEST');
+
+  var encontrados = leerObjetos_(EG.SHEETS.EVALUACION_SEGUIMIENTO).objetos.filter(function(r) {
+    return ids[String(r.idAlumno || '')] && claveEvaluacionRepresentante_('EV', r) === clave;
+  });
+  if (encontrados.length) {
+    var e = encontrados[0];
+    var recs = leerObjetos_(EG.SHEETS.RECUPERACIONES_EVALUACION).objetos.filter(function(x) {
+      return String(x.idProfesor || '') === String(e.idProfesor || '') &&
+        String(x.idAlumno || '') === String(e.idAlumno || '') &&
+        String(x.idActividad || '') === String(e.idActividad || '');
+    });
+    var rec = recs.length ? recs[0] : null;
+    var nota = rec && rec.notaFinal !== '' && rec.notaFinal !== null && rec.notaFinal !== undefined
+      ? Number(rec.notaFinal)
+      : (e.nota === '' || e.nota === null || e.nota === undefined ? '' : Number(e.nota));
+    return { tipo:'EV', registro:e, alumno:ids[String(e.idAlumno || '')], nota:nota, puntos:Number(e.puntos || 0) };
+  }
+
+  var historicos = leerObjetos_(EG.SHEETS.CALIFICACIONES).objetos.filter(function(r) {
+    return ids[String(r.idAlumno || '')] && claveEvaluacionRepresentante_('CAL', r) === clave;
+  });
+  if (historicos.length) {
+    var h = historicos[0];
+    return {
+      tipo:'CAL', registro:h, alumno:ids[String(h.idAlumno || '')],
+      nota:h.nota === '' || h.nota === null || h.nota === undefined ? '' : Number(h.nota),
+      puntos:Number(h.notaMaxima || 20)
+    };
+  }
+  lanzar_('La evaluación indicada ya no está disponible.', 'NOT_FOUND');
+}
+
+function guardarInteraccionNotaRepresentante_(payload, estado) {
+  var cedula = normalizarCedulaRepresentante_(payload.cedula);
+  validarAccesoRepresentantePublico_(cedula, payload.codigo);
+  asegurarConfirmacionNotasRepresentantes_();
+
+  var info = buscarEvaluacionRepresentante_(cedula, payload.claveEvaluacion);
+  var r = info.registro;
+  var alumno = info.alumno || {};
+  var docente = leerObjetos_(EG.SHEETS.DOCENTES).objetos.filter(function(d) {
+    return String(d.id || '') === String(r.idProfesor || '');
+  })[0] || {};
+  var problema = estado === 'CONSULTA' ? String(payload.problema || '').trim().slice(0, 1000) : '';
+  if (estado === 'CONSULTA' && !problema) lanzar_('Explica brevemente cuál es la duda sobre la nota.', 'VALIDATION_ERROR');
+
+  var tabla = leerObjetos_(EG.SHEETS.CONFIRMACION_NOTAS_REPRESENTANTES);
+  var existente = tabla.objetos.filter(function(x) {
+    return normalizarCedulaRepresentante_(x.cedulaAlumno) === cedula &&
+      String(x.claveEvaluacion || '') === String(payload.claveEvaluacion || '');
+  })[0];
+  var ahora = ahora_();
+  var datos = {
+    id: existente ? String(existente.id || Utilities.getUuid()) : Utilities.getUuid(),
+    cedulaAlumno: cedula,
+    idProfesor: String(r.idProfesor || ''),
+    docente: String(docente.nombre || ''),
+    materia: String(r.materia || docente.materia || ''),
+    claveEvaluacion: String(payload.claveEvaluacion || ''),
+    idAlumno: String(r.idAlumno || ''),
+    alumno: String(alumno.nombre || r.alumno || ''),
+    actividad: String(r.actividad || 'Actividad evaluativa'),
+    nota: info.nota,
+    puntos: info.puntos,
+    estado: estado,
+    problema: problema,
+    creadoEn: existente ? String(existente.creadoEn || ahora) : ahora,
+    actualizadoEn: ahora
+  };
+  if (existente) actualizarFilaObjeto_(EG.SHEETS.CONFIRMACION_NOTAS_REPRESENTANTES, existente.__row, datos);
+  else anexarObjeto_(EG.SHEETS.CONFIRMACION_NOTAS_REPRESENTANTES, datos);
+
+  return {
+    status:'success',
+    estado:estado,
+    actualizadoEn:ahora,
+    mensaje:estado === 'CONSULTA' ? 'La consulta quedó registrada.' : 'Quedó confirmado que el representante vio la calificación.',
+    whatsapp:{
+      telefono:String(docente.telefono || ''),
+      docente:String(docente.nombre || ''),
+      materia:String(r.materia || docente.materia || ''),
+      alumno:String(alumno.nombre || r.alumno || ''),
+      actividad:String(r.actividad || 'Actividad evaluativa'),
+      nota:info.nota,
+      puntos:info.puntos,
+      problema:problema
+    }
+  };
+}
+
+function confirmarVistaNotaRepresentante_(payload) {
+  return guardarInteraccionNotaRepresentante_(payload, 'VISTA_CONFIRMADA');
+}
+
+function registrarConsultaNotaRepresentante_(payload) {
+  return guardarInteraccionNotaRepresentante_(payload, 'CONSULTA');
+}
+/* EDUGESTION_CONFIRMACION_NOTAS_REPRESENTANTES_V85_END */
 
 /* =========================================================
  * EduGestión · V8.1

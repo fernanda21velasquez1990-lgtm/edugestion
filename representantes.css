@@ -125,3 +125,149 @@
 .rep-next-actions-list strong{font-size:10px;color:#334f69}
 .rep-next-actions-list small{margin-top:3px;font-size:8px;line-height:1.45;color:#7d8c9b}
 @media(max-width:650px){.rep-next-actions-list{grid-template-columns:1fr}}
+
+
+/* =========================================================
+   V8.4.1 · Tipografía ampliada extra para el Portal de Representantes
+   ========================================================= */
+.rep-public-app{max-width:1240px;padding:30px 26px 54px}
+.rep-public-brand strong{font-size:22px}
+.rep-public-brand span{font-size:13px}
+.rep-welcome h1{font-size:50px;line-height:1.08}
+.rep-welcome>p{font-size:19px;line-height:1.72}
+.rep-welcome-points{font-size:16px;gap:12px}
+.rep-login-card{padding:34px}
+.rep-login-card h2{font-size:30px}
+.rep-login-card>p{font-size:15px;line-height:1.65}
+.rep-login-card label{font-size:12px}
+.rep-login-card input,.rep-login-card button{height:54px;font-size:17px}
+.rep-login-card small{font-size:12px}
+.rep-error{font-size:13px}
+
+.rep-student-header{padding:30px;border-radius:28px}
+.rep-student-header h1{font-size:34px;line-height:1.15}
+.rep-student-header p{font-size:16px;line-height:1.55}
+.rep-student-header button{padding:12px 16px;font-size:15px}
+.rep-student-avatar{width:62px;height:62px;font-size:24px}
+.rep-header-actions{gap:10px}
+
+.rep-alert-banner{padding:16px 18px;border-radius:16px;gap:12px}
+.rep-alert-banner>i{font-size:24px}
+.rep-alert-banner strong{font-size:16px}
+.rep-alert-banner span{font-size:14px;line-height:1.6}
+
+.rep-family-status{padding:18px;border-radius:20px}
+.rep-family-status>div:first-child>span{font-size:12px}
+.rep-family-status>div:first-child>strong{font-size:17px;line-height:1.45}
+.rep-family-status-grid{gap:10px;margin-top:14px}
+.rep-family-status-grid span{padding:12px;border-radius:13px}
+.rep-family-status-grid b{font-size:18px}
+.rep-family-status-grid small{font-size:11px;line-height:1.35}
+
+.rep-next-actions{padding:18px;border-radius:18px}
+.rep-next-actions-head span{font-size:11px}
+.rep-next-actions-head strong{font-size:17px}
+.rep-next-actions-list article{padding:12px 14px;border-radius:13px;gap:10px}
+.rep-next-actions-list article>span{font-size:22px}
+.rep-next-actions-list strong{font-size:14px;line-height:1.4}
+.rep-next-actions-list small{font-size:12px;line-height:1.55}
+
+.rep-summary-grid{gap:12px}
+.rep-summary-grid article{padding:18px;border-radius:18px}
+.rep-summary-grid span{font-size:12px;line-height:1.35}
+.rep-summary-grid strong{font-size:30px;margin-top:6px}
+
+.rep-filterbar{padding:15px;gap:12px;border-radius:18px}
+.rep-filterbar label span,.rep-last-update span{font-size:11px}
+.rep-filterbar select{height:44px;font-size:15px;padding:0 12px}
+.rep-last-update strong{font-size:14px;line-height:1.45}
+
+.rep-tabs{gap:9px;padding:9px;border-radius:17px}
+.rep-tabs button{padding:12px 16px;font-size:14px;border-radius:11px}
+
+.rep-view{padding:22px;border-radius:22px}
+.rep-section-title{margin-bottom:16px}
+.rep-section-title span{font-size:11px}
+.rep-section-title h2{font-size:24px;line-height:1.25}
+.rep-section-title input{height:42px;font-size:15px}
+
+.rep-subject-grid{gap:14px}
+.rep-subject-card{padding:18px;border-radius:17px}
+.rep-subject-card h3{font-size:18px}
+.rep-subject-card header span{font-size:12px}
+.rep-subject-stats{gap:8px;margin-top:14px}
+.rep-subject-stats div{padding:10px;border-radius:11px}
+.rep-subject-stats b{font-size:18px}
+.rep-subject-stats small{font-size:10px;line-height:1.35}
+.rep-progress{height:9px;margin-top:13px}
+.rep-card-alert{font-size:12px;line-height:1.5;margin-top:10px}
+
+.rep-table-wrap{border-radius:15px}
+table{font-size:14px;min-width:860px}
+th{font-size:11px;padding:12px}
+td{font-size:14px;line-height:1.45;padding:12px}
+.status{padding:6px 10px;font-size:11px}
+
+.rep-pending-list{gap:11px}
+.rep-pending-card{padding:13px 14px;border-radius:14px}
+.rep-pending-card>div span{font-size:11px}
+.rep-pending-card>div strong{font-size:15px;line-height:1.35}
+.rep-pending-card>div small{font-size:11px}
+
+.rep-grade-grid{gap:12px}
+.rep-grade-card{padding:16px;border-radius:16px}
+.rep-grade-top span{font-size:11px}
+.rep-grade-top strong{font-size:15px}
+.rep-grade-top>b{font-size:26px}
+.rep-grade-card>small{font-size:11px;line-height:1.45}
+
+.rep-commitments{gap:10px}
+.rep-commitment{grid-template-columns:160px minmax(0,1fr) auto;gap:14px;padding:14px;border-radius:14px}
+.rep-commitment strong{font-size:14px;line-height:1.4}
+.rep-commitment span,.rep-commitment small{font-size:12px;line-height:1.45}
+.rep-commitment-state{padding:6px 10px;font-size:11px!important}
+.rep-empty{font-size:15px;line-height:1.55;padding:42px}
+.rep-privacy{font-size:12px;line-height:1.65;padding:20px}
+
+@media(max-width:900px){
+  .rep-welcome h1{font-size:40px}
+  .rep-welcome>p{font-size:17px}
+  .rep-summary-grid strong{font-size:26px}
+  .rep-section-title h2{font-size:22px}
+}
+
+@media(max-width:600px){
+  .rep-public-app{padding:20px 14px 38px}
+  .rep-welcome h1{font-size:32px}
+  .rep-welcome>p{font-size:16px}
+  .rep-student-header h1{font-size:28px}
+  .rep-student-header p{font-size:14px}
+  .rep-summary-grid span{font-size:11px}
+  .rep-summary-grid strong{font-size:24px}
+  .rep-tabs button{font-size:13px}
+  .rep-section-title h2{font-size:20px}
+  table{font-size:13px}
+  td,th{font-size:12px}
+}
+
+
+/* =========================================================
+   V8.5 · Confirmación de notas y consulta directa por WhatsApp
+   ========================================================= */
+.rep-grade-cell{min-width:235px}.rep-grade-cell>strong{display:block;font-size:15px;color:#294b69;margin-bottom:8px}
+.rep-grade-actions{display:flex;flex-direction:column;align-items:flex-start;gap:7px}
+.rep-grade-actions button{border:1px solid #d6e2eb;border-radius:9px;padding:7px 9px;background:#fff;color:#285b85;font-size:11px;font-weight:900;cursor:pointer;text-align:left;line-height:1.35}
+.rep-grade-actions button:hover{background:#f2f8fd}.rep-grade-actions button:disabled{cursor:default;opacity:.8}
+.rep-grade-actions .rep-grade-confirm{background:#eff9f4;border-color:#c9e6d7;color:#1b7450}.rep-grade-actions .rep-grade-confirm.is-done{background:#dff4e8;color:#176b48}
+.rep-grade-actions .rep-grade-question{background:#fff8e8;border-color:#ecd59a;color:#875d09}
+.rep-grade-read{display:block;border-radius:8px;padding:6px 8px;font-size:10px;font-weight:900;line-height:1.4}
+.rep-grade-read.is-confirmed{background:#e5f6ec;color:#1a744d}.rep-grade-read.is-question{background:#fff0cf;color:#8c6100}
+.rep-header-actions #rep-refresh{background:rgba(255,255,255,.2)}
+.rep-grade-modal{position:fixed;inset:0;z-index:9999;background:rgba(22,43,63,.56);display:grid;place-items:center;padding:20px}
+.rep-grade-modal-card{width:min(620px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:22px;box-shadow:0 30px 80px rgba(19,45,70,.3);padding:22px}
+.rep-grade-modal-head{display:flex;justify-content:space-between;gap:15px;align-items:flex-start}.rep-grade-modal-head span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:900;color:#7c8c9d}.rep-grade-modal-head strong{display:block;margin-top:4px;font-size:22px;color:#274965}.rep-grade-modal-head button{border:0;background:#edf3f7;border-radius:10px;width:38px;height:38px;font-size:23px;color:#4f6478;cursor:pointer}
+.rep-grade-question-info{margin:16px 0;padding:14px;border:1px solid #dfe8ef;border-radius:14px;background:#f8fbfd}.rep-grade-question-info strong,.rep-grade-question-info span{display:block}.rep-grade-question-info strong{font-size:17px;color:#284d6c}.rep-grade-question-info span{font-size:13px;color:#62788d;margin-top:4px}.rep-grade-question-label>span{display:block;margin-bottom:7px;font-size:13px;font-weight:900;color:#435e76}.rep-grade-question-label textarea{width:100%;resize:vertical;border:1px solid #cfdae4;border-radius:12px;padding:12px;font:inherit;font-size:14px;line-height:1.5;color:#2d465e;outline:none}.rep-grade-question-label textarea:focus{border-color:#3984bd;box-shadow:0 0 0 3px rgba(57,132,189,.12)}
+.rep-grade-question-note{font-size:12px;line-height:1.55;color:#6c7d8e;background:#f7fafc;border-radius:10px;padding:10px 12px}.rep-grade-modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:15px;flex-wrap:wrap}.rep-grade-modal-actions button{border:0;border-radius:10px;padding:11px 15px;font-size:13px;font-weight:900;cursor:pointer;background:#176f51;color:#fff}.rep-grade-modal-actions button.secondary{background:#edf2f6;color:#476078}.rep-grade-modal-actions button:disabled{opacity:.65;cursor:wait}
+@media(max-width:600px){.rep-grade-cell{min-width:210px}.rep-grade-modal-card{padding:17px}.rep-grade-modal-head strong{font-size:19px}.rep-grade-modal-actions{flex-direction:column-reverse}.rep-grade-modal-actions button{width:100%}}
+
+.rep-attendance-detail-block{margin-top:20px}.rep-attendance-detail-title{margin-bottom:10px}.rep-attendance-detail-title span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:900;color:#7f8f9f}.rep-attendance-detail-title strong{display:block;margin-top:4px;font-size:18px;color:#2d4d69}.rep-attendance-table{min-width:650px}

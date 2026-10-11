@@ -59,6 +59,7 @@
           </div>
         </div>
         <div class="rep-header-actions">
+          <button id="rep-refresh" type="button">↻ Actualizar ahora</button>
           <button id="rep-print" type="button">🖨 Imprimir resumen</button>
           <button id="rep-logout" type="button">Salir</button>
         </div>
@@ -136,7 +137,7 @@
         </div>
         <div class="rep-table-wrap">
           <table>
-            <thead><tr><th>Materia</th><th>Actividad</th><th>Fecha</th><th>Entrega</th><th>Puntuación</th><th>Recuperación</th></tr></thead>
+            <thead><tr><th>Materia</th><th>Actividad</th><th>Fecha</th><th>Entrega</th><th>Puntuación y confirmación</th><th>Recuperación</th></tr></thead>
             <tbody id="rep-activities-body"></tbody>
           </table>
         </div>
@@ -161,6 +162,15 @@
           <div><span>Asistencia</span><h2>Resumen por materia</h2></div>
         </div>
         <div id="rep-attendance-subjects" class="rep-subject-grid"></div>
+        <div class="rep-attendance-detail-block">
+          <div class="rep-attendance-detail-title"><span>Detalle reciente</span><strong>Asistencias e inasistencias registradas</strong></div>
+          <div class="rep-table-wrap">
+            <table class="rep-attendance-table">
+              <thead><tr><th>Fecha</th><th>Materia</th><th>Docente</th><th>Estado</th></tr></thead>
+              <tbody id="rep-attendance-detail"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section id="rep-view-compromisos" class="rep-view hidden">
@@ -173,6 +183,27 @@
       <footer class="rep-privacy" id="rep-privacy"></footer>
     </section>
   </main>
+
+
+<div id="rep-grade-question-modal" class="rep-grade-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rep-grade-question-title">
+  <div class="rep-grade-modal-card">
+    <div class="rep-grade-modal-head">
+      <div><span>Consulta sobre una calificación</span><strong id="rep-grade-question-title">Tengo una duda con esta nota</strong></div>
+      <button id="rep-grade-question-close" type="button" aria-label="Cerrar">×</button>
+    </div>
+    <div id="rep-grade-question-info" class="rep-grade-question-info"></div>
+    <label class="rep-grade-question-label">
+      <span>¿Cuál es el problema o duda?</span>
+      <textarea id="rep-grade-question-text" rows="5" maxlength="1000" placeholder="Ej.: Pensábamos que la actividad estaba completa. ¿Podría explicarnos qué aspecto faltó o por qué obtuvo esta puntuación?"></textarea>
+    </label>
+    <p class="rep-grade-question-note">Al continuar, la consulta quedará registrada en EduGestión y se abrirá WhatsApp con un mensaje preparado para el docente.</p>
+    <div class="rep-grade-modal-actions">
+      <button id="rep-grade-question-cancel" type="button" class="secondary">Cancelar</button>
+      <button id="rep-grade-question-whatsapp" type="button">Registrar y abrir WhatsApp</button>
+    </div>
+  </div>
+</div>
+
   <script src="config.js"></script>
   <script src="representantes.js"></script>
 </body>
