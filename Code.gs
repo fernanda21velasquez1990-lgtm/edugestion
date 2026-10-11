@@ -37,7 +37,8 @@ var EG = Object.freeze({
     AUDITORIA_CALIFICACIONES: 'AuditoriaCalificaciones',
     ESTADO_ACTIVIDADES_EVALUACION: 'EstadoActividadesEvaluacion',
     CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico',
-    COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos'
+    COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos',
+    ACCESO_REPRESENTANTES: 'AccesoRepresentantes'
   }),
   HEADERS: Object.freeze({
     Docentes: [
@@ -133,6 +134,10 @@ var EG = Object.freeze({
       'idAlumno', 'alumno', 'fechaRegistro', 'fechaCompromiso', 'tipo',
       'representante', 'medio', 'compromiso', 'estado', 'resueltoEn',
       'resultado', 'creadoEn', 'actualizadoEn'
+    ],
+    AccesoRepresentantes: [
+      'id', 'cedulaAlumno', 'alumno', 'salt', 'codigoHash', 'activo',
+      'creadoPorIdProfesor', 'creadoPor', 'creadoEn', 'actualizadoEn', 'ultimoAcceso'
     ]
   })
 });
@@ -411,6 +416,12 @@ function doPost(e) {
       return json_(registrarEncuestaPersonalPublica_(payload));
     }
 
+    // V7.6 · Portal público de representantes.
+    // Requiere cédula del alumno + código de acceso de 6 dígitos.
+    if (action === 'consultaRepresentantePublica') {
+      return json_(consultaRepresentantePublica_(payload));
+    }
+
     // Acciones exclusivas del bot de Telegram. Se autentican con
     // EDUGESTION_BOT_SECRET y no dependen de una sesión del navegador.
     if (action.indexOf('bot') === 0) {
@@ -678,6 +689,15 @@ function doPost(e) {
         break;
       case 'sincronizarPlanificacionExpressEvaluaciones':
         respuesta = sincronizarPlanificacionExpressEvaluaciones_(sesion.docente, payload);
+        break;
+      case 'obtenerAccesosRepresentantes':
+        respuesta = obtenerAccesosRepresentantes_(sesion.docente, payload);
+        break;
+      case 'generarAccesoRepresentante':
+        respuesta = generarAccesoRepresentante_(sesion.docente, payload);
+        break;
+      case 'desactivarAccesoRepresentante':
+        respuesta = desactivarAccesoRepresentante_(sesion.docente, payload);
         break;
       case 'obtenerGestionEvaluaciones':
         respuesta = obtenerGestionEvaluaciones_(sesion.docente, payload);
@@ -6272,3 +6292,419 @@ function eliminarAlumno_(docente, payload) {
   }
 }
 /* EDUGESTION_ELIMINAR_ALUMNO_V71_END */
+
+
+/* =========================================================
+ * EduGestión · V7.6
+ * PORTAL DE REPRESENTANTES
+ * ========================================================= */
+
+function asegurarAccesoRepresentantes_() {
+  asegurarHoja_(getDb_(), EG.SHEETS.ACCESO_REPRESENTANTES, EG.HEADERS.AccesoRepresentantes);
+}
+
+function normalizarCedulaRepresentante_(valor) {
+  var texto = String(valor || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .trim();
+  if (/^[VE]\d+$/.test(texto)) texto = texto.substring(1);
+  return texto;
+}
+
+function accesoRepresentantePorCedula_(cedula) {
+  asegurarAccesoRepresentantes_();
+  var clave = normalizarCedulaRepresentante_(cedula);
+  if (!clave) return null;
+  var tabla = leerObjetos_(EG.SHEETS.ACCESO_REPRESENTANTES);
+  return tabla.objetos.filter(function(r) {
+    return normalizarCedulaRepresentante_(r.cedulaAlumno) === clave;
+  })[0] || null;
+}
+
+function obtenerAccesosRepresentantes_(docente, payload) {
+  asegurarAccesoRepresentantes_();
+  var alumnos = filtrarPorProfesor_(EG.SHEETS.ALUMNOS, docente.id);
+  var tabla = leerObjetos_(EG.SHEETS.ACCESO_REPRESENTANTES);
+  var accesos = {};
+  tabla.objetos.forEach(function(r) {
+    accesos[normalizarCedulaRepresentante_(r.cedulaAlumno)] = r;
+  });
+
+  var ano = normalizarTexto_(payload.ano || '');
+  var seccion = normalizarTexto_(payload.seccion || '').toUpperCase();
+  var turno = normalizarTurno_(payload.turno || '');
+
+  var lista = alumnos.filter(function(a) {
+    if (ano && normalizarTexto_(a.ano || '').toUpperCase() !== ano.toUpperCase()) return false;
+    if (seccion && normalizarTexto_(a.seccion || '').toUpperCase() !== seccion) return false;
+    if (turno && normalizarTurno_(a.turno || '') !== turno) return false;
+    return true;
+  }).sort(function(a,b) {
+    return String(a.ano || '').localeCompare(String(b.ano || ''), 'es') ||
+      String(a.seccion || '').localeCompare(String(b.seccion || ''), 'es') ||
+      String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es');
+  }).map(function(a) {
+    var cedula = normalizarCedulaRepresentante_(a.cedula);
+    var ac = cedula ? accesos[cedula] : null;
+    return {
+      idAlumno: String(a.id || ''),
+      alumno: String(a.nombre || ''),
+      cedula: String(a.cedula || ''),
+      ano: String(a.ano || ''),
+      seccion: String(a.seccion || ''),
+      turno: String(a.turno || ''),
+      representante: String(a.representante || ''),
+      telefonoRepresentante: String(a.telefonoRepresentante || ''),
+      accesoConfigurado: Boolean(ac && String(ac.activo || '').toUpperCase() === 'SI'),
+      actualizadoEn: ac ? String(ac.actualizadoEn || '') : '',
+      ultimoAcceso: ac ? String(ac.ultimoAcceso || '') : ''
+    };
+  });
+
+  return {
+    status: 'success',
+    alumnos: lista,
+    total: lista.length,
+    configurados: lista.filter(function(x){ return x.accesoConfigurado; }).length
+  };
+}
+
+function generarCodigoRepresentante_() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function generarAccesoRepresentante_(docente, payload) {
+  asegurarAccesoRepresentantes_();
+  var idAlumno = limpiarRequerido_(payload.idAlumno, 'estudiante');
+  var alumno = filtrarPorProfesor_(EG.SHEETS.ALUMNOS, docente.id).filter(function(a) {
+    return String(a.id || '') === String(idAlumno);
+  })[0];
+  if (!alumno) lanzar_('El estudiante no pertenece a este docente.', 'UNAUTHORIZED');
+
+  var cedula = normalizarCedulaRepresentante_(alumno.cedula);
+  if (!cedula || cedula.length < 5) {
+    lanzar_('El estudiante debe tener una cédula válida antes de crear el acceso del representante.', 'VALIDATION_ERROR');
+  }
+
+  var codigo = generarCodigoRepresentante_();
+  var salt = crearSalt_();
+  var hash = hashClave_(codigo, salt);
+  var tabla = leerObjetos_(EG.SHEETS.ACCESO_REPRESENTANTES);
+  var existente = tabla.objetos.filter(function(r) {
+    return normalizarCedulaRepresentante_(r.cedulaAlumno) === cedula;
+  })[0];
+  var ahora = ahora_();
+
+  var datos = {
+    id: existente && existente.id ? existente.id : Utilities.getUuid(),
+    cedulaAlumno: cedula,
+    alumno: String(alumno.nombre || ''),
+    salt: salt,
+    codigoHash: hash,
+    activo: 'SI',
+    creadoPorIdProfesor: String(docente.id),
+    creadoPor: String(docente.nombre || docente.usuario || 'Docente'),
+    creadoEn: existente ? String(existente.creadoEn || ahora) : ahora,
+    actualizadoEn: ahora,
+    ultimoAcceso: existente ? String(existente.ultimoAcceso || '') : ''
+  };
+
+  if (existente) actualizarFilaObjeto_(EG.SHEETS.ACCESO_REPRESENTANTES, existente.__row, datos);
+  else anexarObjeto_(EG.SHEETS.ACCESO_REPRESENTANTES, datos);
+
+  return {
+    status: 'success',
+    alumno: {
+      idAlumno: String(alumno.id || ''),
+      nombre: String(alumno.nombre || ''),
+      cedula: String(alumno.cedula || ''),
+      representante: String(alumno.representante || '')
+    },
+    codigo: codigo,
+    message: 'Código de acceso generado. Entrégalo únicamente al representante autorizado.'
+  };
+}
+
+function desactivarAccesoRepresentante_(docente, payload) {
+  asegurarAccesoRepresentantes_();
+  var idAlumno = limpiarRequerido_(payload.idAlumno, 'estudiante');
+  var alumno = filtrarPorProfesor_(EG.SHEETS.ALUMNOS, docente.id).filter(function(a) {
+    return String(a.id || '') === String(idAlumno);
+  })[0];
+  if (!alumno) lanzar_('El estudiante no pertenece a este docente.', 'UNAUTHORIZED');
+
+  var cedula = normalizarCedulaRepresentante_(alumno.cedula);
+  var tabla = leerObjetos_(EG.SHEETS.ACCESO_REPRESENTANTES);
+  var acceso = tabla.objetos.filter(function(r) {
+    return normalizarCedulaRepresentante_(r.cedulaAlumno) === cedula;
+  })[0];
+  if (!acceso) return { status:'success', message:'El estudiante no tenía un acceso activo.' };
+
+  actualizarFilaObjeto_(EG.SHEETS.ACCESO_REPRESENTANTES, acceso.__row, {
+    activo: 'NO',
+    actualizadoEn: ahora_()
+  });
+  return { status:'success', message:'Acceso del representante desactivado.' };
+}
+
+function validarAccesoRepresentantePublico_(cedula, codigo) {
+  asegurarAccesoRepresentantes_();
+  var claveCedula = normalizarCedulaRepresentante_(cedula);
+  var claveCodigo = String(codigo || '').replace(/\D/g, '');
+  if (!claveCedula || claveCedula.length < 5 || !/^\d{6}$/.test(claveCodigo)) {
+    lanzar_('Verifica la cédula y el código de acceso.', 'INVALID_ACCESS');
+  }
+
+  var cache = CacheService.getScriptCache();
+  var rateKey = 'eg_rep_fail_' + digestToken_(claveCedula).slice(0, 30);
+  var intentos = Number(cache.get(rateKey) || 0);
+  if (intentos >= 8) {
+    lanzar_('Demasiados intentos. Espera unos minutos antes de volver a intentar.', 'RATE_LIMIT');
+  }
+
+  var tabla = leerObjetos_(EG.SHEETS.ACCESO_REPRESENTANTES);
+  var acceso = tabla.objetos.filter(function(r) {
+    return normalizarCedulaRepresentante_(r.cedulaAlumno) === claveCedula &&
+      String(r.activo || '').toUpperCase() === 'SI';
+  })[0];
+
+  if (!acceso || hashClave_(claveCodigo, acceso.salt) !== String(acceso.codigoHash || '')) {
+    cache.put(rateKey, String(intentos + 1), 600);
+    lanzar_('Cédula o código de acceso incorrecto.', 'INVALID_ACCESS');
+  }
+
+  cache.remove(rateKey);
+  actualizarFilaObjeto_(EG.SHEETS.ACCESO_REPRESENTANTES, acceso.__row, {
+    ultimoAcceso: ahora_(),
+    actualizadoEn: String(acceso.actualizadoEn || ahora_())
+  });
+  return acceso;
+}
+
+function consultaRepresentantePublica_(payload) {
+  var cedula = normalizarCedulaRepresentante_(payload.cedula);
+  validarAccesoRepresentantePublico_(cedula, payload.codigo);
+
+  var alumnosTabla = leerObjetos_(EG.SHEETS.ALUMNOS);
+  var alumnos = alumnosTabla.objetos.filter(function(a) {
+    return normalizarCedulaRepresentante_(a.cedula) === cedula;
+  });
+  if (!alumnos.length) lanzar_('No se encontró información académica para este estudiante.', 'NOT_FOUND');
+
+  var ids = {};
+  alumnos.forEach(function(a) { ids[String(a.id || '')] = true; });
+
+  var nombre = String(alumnos[0].nombre || 'Estudiante');
+  var representante = '';
+  var cursosMap = {};
+  alumnos.forEach(function(a) {
+    if (!representante && a.representante) representante = String(a.representante);
+    var key = [String(a.ano || ''), String(a.seccion || ''), normalizarTurno_(a.turno || '')].join('|');
+    cursosMap[key] = {
+      ano: String(a.ano || ''),
+      seccion: String(a.seccion || ''),
+      turno: normalizarTurno_(a.turno || '')
+    };
+  });
+
+  var docentesTabla = leerObjetos_(EG.SHEETS.DOCENTES);
+  var docentes = {};
+  docentesTabla.objetos.forEach(function(d) {
+    docentes[String(d.id || '')] = {
+      nombre: String(d.nombre || ''),
+      materia: String(d.materia || '')
+    };
+  });
+
+  var evaluaciones = leerObjetos_(EG.SHEETS.EVALUACION_SEGUIMIENTO).objetos.filter(function(r) {
+    return ids[String(r.idAlumno || '')];
+  });
+  var recuperaciones = leerObjetos_(EG.SHEETS.RECUPERACIONES_EVALUACION).objetos.filter(function(r) {
+    return ids[String(r.idAlumno || '')];
+  });
+  var calificaciones = leerObjetos_(EG.SHEETS.CALIFICACIONES).objetos.filter(function(r) {
+    return ids[String(r.idAlumno || '')];
+  });
+  var asistencia = leerObjetos_(EG.SHEETS.ASISTENCIA).objetos.filter(function(r) {
+    return ids[String(r.idAlumno || '')];
+  });
+  var compromisos = leerObjetos_(EG.SHEETS.COMPROMISOS_ACADEMICOS).objetos.filter(function(r) {
+    return ids[String(r.idAlumno || '')];
+  });
+
+  var recMap = {};
+  recuperaciones.forEach(function(r) {
+    recMap[String(r.idActividad || '') + '|' + String(r.idAlumno || '')] = r;
+  });
+
+  var materias = {};
+  function materiaKey_(r) {
+    return String(r.materia || ((docentes[String(r.idProfesor || '')] || {}).materia) || 'Materia').trim() || 'Materia';
+  }
+
+  var actividadesPublicas = evaluaciones.map(function(r) {
+    var materia = materiaKey_(r);
+    var rec = recMap[String(r.idActividad || '') + '|' + String(r.idAlumno || '')];
+    var notaOriginal = r.nota === '' || r.nota === null || r.nota === undefined ? '' : Number(r.nota);
+    var notaFinal = rec && rec.notaFinal !== '' && rec.notaFinal !== null && rec.notaFinal !== undefined
+      ? Number(rec.notaFinal) : notaOriginal;
+    var estado = normalizarEstadoEntregaEvaluacion_(r.estadoEntrega);
+
+    if (!materias[materia]) {
+      materias[materia] = {
+        materia: materia,
+        actividades: 0,
+        entregadas: 0,
+        noEntregadas: 0,
+        pendientes: 0,
+        puntosObtenidos: 0,
+        puntosPlanificados: 0
+      };
+    }
+    var m = materias[materia];
+    m.actividades++;
+    if (estado === 'Entrego' || estado === 'Tardia') m.entregadas++;
+    else if (estado === 'No entrego') m.noEntregadas++;
+    else m.pendientes++;
+    m.puntosPlanificados += Number(r.puntos || 0);
+    if (notaFinal !== '') m.puntosObtenidos += Number(notaFinal || 0);
+
+    return {
+      materia: materia,
+      docente: String(((docentes[String(r.idProfesor || '')] || {}).nombre) || ''),
+      lapso: String(r.lapso || ''),
+      actividad: String(r.actividad || 'Actividad evaluativa'),
+      fechaPlanificada: String(serializarValor_(r.fechaPlanificada, 'fecha') || ''),
+      estadoEntrega: estado,
+      fechaEntrega: String(serializarValor_(r.fechaEntrega, 'fecha') || ''),
+      puntos: Number(r.puntos || 0),
+      notaOriginal: notaOriginal,
+      notaRecuperacion: rec && rec.notaRecuperacion !== '' && rec.notaRecuperacion !== null && rec.notaRecuperacion !== undefined
+        ? Number(rec.notaRecuperacion) : '',
+      notaFinal: notaFinal
+    };
+  }).sort(function(a,b) {
+    return String(b.fechaPlanificada || '').localeCompare(String(a.fechaPlanificada || ''));
+  });
+
+  // Incluye calificaciones históricas que pudieran existir antes del módulo
+  // de seguimiento de entregas, evitando duplicar actividades ya representadas.
+  var clavesActividad = {};
+  actividadesPublicas.forEach(function(x) {
+    clavesActividad[
+      normalizarTexto_(x.materia) + '|' +
+      normalizarTexto_(x.actividad) + '|' +
+      String(x.fechaPlanificada || '')
+    ] = true;
+  });
+  calificaciones.forEach(function(r) {
+    var materia = materiaKey_(r);
+    var fecha = String(serializarValor_(r.fecha, 'fecha') || '');
+    var actividad = String(r.actividad || 'Actividad evaluativa');
+    var clave = normalizarTexto_(materia) + '|' + normalizarTexto_(actividad) + '|' + fecha;
+    if (clavesActividad[clave]) return;
+
+    var nota = r.nota === '' || r.nota === null || r.nota === undefined ? '' : Number(r.nota);
+    var max = Number(r.notaMaxima || 20);
+    actividadesPublicas.push({
+      materia: materia,
+      docente: String(((docentes[String(r.idProfesor || '')] || {}).nombre) || ''),
+      lapso: String(r.periodo || ''),
+      actividad: actividad,
+      fechaPlanificada: fecha,
+      estadoEntrega: nota === '' ? 'Pendiente' : 'Entrego',
+      fechaEntrega: '',
+      puntos: max,
+      notaOriginal: nota,
+      notaRecuperacion: '',
+      notaFinal: nota
+    });
+
+    if (!materias[materia]) {
+      materias[materia] = {
+        materia: materia, actividades: 0, entregadas: 0,
+        noEntregadas: 0, pendientes: 0, puntosObtenidos: 0, puntosPlanificados: 0
+      };
+    }
+    materias[materia].actividades++;
+    if (nota === '') materias[materia].pendientes++;
+    else materias[materia].entregadas++;
+    materias[materia].puntosPlanificados += max;
+    if (nota !== '') materias[materia].puntosObtenidos += Number(nota || 0);
+    clavesActividad[clave] = true;
+  });
+  actividadesPublicas.sort(function(a,b) {
+    return String(b.fechaPlanificada || '').localeCompare(String(a.fechaPlanificada || ''));
+  });
+
+  var asistenciaResumen = {};
+  var totales = { presentes:0, ausentes:0, tardanzas:0, justificadas:0, total:0 };
+  asistencia.forEach(function(r) {
+    var materia = materiaKey_(r);
+    if (!asistenciaResumen[materia]) {
+      asistenciaResumen[materia] = { materia:materia, presentes:0, ausentes:0, tardanzas:0, justificadas:0, total:0 };
+    }
+    var e = normalizarEstadoAsistencia_(r.estado);
+    var obj = asistenciaResumen[materia];
+    obj.total++; totales.total++;
+    if (e === 'Ausente') { obj.ausentes++; totales.ausentes++; }
+    else if (e === 'Tardanza') { obj.tardanzas++; totales.tardanzas++; }
+    else if (e === 'Justificada') { obj.justificadas++; totales.justificadas++; }
+    else { obj.presentes++; totales.presentes++; }
+  });
+  totales.porcentaje = totales.total ? Math.round(((totales.presentes + totales.tardanzas) / totales.total) * 100) : 0;
+
+  var materiasLista = Object.keys(materias).map(function(k) {
+    var m = materias[k];
+    m.puntosObtenidos = Math.round(m.puntosObtenidos * 100) / 100;
+    m.puntosPlanificados = Math.round(m.puntosPlanificados * 100) / 100;
+    m.porcentaje = m.puntosPlanificados ? Math.round((m.puntosObtenidos / m.puntosPlanificados) * 100) : 0;
+    m.alerta = m.noEntregadas >= 2;
+    return m;
+  }).sort(function(a,b){ return a.materia.localeCompare(b.materia, 'es'); });
+
+  var compromisosPublicos = compromisos
+    .filter(function(r) {
+      var estado = String(r.estado || '').toUpperCase();
+      return estado === 'PENDIENTE' || estado === 'RESUELTO';
+    })
+    .sort(function(a,b) {
+      return String(b.fechaRegistro || '').localeCompare(String(a.fechaRegistro || ''));
+    })
+    .slice(0, 30)
+    .map(function(r) {
+      return {
+        materia: materiaKey_(r),
+        fechaRegistro: String(serializarValor_(r.fechaRegistro, 'fecha') || ''),
+        fechaCompromiso: String(serializarValor_(r.fechaCompromiso, 'fecha') || ''),
+        compromiso: String(r.compromiso || ''),
+        estado: String(r.estado || ''),
+        resultado: String(r.resultado || '')
+      };
+    });
+
+  return {
+    status: 'success',
+    alumno: {
+      nombre: nombre,
+      cedula: String(alumnos[0].cedula || cedula),
+      representante: representante,
+      cursos: Object.keys(cursosMap).map(function(k){ return cursosMap[k]; })
+    },
+    resumen: {
+      materias: materiasLista.length,
+      actividades: actividadesPublicas.length,
+      entregadas: actividadesPublicas.filter(function(x){ return x.estadoEntrega === 'Entrego' || x.estadoEntrega === 'Tardia'; }).length,
+      noEntregadas: actividadesPublicas.filter(function(x){ return x.estadoEntrega === 'No entrego'; }).length,
+      pendientes: actividadesPublicas.filter(function(x){ return x.estadoEntrega === 'Pendiente'; }).length,
+      asistencia: totales
+    },
+    materias: materiasLista,
+    actividades: actividadesPublicas,
+    asistenciaPorMateria: Object.keys(asistenciaResumen).map(function(k){ return asistenciaResumen[k]; }),
+    compromisos: compromisosPublicos,
+    privacidad: 'El portal muestra información académica. No expone dirección, datos de salud, actas internas ni observaciones privadas del docente.'
+  };
+}
+/* EDUGESTION_PORTAL_REPRESENTANTES_V76_END */

@@ -20251,3 +20251,255 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,350),{once:true});else setTimeout(init,180);
 })();
+
+
+/* ================================================================
+   EduGestión · PORTAL DE REPRESENTANTES · V7.6
+   Gestión docente de accesos familiares
+   ================================================================ */
+(() => {
+  const MARK='EDUGESTION_PORTAL_REPRESENTANTES_V76';
+  if(window[MARK]) return;
+  window[MARK]=true;
+
+  const TAB_ID='tab-representantes';
+  const SECTION_ID='section-representantes';
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  let alumnos=[];
+  let filtroTexto='';
+
+  function rolPermitido(){
+    const rol=String(window.profesorActual?.rol||'docente').toLowerCase();
+    return rol!=='director' && rol!=='control_estudio';
+  }
+
+  function crearUI(){
+    const nav=$('app-nav'), main=$('app-main')||document.querySelector('main');
+    if(!nav||!main)return;
+
+    let tab=$(TAB_ID);
+    if(!tab){
+      tab=document.createElement('button');
+      tab.id=TAB_ID;
+      tab.type='button';
+      tab.className='nav-item';
+      tab.dataset.title='Portal de Representantes';
+      tab.dataset.description='Genera accesos seguros para que cada representante consulte el progreso académico de su estudiante.';
+      tab.innerHTML='<i class="fa-solid fa-people-roof"></i><span>Representantes</span>';
+      const ref=document.getElementById('tab-registro')||document.getElementById('tab-actas');
+      nav.insertBefore(tab,ref||null);
+      tab.addEventListener('click',abrir);
+    }
+    tab.classList.toggle('role-hidden',!rolPermitido());
+
+    let sec=$(SECTION_ID);
+    if(!sec){
+      sec=document.createElement('section');
+      sec.id=SECTION_ID;
+      sec.className='hidden rep-v76-shell';
+      sec.innerHTML=`
+        <header class="rep-v76-hero">
+          <div>
+            <span><i class="fa-solid fa-shield-halved"></i> Comunicación familia–escuela</span>
+            <h2>Portal de Representantes</h2>
+            <p>Entrega a cada representante un acceso individual para consultar actividades, notas, entregas, asistencia y compromisos académicos.</p>
+          </div>
+          <a class="rep-v76-public-link" id="rep-v76-open-public" target="_blank" rel="noopener">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            Abrir portal familiar
+          </a>
+        </header>
+
+        <div class="rep-v76-security">
+          <i class="fa-solid fa-lock"></i>
+          <div>
+            <strong>Acceso protegido</strong>
+            <span>El representante entra con la cédula del estudiante y un código de 6 dígitos generado por el docente. El portal no muestra dirección, datos de salud ni observaciones internas.</span>
+          </div>
+        </div>
+
+        <section class="rep-v76-toolbar">
+          <label><i class="fa-solid fa-magnifying-glass"></i><input id="rep-v76-search" placeholder="Buscar estudiante, cédula o sección"></label>
+          <button type="button" id="rep-v76-refresh"><i class="fa-solid fa-rotate"></i> Actualizar lista</button>
+          <button type="button" id="rep-v76-copy-link"><i class="fa-solid fa-link"></i> Copiar enlace del portal</button>
+        </section>
+
+        <section class="rep-v76-summary">
+          <article><i class="fa-solid fa-users"></i><div><b id="rep-v76-total">0</b><small>Estudiantes</small></div></article>
+          <article><i class="fa-solid fa-key"></i><div><b id="rep-v76-configured">0</b><small>Accesos activos</small></div></article>
+          <article><i class="fa-solid fa-id-card"></i><div><b id="rep-v76-no-id">0</b><small>Sin cédula</small></div></article>
+        </section>
+
+        <section class="rep-v76-list-card">
+          <div class="rep-v76-list-head">
+            <div><span>Accesos familiares</span><strong>Estudiantes registrados</strong></div>
+            <small>El código se muestra únicamente cuando se genera o regenera.</small>
+          </div>
+          <div id="rep-v76-list" class="rep-v76-list"><div class="rep-v76-empty">Cargando estudiantes…</div></div>
+        </section>
+
+        <section class="rep-v76-credential hidden" id="rep-v76-credential">
+          <div class="rep-v76-credential-head">
+            <div><span>Credencial creada</span><strong id="rep-v76-credential-name">Estudiante</strong></div>
+            <button type="button" id="rep-v76-close-credential"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="rep-v76-credential-code">
+            <small>Código de acceso</small>
+            <strong id="rep-v76-code">000000</strong>
+            <span>Cédula: <b id="rep-v76-id">—</b></span>
+          </div>
+          <p>Entrega esta información únicamente al representante autorizado. Si se genera un nuevo código, el anterior deja de funcionar.</p>
+          <div class="rep-v76-credential-actions">
+            <button type="button" id="rep-v76-copy-credential"><i class="fa-solid fa-copy"></i> Copiar credencial</button>
+            <button type="button" id="rep-v76-print-credential"><i class="fa-solid fa-print"></i> Imprimir</button>
+            <a id="rep-v76-go-public" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> Probar portal</a>
+          </div>
+        </section>`;
+      main.appendChild(sec);
+    }
+
+    const portal=`${location.origin}${location.pathname.replace(/\/[^/]*$/,'/') }representantes.html`.replace(/([^:]\/)\/+/g,'$1');
+    ['rep-v76-open-public','rep-v76-go-public'].forEach(id=>{const el=$(id);if(el)el.href=portal;});
+    bind();
+  }
+
+  function activar(){
+    const tab=$(TAB_ID),sec=$(SECTION_ID);
+    if(!tab||!sec)return;
+    document.querySelectorAll('#app-nav .nav-item').forEach(x=>{
+      x.classList.toggle('is-active',x===tab);
+      x.setAttribute('aria-selected',x===tab?'true':'false');
+    });
+    document.querySelectorAll('#app-main > section').forEach(x=>x.classList.toggle('hidden',x!==sec));
+    const title=$('page-title'),desc=$('page-description');
+    if(title)title.textContent='Portal de Representantes';
+    if(desc)desc.textContent='Gestiona accesos familiares y consulta qué información puede ver cada representante.';
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function portalUrl(){
+    return `${location.origin}${location.pathname.replace(/\/[^/]*$/,'/') }representantes.html`.replace(/([^:]\/)\/+/g,'$1');
+  }
+
+  async function abrir(){
+    activar();
+    await cargar();
+  }
+
+  function bind(){
+    if($('rep-v76-search') && !$('rep-v76-search').dataset.bound){
+      $('rep-v76-search').dataset.bound='1';
+      $('rep-v76-search').addEventListener('input',e=>{filtroTexto=String(e.target.value||'').toLowerCase();render();});
+    }
+    $('rep-v76-refresh')?.addEventListener('click',cargar);
+    $('rep-v76-copy-link')?.addEventListener('click',async()=>{
+      try{await navigator.clipboard.writeText(portalUrl());mostrarToast?.('Enlace del portal copiado.','success','Portal de Representantes');}
+      catch(_){window.prompt('Copia este enlace:',portalUrl());}
+    });
+    $('rep-v76-close-credential')?.addEventListener('click',()=> $('rep-v76-credential')?.classList.add('hidden'));
+  }
+
+  async function cargar(){
+    const host=$('rep-v76-list');
+    if(host)host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes…</div>';
+    try{
+      const r=await apiRequest('obtenerAccesosRepresentantes',{});
+      alumnos=Array.isArray(r?.alumnos)?r.alumnos:[];
+      render();
+    }catch(e){
+      if(host)host.innerHTML=`<div class="rep-v76-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar la información.</strong><span>${esc(e?.message||'')}</span></div>`;
+    }
+  }
+
+  function render(){
+    const total=alumnos.length;
+    const configured=alumnos.filter(a=>a.accesoConfigurado).length;
+    const noId=alumnos.filter(a=>!String(a.cedula||'').trim()).length;
+    if($('rep-v76-total'))$('rep-v76-total').textContent=total;
+    if($('rep-v76-configured'))$('rep-v76-configured').textContent=configured;
+    if($('rep-v76-no-id'))$('rep-v76-no-id').textContent=noId;
+
+    const host=$('rep-v76-list');if(!host)return;
+    const list=alumnos.filter(a=>{
+      if(!filtroTexto)return true;
+      return `${a.alumno} ${a.cedula} ${a.ano} ${a.seccion} ${a.representante}`.toLowerCase().includes(filtroTexto);
+    });
+    if(!list.length){
+      host.innerHTML='<div class="rep-v76-empty">No hay estudiantes que coincidan con la búsqueda.</div>';
+      return;
+    }
+
+    host.innerHTML=list.map(a=>{
+      const hasId=Boolean(String(a.cedula||'').trim());
+      return `<article class="rep-v76-student">
+        <div class="rep-v76-student-avatar">${esc((a.alumno||'E')[0])}</div>
+        <div class="rep-v76-student-main">
+          <strong>${esc(a.alumno||'Estudiante')}</strong>
+          <span>${esc(a.ano||'')} · Sección ${esc(a.seccion||'')} · ${esc(a.turno==='Manana'?'Mañana':a.turno||'')}</span>
+          <small>C.I.: ${esc(a.cedula||'Sin cédula')} · Representante: ${esc(a.representante||'No registrado')}</small>
+        </div>
+        <div class="rep-v76-access-state ${a.accesoConfigurado?'is-active':'is-inactive'}">
+          <i class="fa-solid ${a.accesoConfigurado?'fa-circle-check':'fa-circle-minus'}"></i>
+          ${a.accesoConfigurado?'Acceso activo':'Sin acceso'}
+        </div>
+        <div class="rep-v76-actions">
+          <button type="button" data-rep-generate="${esc(a.idAlumno)}" ${hasId?'':'disabled'}>
+            <i class="fa-solid fa-key"></i> ${a.accesoConfigurado?'Regenerar código':'Generar acceso'}
+          </button>
+          ${a.accesoConfigurado?`<button type="button" class="is-danger" data-rep-disable="${esc(a.idAlumno)}"><i class="fa-solid fa-lock"></i> Desactivar</button>`:''}
+        </div>
+      </article>`;
+    }).join('');
+
+    host.querySelectorAll('[data-rep-generate]').forEach(b=>b.addEventListener('click',()=>generar(b.dataset.repGenerate)));
+    host.querySelectorAll('[data-rep-disable]').forEach(b=>b.addEventListener('click',()=>desactivar(b.dataset.repDisable)));
+  }
+
+  async function generar(id){
+    const a=alumnos.find(x=>String(x.idAlumno)===String(id));if(!a)return;
+    if(a.accesoConfigurado && !window.confirm(`Se generará un código nuevo para ${a.alumno}. El código anterior dejará de funcionar. ¿Continuar?`))return;
+    try{
+      const r=await apiRequest('generarAccesoRepresentante',{idAlumno:id});
+      mostrarCredencial(r);
+      await cargar();
+    }catch(e){mostrarToast?.(e?.message||'No se pudo generar el acceso.','error','Portal de Representantes');}
+  }
+
+  async function desactivar(id){
+    const a=alumnos.find(x=>String(x.idAlumno)===String(id));if(!a)return;
+    if(!window.confirm(`¿Desactivar el acceso del representante de ${a.alumno}?`))return;
+    try{
+      await apiRequest('desactivarAccesoRepresentante',{idAlumno:id});
+      mostrarToast?.('Acceso desactivado.','success','Portal de Representantes');
+      await cargar();
+    }catch(e){mostrarToast?.(e?.message||'No se pudo desactivar.','error','Portal de Representantes');}
+  }
+
+  function mostrarCredencial(r){
+    const box=$('rep-v76-credential');if(!box)return;
+    box.classList.remove('hidden');
+    $('rep-v76-credential-name').textContent=r?.alumno?.nombre||'Estudiante';
+    $('rep-v76-code').textContent=r?.codigo||'';
+    $('rep-v76-id').textContent=r?.alumno?.cedula||'';
+    const texto=`EduGestión · Portal de Representantes\nEstudiante: ${r?.alumno?.nombre||''}\nCédula: ${r?.alumno?.cedula||''}\nCódigo: ${r?.codigo||''}\nPortal: ${portalUrl()}`;
+    $('rep-v76-copy-credential').onclick=async()=>{
+      try{await navigator.clipboard.writeText(texto);mostrarToast?.('Credencial copiada.','success','Portal de Representantes');}
+      catch(_){window.prompt('Copia la credencial:',texto);}
+    };
+    $('rep-v76-print-credential').onclick=()=>{
+      const w=window.open('','_blank');if(!w)return;
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Acceso representante</title><style>body{font-family:Arial;padding:36px;color:#21354d}.card{max-width:520px;border:2px solid #1e5d96;border-radius:20px;padding:26px}h1{font-size:20px}.code{font-size:36px;font-weight:900;letter-spacing:.15em;margin:20px 0}.muted{color:#68798b;font-size:12px}</style></head><body><div class="card"><h1>EduGestión · Portal de Representantes</h1><p><b>Estudiante:</b> ${esc(r?.alumno?.nombre||'')}</p><p><b>Cédula:</b> ${esc(r?.alumno?.cedula||'')}</p><div class="code">${esc(r?.codigo||'')}</div><p class="muted">Ingrese en: ${esc(portalUrl())}</p><p class="muted">Esta credencial es personal. No la comparta con terceros.</p></div><script>window.onload=()=>window.print();<\/script></body></html>`);
+      w.document.close();
+    };
+    box.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  function init(){
+    crearUI();
+    window.addEventListener('edugestion:session',()=>setTimeout(crearUI,200));
+    window.addEventListener('edugestion:students-changed',()=>setTimeout(()=>{if(!$(SECTION_ID)?.classList.contains('hidden'))cargar();},150));
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,350),{once:true});
+  else setTimeout(init,180);
+})();

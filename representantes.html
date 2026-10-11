@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>EduGestión · Portal de Representantes</title>
+  <meta name="description" content="Consulta segura del progreso académico del estudiante.">
+  <link rel="stylesheet" href="representantes.css">
+</head>
+<body>
+  <div class="rep-public-bg"></div>
+  <main class="rep-public-app">
+    <header class="rep-public-brand">
+      <div class="brand-mark">EG</div>
+      <div><strong>EduGestión</strong><span>Portal de Representantes</span></div>
+    </header>
+
+    <section id="rep-login-view" class="rep-login-layout">
+      <div class="rep-welcome">
+        <span class="eyebrow">Familia y escuela conectadas</span>
+        <h1>Consulta el progreso académico de tu estudiante</h1>
+        <p>Revisa actividades corregidas, trabajos entregados y pendientes, calificaciones, asistencia y compromisos académicos desde un solo lugar.</p>
+        <div class="rep-welcome-points">
+          <span>✓ Información académica actualizada</span>
+          <span>✓ Acceso individual protegido</span>
+          <span>✓ Consulta desde celular o computadora</span>
+        </div>
+      </div>
+
+      <form id="rep-login-form" class="rep-login-card">
+        <div class="rep-lock">🔐</div>
+        <span class="eyebrow">Acceso familiar</span>
+        <h2>Ingresa al portal</h2>
+        <p>Utiliza la cédula del estudiante y el código de 6 dígitos entregado por el docente.</p>
+        <label>Cédula del estudiante
+          <input id="rep-cedula" autocomplete="username" inputmode="text" placeholder="Ej.: 32123456" required>
+        </label>
+        <label>Código de acceso
+          <input id="rep-codigo" autocomplete="one-time-code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required>
+        </label>
+        <button id="rep-login-btn" type="submit">Consultar información</button>
+        <div id="rep-login-error" class="rep-error hidden"></div>
+        <small>Por seguridad, no compartas tu código con terceros.</small>
+      </form>
+    </section>
+
+    <section id="rep-dashboard" class="hidden">
+      <div class="rep-student-header">
+        <div>
+          <span class="eyebrow">Expediente académico familiar</span>
+          <h1 id="rep-student-name">Estudiante</h1>
+          <p id="rep-student-meta"></p>
+          <p id="rep-representative"></p>
+        </div>
+        <button id="rep-logout" type="button">Salir</button>
+      </div>
+
+      <div class="rep-summary-grid">
+        <article><span>Materias</span><strong id="rep-kpi-subjects">0</strong></article>
+        <article><span>Actividades</span><strong id="rep-kpi-activities">0</strong></article>
+        <article class="good"><span>Entregadas</span><strong id="rep-kpi-delivered">0</strong></article>
+        <article class="warn"><span>No entregadas</span><strong id="rep-kpi-missing">0</strong></article>
+        <article><span>Pendientes</span><strong id="rep-kpi-pending">0</strong></article>
+        <article><span>Asistencia</span><strong id="rep-kpi-attendance">0%</strong></article>
+      </div>
+
+      <nav class="rep-tabs">
+        <button class="active" data-view="resumen">Resumen</button>
+        <button data-view="actividades">Actividades y notas</button>
+        <button data-view="asistencia">Asistencia</button>
+        <button data-view="compromisos">Compromisos</button>
+      </nav>
+
+      <section id="rep-view-resumen" class="rep-view">
+        <div class="rep-section-title"><div><span>Rendimiento</span><h2>Resumen por materia</h2></div></div>
+        <div id="rep-subjects" class="rep-subject-grid"></div>
+      </section>
+
+      <section id="rep-view-actividades" class="rep-view hidden">
+        <div class="rep-section-title">
+          <div><span>Evaluaciones</span><h2>Actividades, entregas y calificaciones</h2></div>
+          <input id="rep-activity-search" placeholder="Buscar actividad o materia">
+        </div>
+        <div class="rep-table-wrap">
+          <table>
+            <thead><tr><th>Materia</th><th>Actividad</th><th>Fecha</th><th>Entrega</th><th>Nota</th><th>Recuperación</th></tr></thead>
+            <tbody id="rep-activities-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="rep-view-asistencia" class="rep-view hidden">
+        <div class="rep-section-title"><div><span>Asistencia</span><h2>Resumen por materia</h2></div></div>
+        <div id="rep-attendance-subjects" class="rep-subject-grid"></div>
+      </section>
+
+      <section id="rep-view-compromisos" class="rep-view hidden">
+        <div class="rep-section-title"><div><span>Seguimiento</span><h2>Compromisos académicos</h2></div></div>
+        <div id="rep-commitments" class="rep-commitments"></div>
+      </section>
+
+      <footer class="rep-privacy" id="rep-privacy"></footer>
+    </section>
+  </main>
+  <script src="config.js"></script>
+  <script src="representantes.js"></script>
+</body>
+</html>
