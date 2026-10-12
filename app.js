@@ -122,6 +122,11 @@ const SESSION_KEY = 'edugestion_session_v2';
     const badgePuntosFaltantesV88 = document.getElementById('badge-puntos-faltantes-v88');
     const badgeEstadoPlanV88 = document.getElementById('badge-estado-plan-v88');
     const controlSeccionesPlanV88 = document.getElementById('plan-control-secciones-v88');
+    const planningSectionControlV88 = document.getElementById('planning-section-control-v88');
+    const planningViewPlanV89 = document.getElementById('planning-view-plan-v89');
+    const planningViewSummaryV89 = document.getElementById('planning-view-summary-v89');
+    const planningLayoutV89 = sectionPlanificacion?.querySelector('.planning-layout');
+    const planningIaCardV89 = document.getElementById('planificacion-ia-card');
     const accionesPlan = document.getElementById('acciones-planificacion');
     const gridCalendario = document.getElementById('grid-calendario');
     const mesCalendario = document.getElementById('mes-calendario');
@@ -463,7 +468,11 @@ const SESSION_KEY = 'edugestion_session_v2';
       cambiarPestana(tabAsistencia, sectionAsistencia);
       await renderAgendaAsistencia();
     });
-    tabPlanificacion.addEventListener('click', () => { cambiarPestana(tabPlanificacion, sectionPlanificacion); actualizarUIPlanificacion(); });
+    tabPlanificacion.addEventListener('click', () => {
+      cambiarPestana(tabPlanificacion, sectionPlanificacion);
+      actualizarUIPlanificacion();
+      cambiarVistaPlanificacionV89('plan', { seleccionarSeccion: true });
+    });
     tabActas.addEventListener('click', async () => { cambiarPestana(tabActas, sectionActas); setFechaHoraActas(); await filtrarAlumnosParaActas(); });
     tabRegistro.addEventListener('click', () => { cambiarPestana(tabRegistro, sectionRegistro); });
     tabHorario.addEventListener('click', () => { cambiarPestana(tabHorario, sectionHorario); actualizarUIHorario(); });
@@ -2024,6 +2033,39 @@ const SESSION_KEY = 'edugestion_session_v2';
     };
 
     const META_PUNTOS_PLAN_V88 = 20;
+    let vistaPlanificacionV89 = 'plan';
+
+    function cambiarVistaPlanificacionV89(vista = 'plan', opciones = {}) {
+      vistaPlanificacionV89 = vista === 'summary' ? 'summary' : 'plan';
+      const esResumen = vistaPlanificacionV89 === 'summary';
+
+      planningSectionControlV88?.classList.toggle('hidden', !esResumen);
+      planningLayoutV89?.classList.toggle('hidden', esResumen);
+      planningIaCardV89?.classList.toggle('hidden', esResumen);
+
+      planningViewPlanV89?.classList.toggle('is-active', !esResumen);
+      planningViewSummaryV89?.classList.toggle('is-active', esResumen);
+      planningViewPlanV89?.setAttribute('aria-selected', String(!esResumen));
+      planningViewSummaryV89?.setAttribute('aria-selected', String(esResumen));
+
+      if (!esResumen && opciones.seleccionarSeccion) {
+        const secciones = seccionesPlanificacionV88();
+        const actualExiste = seccionPlanViendo && secciones.some(s => String(s.ano) === String(seccionPlanViendo.ano) && String(s.seccion).toUpperCase() === String(seccionPlanViendo.seccion).toUpperCase());
+        if (actualExiste) {
+          mostrarListaPlan(seccionPlanViendo.ano, seccionPlanViendo.seccion);
+        } else {
+          const preferida = secciones.find(s => resumenSeccionPlanV88(s.ano, s.seccion).evaluaciones.length > 0) || secciones[0];
+          if (preferida) mostrarListaPlan(preferida.ano, preferida.seccion);
+          else mostrarFormularioPlan();
+        }
+      }
+    }
+
+    planningViewPlanV89?.addEventListener('click', () => cambiarVistaPlanificacionV89('plan', { seleccionarSeccion: true }));
+    planningViewSummaryV89?.addEventListener('click', () => {
+      cambiarVistaPlanificacionV89('summary');
+      renderControlSeccionesPlanificacionV88();
+    });
 
     function tipoEvaluacionPlanV88(plan = {}) {
       const guardado = String(plan.tipoEvaluacion || plan.tipo || '').trim();
@@ -2090,6 +2132,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       }).join('');
       controlSeccionesPlanV88.querySelectorAll('[data-plan-sec-v88]').forEach(btn=>btn.addEventListener('click',()=>{
         const sec=secciones.find(s=>s.key===btn.dataset.planSecV88); if(!sec)return;
+        cambiarVistaPlanificacionV89('plan');
         mostrarListaPlan(sec.ano,sec.seccion);
         panelListaPlan?.scrollIntoView({behavior:'smooth',block:'start'});
       }));

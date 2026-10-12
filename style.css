@@ -10131,3 +10131,62 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
 .planning-detail-v88__head{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:18px;border-bottom:1px solid #edf1f5;padding-bottom:14px}.planning-detail-v88__stats{display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:7px}.planning-detail-v88__stats article{border:1px solid #dde7ef;background:#f8fbfd;border-radius:11px;padding:8px 10px;text-align:center}.planning-detail-v88__stats span,.planning-detail-v88__stats strong{display:block}.planning-detail-v88__stats span{font-size:8px;text-transform:uppercase;color:#8593a0;font-weight:900}.planning-detail-v88__stats strong{font-size:13px;color:#2e5d84;margin-top:3px}.planning-detail-v88__stats strong.is-complete{color:#1f7b4f}.planning-detail-v88__stats strong.is-pending{color:#976608}.planning-detail-v88__stats strong.is-over{color:#ad3434}.planning-eval-name-v88{display:block;min-width:190px;color:#324f68}.planning-eval-type-v88{display:inline-flex;background:#eef5fb;color:#35658d;border-radius:999px;padding:5px 8px;font-size:10px;font-weight:850;white-space:nowrap}.planning-detail-table-v88 th{white-space:nowrap}
 @media(max-width:980px){.planning-section-control-v88__grid{grid-template-columns:1fr}.planning-section-control-v88__head,.planning-detail-v88__head{flex-direction:column;align-items:stretch}.planning-detail-v88__stats{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:600px){.planning-section-control-v88{padding:14px}.planning-section-control-v88__legend{min-width:0}.planning-control-summary-v88{grid-template-columns:repeat(3,1fr)}.planning-detail-v88__stats{grid-template-columns:1fr}.planning-section-control-v88__head h3{font-size:18px}}
+
+/* =========================================================
+   V8.9 · PLANIFICACIÓN ORDENADA EN DOS VISTAS
+   ========================================================= */
+.planning-view-tabs-v89{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  padding:8px;
+  border:1px solid #d9e7f3;
+  background:rgba(255,255,255,.92);
+  border-radius:20px;
+  box-shadow:0 8px 24px rgba(30,64,98,.05);
+}
+.planning-view-tabs-v89 button{
+  display:grid;
+  grid-template-columns:42px 1fr;
+  grid-template-rows:auto auto;
+  align-items:center;
+  column-gap:11px;
+  min-height:70px;
+  padding:10px 14px;
+  border:1px solid transparent;
+  border-radius:15px;
+  background:transparent;
+  color:#64748b;
+  text-align:left;
+  transition:.2s ease;
+}
+.planning-view-tabs-v89 button i{
+  grid-row:1/3;
+  width:42px;height:42px;
+  display:grid;place-items:center;
+  border-radius:12px;
+  background:#edf4fb;
+  color:#23679f;
+  font-size:17px;
+}
+.planning-view-tabs-v89 button span{font-size:14px;font-weight:950;color:#334e68;line-height:1.2}
+.planning-view-tabs-v89 button small{font-size:10px;font-weight:700;color:#8a9aad;margin-top:3px}
+.planning-view-tabs-v89 button:hover{background:#f7fbff;border-color:#d8e7f4}
+.planning-view-tabs-v89 button.is-active{
+  background:#173f70;
+  border-color:#173f70;
+  box-shadow:0 7px 16px rgba(23,63,112,.18);
+}
+.planning-view-tabs-v89 button.is-active i{background:rgba(255,255,255,.14);color:#fff}
+.planning-view-tabs-v89 button.is-active span,.planning-view-tabs-v89 button.is-active small{color:#fff}
+.planning-view-tabs-v89 button.is-active small{opacity:.78}
+
+/* En la vista principal el plan debe ser lo primero que se lee. */
+#section-planificacion .planning-layout{scroll-margin-top:105px}
+#section-planificacion #panel-lista-planificacion{scroll-margin-top:120px}
+#section-planificacion #planificacion-ia-card{margin-top:2px}
+
+@media(max-width:700px){
+  .planning-view-tabs-v89{grid-template-columns:1fr}
+  .planning-view-tabs-v89 button{min-height:62px}
+}

@@ -1,0 +1,17 @@
+EDUGESTIÓN — PLANIFICACIÓN SEMANAL V2
+
+Versión preparada para reemplazar/publicar directamente.
+
+Incluye:
+- horario docente + aula/cancha;
+- calendario escolar;
+- plan de evaluación vinculado;
+- planificación semanal;
+- 1er, 2do y 3er lapso con conteos automáticos;
+- continuidad pedagógica entre semanas;
+- temas curriculares del Panel por lapso como contexto de Gemini;
+- Gemini respeta contenido manual y completa campos vacíos.
+
+La variable GEMINI_API_KEY debe permanecer configurada en Vercel como variable de entorno. No se incluye dentro del ZIP.
+
+Actualización V8.9: Planificación dividida en Plan de evaluación y Resumen por secciones.
