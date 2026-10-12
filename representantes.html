@@ -121,6 +121,7 @@
         <button data-view="calificaciones">Calificaciones</button>
         <button data-view="asistencia">Asistencia</button>
         <button data-view="compromisos">Compromisos</button>
+        <button data-view="reunion">Solicitar reunión</button>
       </nav>
 
       <section id="rep-view-resumen" class="rep-view">
@@ -178,6 +179,29 @@
           <div><span>Seguimiento</span><h2>Compromisos académicos</h2></div>
         </div>
         <div id="rep-commitments" class="rep-commitments"></div>
+      </section>
+
+      <section id="rep-view-reunion" class="rep-view hidden">
+        <div class="rep-section-title">
+          <div><span>Comunicación con el docente</span><h2>Solicitar reunión</h2></div>
+        </div>
+        <div class="rep-meeting-layout">
+          <form id="rep-meeting-form" class="rep-meeting-form">
+            <div class="rep-meeting-info"><strong>Solicita una cita con el profesor</strong><span>Indica el motivo, el día y la hora que propones. La cita quedará <b>por confirmar</b> hasta que el docente la revise.</span></div>
+            <label><span>Profesor / materia</span><select id="rep-meeting-teacher" required><option value="">Selecciona el profesor</option></select></label>
+            <div class="rep-meeting-row">
+              <label><span>Día propuesto</span><input id="rep-meeting-date" type="date" required></label>
+              <label><span>Hora propuesta</span><input id="rep-meeting-time" type="time" required></label>
+            </div>
+            <label><span>Motivo de la reunión</span><textarea id="rep-meeting-reason" rows="5" maxlength="1200" placeholder="Explique brevemente por qué necesita conversar con el profesor." required></textarea></label>
+            <button id="rep-meeting-submit" type="submit">Solicitar reunión</button>
+            <div id="rep-meeting-message" class="rep-meeting-message hidden"></div>
+          </form>
+          <div class="rep-meeting-history">
+            <div class="rep-meeting-history-head"><span>Estado de sus solicitudes</span><strong>Citas y reuniones</strong></div>
+            <div id="rep-meeting-list"></div>
+          </div>
+        </div>
       </section>
 
       <footer class="rep-privacy" id="rep-privacy"></footer>

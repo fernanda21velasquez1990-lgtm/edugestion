@@ -39,7 +39,8 @@ var EG = Object.freeze({
     CIERRES_LAPSO_ACADEMICO: 'CierresLapsoAcademico',
     COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos',
     ACCESO_REPRESENTANTES: 'AccesoRepresentantes',
-    CONFIRMACION_NOTAS_REPRESENTANTES: 'ConfirmacionNotasRepresentantes'
+    CONFIRMACION_NOTAS_REPRESENTANTES: 'ConfirmacionNotasRepresentantes',
+    SOLICITUDES_REUNION_REPRESENTANTES: 'SolicitudesReunionRepresentantes'
   }),
   HEADERS: Object.freeze({
     Docentes: [
@@ -144,6 +145,12 @@ var EG = Object.freeze({
       'id', 'cedulaAlumno', 'idProfesor', 'docente', 'materia',
       'claveEvaluacion', 'idAlumno', 'alumno', 'actividad', 'nota', 'puntos',
       'estado', 'problema', 'creadoEn', 'actualizadoEn'
+    ],
+    SolicitudesReunionRepresentantes: [
+      'id', 'cedulaAlumno', 'idProfesor', 'docente', 'materia', 'idAlumno', 'alumno',
+      'ano', 'seccion', 'turno', 'representante', 'motivo', 'fechaSolicitada',
+      'horaSolicitada', 'estado', 'fechaConfirmada', 'horaConfirmada',
+      'respuestaDocente', 'creadoEn', 'actualizadoEn'
     ]
   })
 });
@@ -436,6 +443,11 @@ function doPost(e) {
       return json_(registrarConsultaNotaRepresentante_(payload));
     }
 
+    // V8.7 · Solicitud de reunión del representante con el docente.
+    if (action === 'solicitarReunionRepresentante') {
+      return json_(solicitarReunionRepresentante_(payload));
+    }
+
     // Acciones exclusivas del bot de Telegram. Se autentican con
     // EDUGESTION_BOT_SECRET y no dependen de una sesión del navegador.
     if (action.indexOf('bot') === 0) {
@@ -706,6 +718,12 @@ function doPost(e) {
         break;
       case 'obtenerAccesosRepresentantes':
         respuesta = obtenerAccesosRepresentantes_(sesion.docente, payload);
+        break;
+      case 'obtenerSolicitudesReunionRepresentantes':
+        respuesta = obtenerSolicitudesReunionRepresentantes_(sesion.docente, payload);
+        break;
+      case 'confirmarSolicitudReunionRepresentante':
+        respuesta = confirmarSolicitudReunionRepresentante_(sesion.docente, payload);
         break;
       case 'generarAccesoRepresentante':
         respuesta = generarAccesoRepresentante_(sesion.docente, payload);
@@ -6784,6 +6802,30 @@ function consultaRepresentantePublica_(payload) {
       };
     });
 
+  asegurarSolicitudesReunionRepresentantes_();
+  var solicitudesReunion = leerObjetos_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES).objetos
+    .filter(function(r) { return normalizarCedulaRepresentante_(r.cedulaAlumno) === cedula; })
+    .sort(function(a,b) { return String(b.actualizadoEn || b.creadoEn || '').localeCompare(String(a.actualizadoEn || a.creadoEn || '')); })
+    .slice(0, 30)
+    .map(function(r) {
+      return {
+        id:String(r.id || ''), idProfesor:String(r.idProfesor || ''), docente:String(r.docente || ''),
+        materia:String(r.materia || ''), alumno:String(r.alumno || ''), motivo:String(r.motivo || ''),
+        fechaSolicitada:String(serializarValor_(r.fechaSolicitada, 'fecha') || ''), horaSolicitada:String(r.horaSolicitada || ''),
+        estado:String(r.estado || 'PENDIENTE'), fechaConfirmada:String(serializarValor_(r.fechaConfirmada, 'fecha') || ''),
+        horaConfirmada:String(r.horaConfirmada || ''), respuestaDocente:String(r.respuestaDocente || ''),
+        actualizadoEn:String(r.actualizadoEn || r.creadoEn || '')
+      };
+    });
+
+  var docentesReunionMap = {};
+  alumnos.forEach(function(a) {
+    var idp = String(a.idProfesor || '');
+    if (!idp || docentesReunionMap[idp]) return;
+    var d = docentes[idp] || {};
+    docentesReunionMap[idp] = { idProfesor:idp, docente:String(d.nombre || 'Docente'), materia:String(d.materia || 'Materia') };
+  });
+
   return {
     status: 'success',
     alumno: {
@@ -6850,6 +6892,7 @@ var EG = Object.freeze({
     COMPROMISOS_ACADEMICOS: 'CompromisosAcademicos',
     ACCESO_REPRESENTANTES: 'AccesoRepresentantes',
     CONFIRMACION_NOTAS_REPRESENTANTES: 'ConfirmacionNotasRepresentantes',
+    SOLICITUDES_REUNION_REPRESENTANTES: 'SolicitudesReunionRepresentantes',
     PORTAL_REPRESENTANTES_CONFIG: 'PortalRepresentantesConfig',
     SEGUIMIENTO_FAMILIAR_CASOS: 'SeguimientoFamiliarCasos'
   }),
@@ -6956,6 +6999,12 @@ var EG = Object.freeze({
       'id', 'cedulaAlumno', 'idProfesor', 'docente', 'materia',
       'claveEvaluacion', 'idAlumno', 'alumno', 'actividad', 'nota', 'puntos',
       'estado', 'problema', 'creadoEn', 'actualizadoEn'
+    ],
+    SolicitudesReunionRepresentantes: [
+      'id', 'cedulaAlumno', 'idProfesor', 'docente', 'materia', 'idAlumno', 'alumno',
+      'ano', 'seccion', 'turno', 'representante', 'motivo', 'fechaSolicitada',
+      'horaSolicitada', 'estado', 'fechaConfirmada', 'horaConfirmada',
+      'respuestaDocente', 'creadoEn', 'actualizadoEn'
     ],
     PortalRepresentantesConfig: [
       'idProfesor', 'mostrarNotas', 'mostrarAsistencia', 'mostrarPendientes',
@@ -7257,6 +7306,11 @@ function doPost(e) {
       return json_(registrarConsultaNotaRepresentante_(payload));
     }
 
+    // V8.7 · Solicitud de reunión del representante con el docente.
+    if (action === 'solicitarReunionRepresentante') {
+      return json_(solicitarReunionRepresentante_(payload));
+    }
+
     // Acciones exclusivas del bot de Telegram. Se autentican con
     // EDUGESTION_BOT_SECRET y no dependen de una sesión del navegador.
     if (action.indexOf('bot') === 0) {
@@ -7527,6 +7581,12 @@ function doPost(e) {
         break;
       case 'obtenerAccesosRepresentantes':
         respuesta = obtenerAccesosRepresentantes_(sesion.docente, payload);
+        break;
+      case 'obtenerSolicitudesReunionRepresentantes':
+        respuesta = obtenerSolicitudesReunionRepresentantes_(sesion.docente, payload);
+        break;
+      case 'confirmarSolicitudReunionRepresentante':
+        respuesta = confirmarSolicitudReunionRepresentante_(sesion.docente, payload);
         break;
       case 'obtenerConfiguracionPortalRepresentantes':
         respuesta = obtenerConfiguracionPortalRepresentantes_(sesion.docente);
@@ -13664,6 +13724,30 @@ function consultaRepresentantePublica_(payload) {
       };
     });
 
+  asegurarSolicitudesReunionRepresentantes_();
+  var solicitudesReunion = leerObjetos_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES).objetos
+    .filter(function(r) { return normalizarCedulaRepresentante_(r.cedulaAlumno) === cedula; })
+    .sort(function(a,b) { return String(b.actualizadoEn || b.creadoEn || '').localeCompare(String(a.actualizadoEn || a.creadoEn || '')); })
+    .slice(0, 30)
+    .map(function(r) {
+      return {
+        id:String(r.id || ''), idProfesor:String(r.idProfesor || ''), docente:String(r.docente || ''),
+        materia:String(r.materia || ''), alumno:String(r.alumno || ''), motivo:String(r.motivo || ''),
+        fechaSolicitada:String(serializarValor_(r.fechaSolicitada, 'fecha') || ''), horaSolicitada:String(r.horaSolicitada || ''),
+        estado:String(r.estado || 'PENDIENTE'), fechaConfirmada:String(serializarValor_(r.fechaConfirmada, 'fecha') || ''),
+        horaConfirmada:String(r.horaConfirmada || ''), respuestaDocente:String(r.respuestaDocente || ''),
+        actualizadoEn:String(r.actualizadoEn || r.creadoEn || '')
+      };
+    });
+
+  var docentesReunionMap = {};
+  alumnos.forEach(function(a) {
+    var idp = String(a.idProfesor || '');
+    if (!idp || docentesReunionMap[idp]) return;
+    var d = docentes[idp] || {};
+    docentesReunionMap[idp] = { idProfesor:idp, docente:String(d.nombre || 'Docente'), materia:String(d.materia || 'Materia') };
+  });
+
   return {
     status: 'success',
     alumno: {
@@ -13685,6 +13769,8 @@ function consultaRepresentantePublica_(payload) {
     asistenciaPorMateria: Object.keys(asistenciaResumen).map(function(k){ return asistenciaResumen[k]; }),
     asistenciaDetalle: asistenciaDetalle,
     compromisos: compromisosPublicos,
+    docentesReunion: Object.keys(docentesReunionMap).map(function(k){ return docentesReunionMap[k]; }),
+    solicitudesReunion: solicitudesReunion,
     visibilidad: {
       notas: algunoPermite_('mostrarNotas'),
       asistencia: algunoPermite_('mostrarAsistencia'),
@@ -14066,3 +14152,124 @@ function obtenerResumenMensualFamilias_(docente, payload) {
 /* EDUGESTION_SEGUIMIENTO_FAMILIAR_V84_END */
 
 /* EDUGESTION_PRIVACIDAD_PORTAL_REPRESENTANTES_V81_END */
+
+/* =========================================================
+ * EduGestión · V8.7
+ * SOLICITUDES DE REUNIÓN REPRESENTANTE ↔ DOCENTE
+ * ========================================================= */
+function asegurarSolicitudesReunionRepresentantes_() {
+  return asegurarHoja_(getDb_(), EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES, EG.HEADERS.SolicitudesReunionRepresentantes);
+}
+
+function solicitarReunionRepresentante_(payload) {
+  var cedula = normalizarCedulaRepresentante_(payload.cedula);
+  validarAccesoRepresentantePublico_(cedula, payload.codigo);
+  asegurarSolicitudesReunionRepresentantes_();
+
+  var idProfesor = String(payload.idProfesor || '').trim();
+  var motivo = String(payload.motivo || '').trim().slice(0, 1200);
+  var fecha = String(payload.fechaSolicitada || '').trim();
+  var hora = String(payload.horaSolicitada || '').trim();
+  if (!idProfesor) lanzar_('Selecciona el profesor con quien deseas reunirte.', 'VALIDATION_ERROR');
+  if (!motivo) lanzar_('Escribe el motivo de la reunión.', 'VALIDATION_ERROR');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) lanzar_('Selecciona el día propuesto para la reunión.', 'VALIDATION_ERROR');
+  if (!/^\d{2}:\d{2}$/.test(hora)) lanzar_('Selecciona la hora propuesta para la reunión.', 'VALIDATION_ERROR');
+
+  var alumnos = leerObjetos_(EG.SHEETS.ALUMNOS).objetos.filter(function(a) {
+    return normalizarCedulaRepresentante_(a.cedula) === cedula && String(a.idProfesor || '') === idProfesor;
+  });
+  if (!alumnos.length) lanzar_('No se encontró relación académica con ese docente.', 'FORBIDDEN');
+  var alumno = alumnos[0];
+  var docente = leerObjetos_(EG.SHEETS.DOCENTES).objetos.filter(function(d) {
+    return String(d.id || '') === idProfesor && esActivo_(d.activo);
+  })[0];
+  if (!docente) lanzar_('El docente seleccionado no está disponible.', 'NOT_FOUND');
+
+  var tabla = leerObjetos_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES);
+  var pendiente = tabla.objetos.filter(function(r) {
+    return normalizarCedulaRepresentante_(r.cedulaAlumno) === cedula &&
+      String(r.idProfesor || '') === idProfesor && String(r.estado || '').toUpperCase() === 'PENDIENTE';
+  }).sort(function(a,b){ return String(b.actualizadoEn || '').localeCompare(String(a.actualizadoEn || '')); })[0];
+  var ahora = ahora_();
+  var registro = {
+    id: pendiente ? String(pendiente.id || Utilities.getUuid()) : Utilities.getUuid(),
+    cedulaAlumno: cedula,
+    idProfesor: idProfesor,
+    docente: String(docente.nombre || docente.usuario || 'Docente'),
+    materia: String(docente.materia || ''),
+    idAlumno: String(alumno.id || ''),
+    alumno: String(alumno.nombre || ''),
+    ano: String(alumno.ano || ''),
+    seccion: String(alumno.seccion || ''),
+    turno: normalizarTurno_(alumno.turno || ''),
+    representante: String(alumno.representante || ''),
+    motivo: motivo,
+    fechaSolicitada: fecha,
+    horaSolicitada: hora,
+    estado: 'PENDIENTE',
+    fechaConfirmada: '',
+    horaConfirmada: '',
+    respuestaDocente: '',
+    creadoEn: pendiente ? String(pendiente.creadoEn || ahora) : ahora,
+    actualizadoEn: ahora
+  };
+  if (pendiente) actualizarFilaObjeto_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES, pendiente.__row, registro);
+  else anexarObjeto_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES, registro);
+
+  return {
+    status:'success',
+    message:'Solicitud enviada. Cita por confirmar.',
+    solicitud:{
+      id:registro.id, docente:registro.docente, materia:registro.materia, motivo:registro.motivo,
+      fechaSolicitada:fecha, horaSolicitada:hora, estado:'PENDIENTE'
+    }
+  };
+}
+
+function obtenerSolicitudesReunionRepresentantes_(docente, payload) {
+  asegurarSolicitudesReunionRepresentantes_();
+  var filas = filtrarPorProfesor_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES, docente.id)
+    .sort(function(a,b) {
+      var ap = String(a.estado || '').toUpperCase() === 'PENDIENTE' ? 0 : 1;
+      var bp = String(b.estado || '').toUpperCase() === 'PENDIENTE' ? 0 : 1;
+      return ap - bp || String(b.actualizadoEn || b.creadoEn || '').localeCompare(String(a.actualizadoEn || a.creadoEn || ''));
+    })
+    .slice(0, 150)
+    .map(function(r) {
+      return {
+        id:String(r.id || ''), alumno:String(r.alumno || ''), cedulaAlumno:String(r.cedulaAlumno || ''),
+        representante:String(r.representante || ''), materia:String(r.materia || docente.materia || ''),
+        ano:String(r.ano || ''), seccion:String(r.seccion || ''), turno:String(r.turno || ''),
+        motivo:String(r.motivo || ''), fechaSolicitada:String(serializarValor_(r.fechaSolicitada, 'fecha') || ''),
+        horaSolicitada:String(r.horaSolicitada || ''), estado:String(r.estado || 'PENDIENTE'),
+        fechaConfirmada:String(serializarValor_(r.fechaConfirmada, 'fecha') || ''), horaConfirmada:String(r.horaConfirmada || ''),
+        respuestaDocente:String(r.respuestaDocente || ''), creadoEn:String(r.creadoEn || ''), actualizadoEn:String(r.actualizadoEn || '')
+      };
+    });
+  return {
+    status:'success', solicitudes:filas,
+    pendientes:filas.filter(function(x){ return String(x.estado).toUpperCase() === 'PENDIENTE'; }).length
+  };
+}
+
+function confirmarSolicitudReunionRepresentante_(docente, payload) {
+  asegurarSolicitudesReunionRepresentantes_();
+  var id = String(payload.id || '').trim();
+  if (!id) lanzar_('Falta identificar la solicitud.', 'BAD_REQUEST');
+  var fecha = String(payload.fechaConfirmada || '').trim();
+  var hora = String(payload.horaConfirmada || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) lanzar_('Selecciona la fecha de la reunión.', 'VALIDATION_ERROR');
+  if (!/^\d{2}:\d{2}$/.test(hora)) lanzar_('Selecciona la hora de la reunión.', 'VALIDATION_ERROR');
+
+  var tabla = leerObjetos_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES);
+  var r = tabla.objetos.filter(function(x) {
+    return String(x.id || '') === id && String(x.idProfesor || '') === String(docente.id);
+  })[0];
+  if (!r) lanzar_('No se encontró la solicitud de reunión.', 'NOT_FOUND');
+  actualizarFilaObjeto_(EG.SHEETS.SOLICITUDES_REUNION_REPRESENTANTES, r.__row, {
+    estado:'CONFIRMADA', fechaConfirmada:fecha, horaConfirmada:hora,
+    respuestaDocente:String(payload.respuestaDocente || '').trim().slice(0, 1000), actualizadoEn:ahora_()
+  });
+  return {status:'success', message:'Reunión confirmada. El representante verá la fecha y hora en su portal.', id:id, estado:'CONFIRMADA', fechaConfirmada:fecha, horaConfirmada:hora};
+}
+/* EDUGESTION_SOLICITUDES_REUNION_V87_END */

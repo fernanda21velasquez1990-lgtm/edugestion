@@ -78,6 +78,11 @@
     const periods=[...new Set((data?.actividades||[]).map(x=>String(x.lapso||'')).filter(Boolean))];
     $('rep-filter-subject').innerHTML='<option value="">Todas las materias</option>'+subjects.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
     $('rep-filter-period').innerHTML='<option value="">Todos los lapsos</option>'+periods.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+    const teacherSel=$('rep-meeting-teacher');
+    if(teacherSel){
+      const teachers=Array.isArray(data?.docentesReunion)?data.docentesReunion:[];
+      teacherSel.innerHTML='<option value="">Selecciona el profesor</option>'+teachers.map(t=>`<option value="${esc(t.idProfesor)}">${esc(t.docente||'Docente')} · ${esc(t.materia||'Materia')}</option>`).join('');
+    }
   }
 
   function renderAlert(){
@@ -337,6 +342,62 @@
     </article>`).join('')||'<div class="rep-empty">No hay compromisos académicos registrados.</div>';
   }
 
+
+  function estadoReunionClaseV87(estado){
+    const e=String(estado||'PENDIENTE').toUpperCase();
+    if(e==='CONFIRMADA')return 'is-confirmed';
+    if(e==='CANCELADA')return 'is-cancelled';
+    return 'is-pending';
+  }
+
+  function renderMeetingsV87(){
+    const host=$('rep-meeting-list');if(!host)return;
+    const rows=Array.isArray(data?.solicitudesReunion)?data.solicitudesReunion:[];
+    if(!rows.length){
+      host.innerHTML='<div class="rep-empty">Todavía no has solicitado reuniones con los docentes.</div>';
+      return;
+    }
+    host.innerHTML=rows.map(r=>{
+      const estado=String(r.estado||'PENDIENTE').toUpperCase();
+      const confirmada=estado==='CONFIRMADA';
+      return `<article class="rep-meeting-card ${estadoReunionClaseV87(estado)}">
+        <div class="rep-meeting-card-top">
+          <div><strong>${esc(r.docente||'Docente')}</strong><span>${esc(r.materia||'')}</span></div>
+          <b>${confirmada?'Cita confirmada':'Cita por confirmar'}</b>
+        </div>
+        <p>${esc(r.motivo||'')}</p>
+        <div class="rep-meeting-dates">
+          <span><small>Fecha solicitada</small><strong>${esc(r.fechaSolicitada||'—')} · ${esc(r.horaSolicitada||'—')}</strong></span>
+          <span><small>${confirmada?'Fecha confirmada':'Estado'}</small><strong>${confirmada?`${esc(r.fechaConfirmada||'—')} · ${esc(r.horaConfirmada||'—')}`:'Esperando confirmación del docente'}</strong></span>
+        </div>
+        ${r.respuestaDocente?`<div class="rep-meeting-response"><small>Mensaje del docente</small><strong>${esc(r.respuestaDocente)}</strong></div>`:''}
+      </article>`;
+    }).join('');
+  }
+
+  async function solicitarReunionV87(e){
+    e?.preventDefault?.();
+    const idProfesor=$('rep-meeting-teacher')?.value||'';
+    const fechaSolicitada=$('rep-meeting-date')?.value||'';
+    const horaSolicitada=$('rep-meeting-time')?.value||'';
+    const motivo=String($('rep-meeting-reason')?.value||'').trim();
+    const msg=$('rep-meeting-message');
+    if(!idProfesor||!fechaSolicitada||!horaSolicitada||!motivo){
+      if(msg){msg.textContent='Completa profesor, día, hora y motivo.';msg.className='rep-meeting-message is-error';}
+      return;
+    }
+    const btn=$('rep-meeting-submit');if(btn){btn.disabled=true;btn.textContent='Enviando solicitud…';}
+    try{
+      const r=await api('solicitarReunionRepresentante',{cedula:currentCedula,codigo:currentCodigo,idProfesor,fechaSolicitada,horaSolicitada,motivo});
+      if(msg){msg.textContent=r?.message||'Solicitud enviada. Cita por confirmar.';msg.className='rep-meeting-message is-success';}
+      $('rep-meeting-reason').value='';
+      const nuevo=await api('consultaRepresentantePublica',{cedula:currentCedula,codigo:currentCodigo});
+      data=nuevo;buildFilters();renderAll();setView('reunion');
+    }catch(err){
+      if(msg){msg.textContent=err?.message||'No se pudo enviar la solicitud.';msg.className='rep-meeting-message is-error';}
+    }finally{if(btn){btn.disabled=false;btn.textContent='Solicitar reunión';}}
+  }
+
   function aplicarVisibilidadV81(){
     const v=data?.visibilidad||{};
     const map={
@@ -367,6 +428,8 @@
     renderGrades();
     renderAttendance();
     renderCommitments();
+    renderMeetingsV87();
+    const meetingDate=$('rep-meeting-date');if(meetingDate)meetingDate.min=new Date().toISOString().slice(0,10);
     $('rep-privacy').textContent=data.privacidad||'';
   }
 
@@ -433,6 +496,7 @@
   $('rep-grade-question-cancel')?.addEventListener('click',cerrarConsultaNota);
   $('rep-grade-question-whatsapp')?.addEventListener('click',registrarConsultaNota);
   $('rep-grade-question-modal')?.addEventListener('click',e=>{if(e.target===e.currentTarget)cerrarConsultaNota();});
+  $('rep-meeting-form')?.addEventListener('submit',solicitarReunionV87);
 
   $('rep-logout')?.addEventListener('click',()=>{
     data=null;subjectFilter='';periodFilter='';currentCedula='';currentCodigo='';if(autoRefreshTimer){clearInterval(autoRefreshTimer);autoRefreshTimer=null;}

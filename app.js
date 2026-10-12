@@ -11314,6 +11314,60 @@ Archivo enviado directamente desde EduGestión.`);
   }
 
   function fmtFecha(v){try{return new Date(v).toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric'})}catch(_){return ''}}
+
+  async function cargarSolicitudesReunionV87(){
+    try{
+      const r=await apiRequest('obtenerSolicitudesReunionRepresentantes',{});
+      solicitudesReunionV87=Array.isArray(r?.solicitudes)?r.solicitudes:[];
+      renderSolicitudesReunionV87();
+    }catch(e){mostrarToast?.(e?.message||'No se pudieron actualizar las solicitudes de reunión.','error','Reuniones');}
+  }
+
+  function mismaSeccionReunionV87(r){
+    if(!seccionActual)return true;
+    const key=[String(r.ano||'').trim(),String(r.seccion||'').trim().toUpperCase(),normalizeTurnoV78(r.turno)].join('|');
+    return key===seccionActual;
+  }
+
+  function renderSolicitudesReunionV87(){
+    const host=$('rep-v87-meeting-list');if(!host)return;
+    const rows=solicitudesReunionV87.filter(mismaSeccionReunionV87);
+    const pendientes=rows.filter(r=>String(r.estado||'').toUpperCase()==='PENDIENTE');
+    const alert=$('rep-v87-meeting-alert'),txt=$('rep-v87-meeting-alert-text');
+    if(alert){alert.classList.toggle('hidden',!pendientes.length);}
+    if(txt)txt.textContent=pendientes.length===1?'Tienes 1 cita por confirmar con un representante.':`Tienes ${pendientes.length} citas por confirmar con representantes.`;
+    if(!rows.length){host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-calendar-check"></i> No hay solicitudes de reunión para esta sección.</div>';return;}
+    host.innerHTML=rows.slice(0,30).map(r=>{
+      const pendiente=String(r.estado||'').toUpperCase()==='PENDIENTE';
+      return `<article class="rep-v87-meeting-card ${pendiente?'is-pending':'is-confirmed'}">
+        <div class="rep-v87-meeting-main">
+          <div class="rep-v87-meeting-title"><strong>${esc(r.alumno||'Estudiante')}</strong><span>${esc(r.ano||'')} · Sección ${esc(r.seccion||'')} · ${esc(r.representante||'Representante')}</span></div>
+          <p>${esc(r.motivo||'Sin motivo indicado')}</p>
+          <div class="rep-v87-requested"><span>Solicita: <b>${esc(r.fechaSolicitada||'—')}</b> a las <b>${esc(r.horaSolicitada||'—')}</b></span>${!pendiente?`<span>Confirmada: <b>${esc(r.fechaConfirmada||'—')}</b> · <b>${esc(r.horaConfirmada||'—')}</b></span>`:''}</div>
+        </div>
+        ${pendiente?`<div class="rep-v87-confirm-box">
+          <label><span>Fecha a confirmar</span><input type="date" data-meeting-date="${esc(r.id)}" value="${esc(r.fechaSolicitada||'')}"></label>
+          <label><span>Hora a confirmar</span><input type="time" data-meeting-time="${esc(r.id)}" value="${esc(r.horaSolicitada||'')}"></label>
+          <label class="is-wide"><span>Mensaje opcional</span><input type="text" data-meeting-note="${esc(r.id)}" placeholder="Ej.: Nos vemos en Coordinación."></label>
+          <button type="button" data-meeting-confirm="${esc(r.id)}"><i class="fa-solid fa-circle-check"></i> Confirmar cita</button>
+        </div>`:`<div class="rep-v87-confirmed-state"><i class="fa-solid fa-circle-check"></i><strong>Cita confirmada</strong><span>${esc(r.respuestaDocente||'El representante ya puede ver la confirmación en su portal.')}</span></div>`}
+      </article>`;
+    }).join('');
+    host.querySelectorAll('[data-meeting-confirm]').forEach(btn=>btn.addEventListener('click',()=>confirmarReunionV87(btn.dataset.meetingConfirm)));
+  }
+
+  async function confirmarReunionV87(id){
+    const fecha=document.querySelector(`[data-meeting-date="${CSS.escape(id)}"]`)?.value||'';
+    const hora=document.querySelector(`[data-meeting-time="${CSS.escape(id)}"]`)?.value||'';
+    const respuestaDocente=document.querySelector(`[data-meeting-note="${CSS.escape(id)}"]`)?.value||'';
+    if(!fecha||!hora){mostrarToast?.('Selecciona la fecha y la hora antes de confirmar.','warning','Cita incompleta');return;}
+    try{
+      const r=await apiRequest('confirmarSolicitudReunionRepresentante',{id,fechaConfirmada:fecha,horaConfirmada:hora,respuestaDocente});
+      mostrarToast?.(r?.message||'Cita confirmada.','success','Reunión confirmada');
+      await cargarSolicitudesReunionV87();
+    }catch(e){mostrarToast?.(e?.message||'No se pudo confirmar la reunión.','error','Error');}
+  }
+
   function render(){
     const list=document.getElementById('eval-lib-list'), count=document.getElementById('eval-lib-count'); if(!list)return;
     const q=clean(document.getElementById('eval-lib-search')?.value).toLowerCase();
@@ -20408,6 +20462,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   let filtroFamilias='todos';
   let alumnoGestionActual='';
   let ordenFamilias='prioridad';
+  let solicitudesReunionV87=[];
   let privacidadPortalV81={mostrarNotas:true,mostrarAsistencia:true,mostrarPendientes:true,mostrarCompromisos:true,mostrarRecuperaciones:true};
 
   function rolPermitido(){
@@ -20562,6 +20617,18 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           </div>
         </section>
 
+        <section class="rep-v87-meetings">
+          <div id="rep-v87-meeting-alert" class="rep-v87-meeting-alert hidden">
+            <i class="fa-solid fa-bell"></i>
+            <div><strong>Solicitud de reunión pendiente</strong><span id="rep-v87-meeting-alert-text">Un representante quiere reunirse contigo.</span></div>
+          </div>
+          <div class="rep-v87-meeting-head">
+            <div><span>Reuniones solicitadas</span><strong>Confirmación de citas con representantes</strong></div>
+            <button type="button" id="rep-v87-meeting-refresh"><i class="fa-solid fa-rotate"></i> Actualizar solicitudes</button>
+          </div>
+          <div id="rep-v87-meeting-list" class="rep-v87-meeting-list"><div class="rep-v76-empty">No hay solicitudes pendientes.</div></div>
+        </section>
+
         <section class="rep-v84-monthly">
           <div class="rep-v84-monthly-head">
             <div><span>Resumen mensual</span><strong>Resultados del seguimiento familiar</strong></div>
@@ -20696,6 +20763,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
         if($('rep-v76-search'))$('rep-v76-search').value='';
         renderSectionTabsV78();
         render();
+        renderSolicitudesReunionV87();
         cargarResumenMensualV84();
       });
     }
@@ -20716,6 +20784,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     $('rep-v81-print-pending')?.addEventListener('click',imprimirPendientesFamiliasV81);
     $('rep-v83-print-week')?.addEventListener('click',imprimirSeguimientoSemanalV83);
     $('rep-v83-export-csv')?.addEventListener('click',exportarSeguimientoCSVV83);
+    $('rep-v87-meeting-refresh')?.addEventListener('click',cargarSolicitudesReunionV87);
     if($('rep-v84-month') && !$('rep-v84-month').dataset.bound){
       $('rep-v84-month').dataset.bound='1';
       $('rep-v84-month').value=new Date().toISOString().slice(0,7);
@@ -20816,6 +20885,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
         if(sel)sel.value=seccionActual;
         renderSectionTabsV78();
         render();
+        renderSolicitudesReunionV87();
       }));
     }
   }
@@ -20824,15 +20894,18 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     const host=$('rep-v76-list');
     if(host)host.innerHTML='<div class="rep-v76-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes…</div>';
     try{
-      const [r,cfg] = await Promise.all([
+      const [r,cfg,meet] = await Promise.all([
         apiRequest('obtenerAccesosRepresentantes',{}),
-        apiRequest('obtenerConfiguracionPortalRepresentantes',{}).catch(()=>null)
+        apiRequest('obtenerConfiguracionPortalRepresentantes',{}).catch(()=>null),
+        apiRequest('obtenerSolicitudesReunionRepresentantes',{}).catch(()=>({solicitudes:[]}))
       ]);
       alumnos=Array.isArray(r?.alumnos)?r.alumnos:[];
+      solicitudesReunionV87=Array.isArray(meet?.solicitudes)?meet.solicitudes:[];
       if(cfg?.configuracion) privacidadPortalV81={...privacidadPortalV81,...cfg.configuracion};
       construirSeccionesV78();
       renderSectionTabsV78();
       render();
+      renderSolicitudesReunionV87();
       cargarResumenMensualV84();
     }catch(e){
       if(host)host.innerHTML=`<div class="rep-v76-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar la información.</strong><span>${esc(e?.message||'')}</span></div>`;
