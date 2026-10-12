@@ -59,7 +59,7 @@ var EG = Object.freeze({
       'idAlumno', 'alumno', 'estado', 'actualizadoEn'
     ],
     Planificacion: [
-      'id', 'idProfesor', 'ano', 'seccion', 'actividad', 'puntos', 'fecha',
+      'id', 'idProfesor', 'ano', 'seccion', 'actividad', 'tipoEvaluacion', 'puntos', 'fecha',
       'creadoEn', 'actualizadoEn'
     ],
     Horarios: [
@@ -2769,7 +2769,8 @@ function guardarPlanificacion_(docente, payload) {
     ano: limpiarRequerido_(payload.ano, 'año'),
     seccion: limpiarRequerido_(payload.seccion, 'sección').toUpperCase(),
     actividad: limpiarRequerido_(payload.actividad, 'actividad'),
-    puntos: numeroEntre_(payload.puntos, 0, 100, 'puntos'),
+    tipoEvaluacion: String(payload.tipoEvaluacion || 'Actividad evaluativa').trim().slice(0, 100),
+    puntos: numeroEntre_(payload.puntos, 0, 20, 'puntos'),
     fecha: limpiarRequerido_(payload.fecha, 'fecha'),
     creadoEn: ahora,
     actualizadoEn: ahora
@@ -5192,6 +5193,7 @@ function actividadEvaluacionPublica_(p) {
   return {
     id: String(p.id || ''),
     nombre: String(p.actividad || p.nombre || 'Actividad evaluativa'),
+    tipoEvaluacion: String(p.tipoEvaluacion || 'Actividad evaluativa'),
     puntos: Number(p.puntos || p.ponderacion || 0),
     fecha: String(serializarValor_(p.fecha, 'fecha') || ''),
     ano: String(p.ano || ''),
@@ -5614,6 +5616,7 @@ function sincronizarPlanificacionExpressEvaluaciones_(docente, payload) {
       ano: ano,
       seccion: seccion,
       actividad: nombre,
+      tipoEvaluacion: String(item.tipoEvaluacion || 'Actividad evaluativa').trim().slice(0, 100),
       puntos: puntos,
       fecha: fecha,
       creadoEn: existente ? String(existente.creadoEn || ahora) : ahora,
@@ -6913,7 +6916,7 @@ var EG = Object.freeze({
       'idAlumno', 'alumno', 'estado', 'actualizadoEn'
     ],
     Planificacion: [
-      'id', 'idProfesor', 'ano', 'seccion', 'actividad', 'puntos', 'fecha',
+      'id', 'idProfesor', 'ano', 'seccion', 'actividad', 'tipoEvaluacion', 'puntos', 'fecha',
       'creadoEn', 'actualizadoEn'
     ],
     Horarios: [
@@ -9647,7 +9650,8 @@ function guardarPlanificacion_(docente, payload) {
     ano: limpiarRequerido_(payload.ano, 'año'),
     seccion: limpiarRequerido_(payload.seccion, 'sección').toUpperCase(),
     actividad: limpiarRequerido_(payload.actividad, 'actividad'),
-    puntos: numeroEntre_(payload.puntos, 0, 100, 'puntos'),
+    tipoEvaluacion: String(payload.tipoEvaluacion || 'Actividad evaluativa').trim().slice(0, 100),
+    puntos: numeroEntre_(payload.puntos, 0, 20, 'puntos'),
     fecha: limpiarRequerido_(payload.fecha, 'fecha'),
     creadoEn: ahora,
     actualizadoEn: ahora
@@ -12070,6 +12074,7 @@ function actividadEvaluacionPublica_(p) {
   return {
     id: String(p.id || ''),
     nombre: String(p.actividad || p.nombre || 'Actividad evaluativa'),
+    tipoEvaluacion: String(p.tipoEvaluacion || 'Actividad evaluativa'),
     puntos: Number(p.puntos || p.ponderacion || 0),
     fecha: String(serializarValor_(p.fecha, 'fecha') || ''),
     ano: String(p.ano || ''),
@@ -12492,6 +12497,7 @@ function sincronizarPlanificacionExpressEvaluaciones_(docente, payload) {
       ano: ano,
       seccion: seccion,
       actividad: nombre,
+      tipoEvaluacion: String(item.tipoEvaluacion || 'Actividad evaluativa').trim().slice(0, 100),
       puntos: puntos,
       fecha: fecha,
       creadoEn: existente ? String(existente.creadoEn || ahora) : ahora,

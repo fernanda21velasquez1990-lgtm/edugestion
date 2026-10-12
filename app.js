@@ -119,6 +119,9 @@ const SESSION_KEY = 'edugestion_session_v2';
     const tituloPlan = document.getElementById('titulo-plan-seccion');
     const subtituloPlan = document.getElementById('subtitulo-plan-seccion');
     const badgeTotalPlan = document.getElementById('badge-total-puntos');
+    const badgePuntosFaltantesV88 = document.getElementById('badge-puntos-faltantes-v88');
+    const badgeEstadoPlanV88 = document.getElementById('badge-estado-plan-v88');
+    const controlSeccionesPlanV88 = document.getElementById('plan-control-secciones-v88');
     const accionesPlan = document.getElementById('acciones-planificacion');
     const gridCalendario = document.getElementById('grid-calendario');
     const mesCalendario = document.getElementById('mes-calendario');
@@ -2020,26 +2023,92 @@ const SESSION_KEY = 'edugestion_session_v2';
       setTimeout(() => document.getElementById('plan-actividad')?.focus(), 40);
     };
 
-    function renderMenuPlanificacion() {
-      menuSeccionesPlan.innerHTML = '';
-      if (planesProfesor.length === 0) {
-        menuSeccionesPlan.innerHTML = '<div class="planning-empty-mini"><i class="fa-regular fa-calendar-xmark"></i><p>Aún no hay secciones planificadas.</p></div>';
+    const META_PUNTOS_PLAN_V88 = 20;
+
+    function tipoEvaluacionPlanV88(plan = {}) {
+      const guardado = String(plan.tipoEvaluacion || plan.tipo || '').trim();
+      if (guardado) return guardado;
+      const txt = String(plan.actividad || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+      if (txt.includes('taller')) return 'Taller';
+      if (txt.includes('informe')) return 'Informe';
+      if (txt.includes('ensayo')) return 'Ensayo';
+      if (txt.includes('expos')) return 'Exposición';
+      if (txt.includes('mapa conceptual')) return 'Mapa conceptual';
+      if (txt.includes('infograf')) return 'Infografía';
+      if (txt.includes('video')) return 'Video';
+      if (txt.includes('prueba') || txt.includes('examen')) return 'Prueba escrita';
+      if (txt.includes('pract')) return 'Actividad práctica';
+      if (txt.includes('proyecto')) return 'Proyecto';
+      return 'Actividad evaluativa';
+    }
+
+    function seccionesPlanificacionV88() {
+      const mapa = new Map();
+      const agregar = (ano, seccion, turno='') => {
+        ano = String(ano || '').trim(); seccion = String(seccion || '').trim().toUpperCase();
+        if (!ano || !seccion) return;
+        const key = `${ano}-${seccion}`;
+        if (!mapa.has(key)) mapa.set(key,{key,ano,seccion,turno:String(turno||'')});
+      };
+      (Array.isArray(horariosProfesor)?horariosProfesor:[]).forEach(h=>agregar(h.ano,h.seccion,h.turno));
+      (Array.isArray(planesProfesor)?planesProfesor:[]).forEach(p=>agregar(p.ano,p.seccion,p.turno));
+      edugestionSeccionesAdicionalesCiencias().forEach(s=>agregar(s.ano,s.seccion,s.turno));
+      return [...mapa.values()].sort((a,b)=>{
+        const na=Number(String(a.ano).match(/\d+/)?.[0]||99), nb=Number(String(b.ano).match(/\d+/)?.[0]||99);
+        return na-nb || a.seccion.localeCompare(b.seccion,'es');
+      });
+    }
+
+    function resumenSeccionPlanV88(ano,seccion) {
+      const evaluaciones=(Array.isArray(planesProfesor)?planesProfesor:[])
+        .filter(p=>String(p.ano)===String(ano)&&String(p.seccion).toUpperCase()===String(seccion).toUpperCase())
+        .sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
+      const total=evaluaciones.reduce((s,p)=>s+Number(p.puntos||0),0);
+      const faltan=Math.max(0,META_PUNTOS_PLAN_V88-total);
+      const excede=Math.max(0,total-META_PUNTOS_PLAN_V88);
+      const estado=excede>0?'Excedido':faltan===0?'Completo':'Pendiente';
+      return {evaluaciones,total,faltan,excede,estado};
+    }
+
+    function renderControlSeccionesPlanificacionV88() {
+      if(!controlSeccionesPlanV88) return;
+      const secciones=seccionesPlanificacionV88();
+      if(!secciones.length){
+        controlSeccionesPlanV88.innerHTML='<div class="planning-control-empty-v88"><i class="fa-regular fa-folder-open"></i><span>Aún no hay secciones disponibles en el horario o la planificación.</span></div>';
         return;
       }
-      const mapa = new Map();
-      planesProfesor.forEach(p => {
-        const key = `${p.ano}-${p.seccion}`;
-        if (!mapa.has(key)) mapa.set(key, { key, ano: p.ano, seccion: p.seccion, cantidad: 0, puntos: 0 });
-        const item = mapa.get(key);
-        item.cantidad += 1;
-        item.puntos += Number(p.puntos || 0);
-      });
-      [...mapa.values()].sort((a, b) => a.key.localeCompare(b.key)).forEach(sec => {
+      controlSeccionesPlanV88.innerHTML=secciones.map(sec=>{
+        const r=resumenSeccionPlanV88(sec.ano,sec.seccion);
+        const color=getColorSeccion(sec.seccion);
+        const filas=r.evaluaciones.length?r.evaluaciones.map((p,i)=>`<div class="planning-control-row-v88"><b>${i+1}</b><span><strong>${escaparHTML(p.actividad||'Evaluación')}</strong><small>${escaparHTML(tipoEvaluacionPlanV88(p))} · ${escaparHTML(p.fecha||'Sin fecha')}</small></span><em>${Number(p.puntos||0)} pts</em></div>`).join(''):'<div class="planning-control-noeval-v88">Sin evaluaciones cargadas</div>';
+        const estadoClass=r.estado==='Completo'?'is-complete':r.estado==='Excedido'?'is-over':'is-pending';
+        return `<article class="planning-control-card-v88 planning-control-card-v88--${color.key}">
+          <header><div><span>${escaparHTML(sec.ano)}</span><strong>Sección ${escaparHTML(sec.seccion)}</strong></div><button type="button" data-plan-sec-v88="${escaparHTML(sec.key)}">Ver detalle <i class="fa-solid fa-arrow-right"></i></button></header>
+          <div class="planning-control-summary-v88"><span><b>${r.total}</b><small>Evaluados</small></span><span><b>${r.faltan}</b><small>Faltan</small></span><span class="${estadoClass}"><b>${r.estado}</b><small>Meta 20 pts</small></span></div>
+          <div class="planning-control-list-v88">${filas}</div>
+        </article>`;
+      }).join('');
+      controlSeccionesPlanV88.querySelectorAll('[data-plan-sec-v88]').forEach(btn=>btn.addEventListener('click',()=>{
+        const sec=secciones.find(s=>s.key===btn.dataset.planSecV88); if(!sec)return;
+        mostrarListaPlan(sec.ano,sec.seccion);
+        panelListaPlan?.scrollIntoView({behavior:'smooth',block:'start'});
+      }));
+    }
+
+    function renderMenuPlanificacion() {
+      menuSeccionesPlan.innerHTML = '';
+      const secciones = seccionesPlanificacionV88();
+      if (!secciones.length) {
+        menuSeccionesPlan.innerHTML = '<div class="planning-empty-mini"><i class="fa-regular fa-calendar-xmark"></i><p>Aún no hay secciones disponibles.</p></div>';
+        return;
+      }
+      secciones.forEach(sec => {
+        const r = resumenSeccionPlanV88(sec.ano, sec.seccion);
         const color = getColorSeccion(sec.seccion);
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `planning-section-button planning-section-button--${color.key}`;
-        btn.innerHTML = `<span class="planning-section-button__mark">${escaparHTML(sec.seccion)}</span><span class="planning-section-button__copy"><strong>${escaparHTML(sec.ano)} - Sección “${escaparHTML(sec.seccion)}”</strong><small>${sec.cantidad} evaluación${sec.cantidad === 1 ? '' : 'es'} · ${sec.puntos} pts</small></span><i class="fa-solid fa-chevron-right"></i>`;
+        btn.innerHTML = `<span class="planning-section-button__mark">${escaparHTML(sec.seccion)}</span><span class="planning-section-button__copy"><strong>${escaparHTML(sec.ano)} - Sección “${escaparHTML(sec.seccion)}”</strong><small>${r.evaluaciones.length} evaluación${r.evaluaciones.length===1?'':'es'} · ${r.total}/20 pts · faltan ${r.faltan}</small></span><i class="fa-solid fa-chevron-right"></i>`;
         btn.addEventListener('click', () => mostrarListaPlan(sec.ano, sec.seccion));
         menuSeccionesPlan.appendChild(btn);
       });
@@ -2050,29 +2119,29 @@ const SESSION_KEY = 'edugestion_session_v2';
       panelListaPlan.classList.remove('hidden');
       accionesPlan.classList.remove('hidden');
       seccionPlanViendo = { ano, seccion };
-      tituloPlan.textContent = 'Plan de Evaluación';
-      subtituloPlan.textContent = `${ano} - Sección “${seccion}”`;
+      tituloPlan.textContent = 'Plan de Evaluación por Sección';
+      subtituloPlan.textContent = `${ano} - Sección “${seccion}” · meta 20 puntos`;
       tablaBodyPlan.innerHTML = '';
-      const filtrados = planesProfesor.filter(p => p.ano === ano && p.seccion === seccion).sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
-      let suma = 0;
+      const r = resumenSeccionPlanV88(ano,seccion);
+      const filtrados = r.evaluaciones;
       if (filtrados.length === 0) {
-        tablaBodyPlan.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-400 text-xs">No hay evaluaciones cargadas.</td></tr>';
+        tablaBodyPlan.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400 text-xs">No hay evaluaciones cargadas para esta sección.</td></tr>';
       } else {
         filtrados.forEach((p, index) => {
-          suma += Number(p.puntos || 0);
           const fecha = fechaLocalDesdeISO(p.fecha);
           const fechaStr = fecha ? fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : escaparHTML(p.fecha);
-          const color = getColorSeccion(p.seccion);
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="px-4 py-3 font-semibold text-gray-800"><span class="planning-table-date">${fechaStr}</span></td><td class="px-4 py-3 text-gray-600"><span class="planning-table-section planning-table-section--${color.key}">${escaparHTML(p.seccion)}</span>${escaparHTML(p.actividad || 'Evaluación')}</td><td class="px-4 py-3 text-center font-black text-indigo-600">${escaparHTML(p.puntos || 0)}</td><td class="px-4 py-3 text-center no-pdf"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar evaluación"><i class="fa-solid fa-trash-can"></i></button></td>`;
+          tr.innerHTML = `<td class="px-4 py-3 text-center font-black text-gray-500">${index+1}</td><td class="px-4 py-3 text-gray-700"><strong class="planning-eval-name-v88">${escaparHTML(p.actividad || 'Evaluación')}</strong></td><td class="px-4 py-3 text-gray-600"><span class="planning-eval-type-v88">${escaparHTML(tipoEvaluacionPlanV88(p))}</span></td><td class="px-4 py-3 text-center font-black text-indigo-600">${Number(p.puntos||0)} pts</td><td class="px-4 py-3 font-semibold text-gray-800"><span class="planning-table-date">${fechaStr}</span></td><td class="px-4 py-3 text-center no-pdf"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar evaluación"><i class="fa-solid fa-trash-can"></i></button></td>`;
           tr.querySelector('button').addEventListener('click', () => eliminarPlanLocal(index, ano, seccion));
           tablaBodyPlan.appendChild(tr);
         });
       }
-      badgeTotalPlan.textContent = `Total: ${suma} pts`;
-      badgeTotalPlan.className = suma > 100
-        ? 'bg-red-100 text-red-800 px-3 py-1.5 rounded-lg font-black text-sm border border-red-200'
-        : 'bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200';
+      if(badgeTotalPlan) badgeTotalPlan.textContent = `${r.total} / 20`;
+      if(badgePuntosFaltantesV88) badgePuntosFaltantesV88.textContent = r.excede>0 ? `+${r.excede} pts` : `${r.faltan} pts`;
+      if(badgeEstadoPlanV88){
+        badgeEstadoPlanV88.textContent=r.estado;
+        badgeEstadoPlanV88.className = r.estado==='Completo'?'is-complete':r.estado==='Excedido'?'is-over':'is-pending';
+      }
     };
 
     window.eliminarPlanLocal = async function(indexReal, ano, seccion) {
@@ -2292,6 +2361,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     function actualizarUIPlanificacion() {
       if (!calendarioDiaSeleccionado) calendarioDiaSeleccionado = fechaISODesdeLocal(new Date());
       renderMenuPlanificacion();
+      renderControlSeccionesPlanificacionV88();
       renderCalendario();
       renderResumenDiaCompacto(calendarioDiaSeleccionado);
       actualizarStatsPlanificacion();
@@ -2439,11 +2509,14 @@ const SESSION_KEY = 'edugestion_session_v2';
         ano: document.getElementById('plan-ano').value,
         seccion: document.getElementById('plan-seccion').value,
         actividad: document.getElementById('plan-actividad').value.trim(),
+        tipoEvaluacion: document.getElementById('plan-tipo-evaluacion')?.value || 'Actividad evaluativa',
         puntos: document.getElementById('plan-puntos').value,
         fecha: document.getElementById('plan-fecha').value
       };
-      const acumulado = planesProfesor.filter(p => p.ano === objPlan.ano && p.seccion === objPlan.seccion).reduce((total, p) => total + Number(p.puntos || 0), 0) + Number(objPlan.puntos || 0);
-      if (acumulado > 100 && !confirm(`La planificación sumará ${acumulado} puntos. ¿Deseas continuar?`)) return;
+      const acumuladoActual = planesProfesor.filter(p => p.ano === objPlan.ano && p.seccion === objPlan.seccion).reduce((total, p) => total + Number(p.puntos || 0), 0);
+      const acumulado = acumuladoActual + Number(objPlan.puntos || 0);
+      if (Number(objPlan.puntos||0) > 20) return mostrarToast('Una evaluación no puede superar 20 puntos.','warning','Revisa el puntaje');
+      if (acumulado > META_PUNTOS_PLAN_V88 && !confirm(`Esta sección quedará con ${acumulado} puntos, es decir ${acumulado-META_PUNTOS_PLAN_V88} puntos por encima de la meta de 20. ¿Deseas continuar?`)) return;
       btnPlan.disabled = true;
       btnPlan.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin"></i> Guardando...';
       try {

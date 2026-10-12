@@ -792,6 +792,18 @@
        </div>
       </div>
 
+      <section class="planning-section-control-v88" id="planning-section-control-v88">
+       <div class="planning-section-control-v88__head">
+        <div>
+         <span><i class="fa-solid fa-table-list"></i> Control por sección</span>
+         <h3>Plan de evaluación organizado</h3>
+         <p>Cada cuadro muestra las evaluaciones de la sección, sus puntos acumulados y los puntos que faltan para completar 20.</p>
+        </div>
+        <div class="planning-section-control-v88__legend"><strong>Meta por sección: 20 puntos</strong><small>Haz clic en una sección para verla en detalle.</small></div>
+       </div>
+       <div class="planning-section-control-v88__grid" id="plan-control-secciones-v88"></div>
+      </section>
+
       <section class="bg-white rounded-3xl border border-indigo-100 shadow-sm p-5 md:p-6" id="planificacion-ia-card">
        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
         <div class="flex items-start gap-3">
@@ -851,9 +863,14 @@
             <select class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 font-semibold" id="plan-seccion"><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
            </div>
           </div>
-          <div><label class="block text-sm font-bold text-gray-700 mb-1">Actividad / Tema</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-actividad" placeholder="Ej: Taller sobre el ecosistema..." required type="text"></div>
+          <div><label class="block text-sm font-bold text-gray-700 mb-1">Nombre de la evaluación</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-actividad" placeholder="Ej: Taller sobre aptitud física..." required type="text"></div>
+          <div><label class="block text-sm font-bold text-gray-700 mb-1">Tipo de evaluación</label>
+           <select class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 font-semibold" id="plan-tipo-evaluacion">
+            <option value="Taller">Taller</option><option value="Informe">Informe</option><option value="Exposición">Exposición</option><option value="Prueba escrita">Prueba escrita</option><option value="Actividad práctica">Actividad práctica</option><option value="Proyecto">Proyecto</option><option value="Mapa conceptual">Mapa conceptual</option><option value="Infografía">Infografía</option><option value="Video">Video</option><option value="Ensayo">Ensayo</option><option value="Otro">Otro</option>
+           </select>
+          </div>
           <div class="grid grid-cols-2 gap-4">
-           <div><label class="block text-sm font-bold text-gray-700 mb-1">Puntos / Ponderaci&oacute;n</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-puntos" max="100" min="1" placeholder="Ej: 20" required type="number"></div>
+           <div><label class="block text-sm font-bold text-gray-700 mb-1">Puntos / Ponderaci&oacute;n</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500" id="plan-puntos" max="20" min="0.5" step="0.5" placeholder="Ej: 5" required type="number"></div>
            <div><label class="block text-sm font-bold text-gray-700 mb-1">Fecha programada</label><input class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 text-gray-700" id="plan-fecha" required type="date"></div>
           </div>
           <div class="planning-form-hint"><i class="fa-solid fa-circle-info"></i><span>Los colores del calendario representan las secciones: A, B y C.</span></div>
@@ -862,12 +879,16 @@
         </div>
 
         <div class="hidden" id="panel-lista-planificacion">
-         <div class="flex justify-between items-center mb-6 border-b border-gray-100 pb-4">
-          <div><h3 class="font-black text-gray-800 text-lg" id="titulo-plan-seccion">Plan de Evaluaci&oacute;n</h3><p class="text-xs font-bold text-gray-400" id="subtitulo-plan-seccion">1er A&ntilde;o - Secci&oacute;n A</p></div>
-          <div class="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg font-black text-sm border border-indigo-200" id="badge-total-puntos">Total: 0 pts</div>
+         <div class="planning-detail-v88__head">
+          <div><h3 class="font-black text-gray-800 text-lg" id="titulo-plan-seccion">Plan de Evaluación</h3><p class="text-xs font-bold text-gray-400" id="subtitulo-plan-seccion">1er Año - Sección A</p></div>
+          <div class="planning-detail-v88__stats">
+           <article><span>Evaluado</span><strong id="badge-total-puntos">0 / 20</strong></article>
+           <article><span>Faltan</span><strong id="badge-puntos-faltantes-v88">20 pts</strong></article>
+           <article><span>Estado</span><strong id="badge-estado-plan-v88">Pendiente</strong></article>
+          </div>
          </div>
          <div class="w-full" id="contenido-pdf-plan">
-          <div class="overflow-x-auto rounded-xl border border-gray-200"><table class="min-w-full text-sm divide-y divide-gray-200"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Fecha</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Actividad</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">Pts</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider no-pdf">Acci&oacute;n</th></tr></thead><tbody class="divide-y divide-gray-100 bg-white" id="tabla-body-planificacion"></tbody></table></div>
+          <div class="overflow-x-auto rounded-xl border border-gray-200"><table class="min-w-full text-sm divide-y divide-gray-200 planning-detail-table-v88"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">N.º</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Evaluación</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Tipo</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">Puntaje</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Fecha</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider no-pdf">Acción</th></tr></thead><tbody class="divide-y divide-gray-100 bg-white" id="tabla-body-planificacion"></tbody></table></div>
          </div>
         </div>
 
