@@ -2027,6 +2027,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       panelListaPlan.classList.add('hidden');
       accionesPlan.classList.add('hidden');
       panelFormPlan.classList.remove('hidden');
+      planningLayoutV89?.classList.remove('is-plan-detail');
       seccionPlanViendo = null;
       if (fechaSugerida) document.getElementById('plan-fecha').value = fechaSugerida;
       setTimeout(() => document.getElementById('plan-actividad')?.focus(), 40);
@@ -2161,6 +2162,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       panelFormPlan.classList.add('hidden');
       panelListaPlan.classList.remove('hidden');
       accionesPlan.classList.remove('hidden');
+      planningLayoutV89?.classList.add('is-plan-detail');
       seccionPlanViendo = { ano, seccion };
       tituloPlan.textContent = 'Plan de Evaluación por Sección';
       subtituloPlan.textContent = `${ano} - Sección “${seccion}” · meta 20 puntos`;
@@ -21633,3 +21635,5 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 })();
 
 // EduGestion build V8.9.1 - Planificacion organizada
+
+// EduGestion build V8.9.2 - Detalle manual de plan de evaluacion a ancho completo

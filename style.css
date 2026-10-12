@@ -10192,3 +10192,163 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
 }
 
 /* EduGestion build V8.9.1 - Planificacion organizada */
+
+
+/* =========================================================
+   V8.9.2 · PLAN MANUAL POR SECCIÓN A ANCHO COMPLETO
+   Al abrir el detalle de una sección, prioriza el plan de
+   evaluación y muestra completas sus cinco columnas clave.
+========================================================= */
+#section-planificacion .planning-layout.is-plan-detail {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail > .planning-sidebar,
+#section-planificacion .planning-layout.is-plan-detail > .planning-calendar-column {
+  display: none !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail > .planning-center {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  padding: 26px 28px !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-v88__head {
+  display: grid !important;
+  grid-template-columns: minmax(250px, 1fr) auto !important;
+  align-items: center !important;
+  gap: 22px !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-v88__stats {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(112px, 1fr)) !important;
+  gap: 10px !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail #contenido-pdf-plan {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail #contenido-pdf-plan > .overflow-x-auto {
+  overflow-x: visible !important;
+  width: 100% !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 th:nth-child(1),
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 td:nth-child(1) { width: 7% !important; }
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 th:nth-child(2),
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 td:nth-child(2) { width: 31% !important; }
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 th:nth-child(3),
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 td:nth-child(3) { width: 20% !important; }
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 th:nth-child(4),
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 td:nth-child(4) { width: 12% !important; }
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 th:nth-child(5),
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 td:nth-child(5) { width: 18% !important; }
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 th:nth-child(6),
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 td:nth-child(6) { width: 12% !important; }
+
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 th,
+#section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 td {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  vertical-align: middle !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail .planning-eval-name-v88,
+#section-planificacion .planning-layout.is-plan-detail .planning-eval-type-v88,
+#section-planificacion .planning-layout.is-plan-detail .planning-table-date {
+  display: block !important;
+  max-width: none !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  word-break: normal !important;
+  overflow-wrap: anywhere !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail .planning-eval-name-v88 {
+  color: #284a67 !important;
+  font-size: .88rem !important;
+  line-height: 1.45 !important;
+}
+
+#section-planificacion .planning-layout.is-plan-detail .planning-eval-type-v88 {
+  background: #eef6ff !important;
+  border: 1px solid #d9eafb !important;
+  border-radius: 999px !important;
+  padding: 6px 9px !important;
+  color: #2f628e !important;
+  font-size: .72rem !important;
+  font-weight: 800 !important;
+  line-height: 1.25 !important;
+  text-align: center !important;
+}
+
+.planning-detail-toolbar-v892 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid #e6eef5;
+}
+.planning-detail-toolbar-v892 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border: 1px solid #cfe0ef;
+  border-radius: 12px;
+  background: #f7fbff;
+  color: #255b87;
+  font-size: .78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.planning-detail-toolbar-v892__actions { display: flex; gap: 9px; }
+.planning-detail-toolbar-v892 button.is-whatsapp {
+  background: #20c866;
+  border-color: #20c866;
+  color: #fff;
+}
+.planning-detail-toolbar-v892__back { background: #1d5c96 !important; color: #fff !important; border-color: #1d5c96 !important; }
+.planning-manual-note-v892 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: #f3f8fc;
+  color: #557188;
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  #section-planificacion .planning-layout.is-plan-detail > .planning-center { padding: 18px 14px !important; }
+  #section-planificacion .planning-layout.is-plan-detail .planning-detail-v88__head { grid-template-columns: 1fr !important; }
+  #section-planificacion .planning-layout.is-plan-detail .planning-detail-v88__stats { grid-template-columns: repeat(3, 1fr) !important; }
+  #section-planificacion .planning-layout.is-plan-detail #contenido-pdf-plan > .overflow-x-auto { overflow-x: auto !important; }
+  #section-planificacion .planning-layout.is-plan-detail .planning-detail-table-v88 { min-width: 720px !important; }
+  .planning-detail-toolbar-v892 { align-items: stretch; flex-direction: column; }
+  .planning-detail-toolbar-v892__actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .planning-detail-toolbar-v892 button { width: 100%; }
+}

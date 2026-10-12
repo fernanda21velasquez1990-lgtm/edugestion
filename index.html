@@ -864,6 +864,14 @@
            <article><span>Estado</span><strong id="badge-estado-plan-v88">Pendiente</strong></article>
           </div>
          </div>
+         <div class="planning-detail-toolbar-v892 no-pdf">
+          <button type="button" class="planning-detail-toolbar-v892__back" onclick="mostrarFormularioPlan()"><i class="fa-solid fa-plus"></i> Nueva evaluación</button>
+          <div class="planning-detail-toolbar-v892__actions">
+           <button type="button" onclick="document.getElementById('btn-plan-pdf')?.click()"><i class="fa-solid fa-file-pdf"></i> Guardar PDF</button>
+           <button type="button" class="is-whatsapp" onclick="document.getElementById('btn-plan-whatsapp')?.click()"><i class="fa-brands fa-whatsapp"></i> WhatsApp</button>
+          </div>
+         </div>
+         <div class="planning-manual-note-v892"><i class="fa-solid fa-clipboard-list"></i><span>Plan manual de la sección: cada fila muestra número, nombre, tipo de evaluación, puntaje y fecha programada.</span></div>
          <div class="w-full" id="contenido-pdf-plan">
           <div class="overflow-x-auto rounded-xl border border-gray-200"><table class="min-w-full text-sm divide-y divide-gray-200 planning-detail-table-v88"><thead class="bg-gray-50"><tr><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">N.º</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Evaluación</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Tipo</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider">Puntaje</th><th class="px-4 py-3 text-left text-xs font-black text-gray-500 uppercase tracking-wider">Fecha</th><th class="px-4 py-3 text-center text-xs font-black text-gray-500 uppercase tracking-wider no-pdf">Acción</th></tr></thead><tbody class="divide-y divide-gray-100 bg-white" id="tabla-body-planificacion"></tbody></table></div>
          </div>
@@ -2319,3 +2327,5 @@
 </html>
 
 <!-- EduGestion build V8.9.1 - Planificacion organizada para despliegue Vercel -->
+
+<!-- EduGestion build V8.9.2 -->

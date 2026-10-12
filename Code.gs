@@ -14280,4 +14280,4 @@ function confirmarSolicitudReunionRepresentante_(docente, payload) {
 }
 /* EDUGESTION_SOLICITUDES_REUNION_V87_END */
 
-// EduGestion build V8.9.1 - Planificacion organizada
+// EduGestion build V8.9.2 - Planificacion manual completa por seccion
