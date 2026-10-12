@@ -1555,8 +1555,27 @@
           </div>
          </div>
         </div>
-        <div class="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-         <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end">
+        <section class="student-picker-v86" id="student-picker-v86">
+         <div class="student-picker-v86__head">
+          <div>
+           <span>Editar o completar una ficha existente</span>
+           <strong>Selecciona al estudiante</strong>
+           <p>Busca por nombre o filtra por año, sección y turno. Al pulsar <b>Editar ficha</b>, todos sus datos se cargarán automáticamente abajo.</p>
+          </div>
+          <button type="button" id="reg-v86-refresh" class="student-picker-v86__refresh"><i class="fa-solid fa-rotate"></i> Actualizar lista</button>
+         </div>
+         <div class="student-picker-v86__filters">
+          <label class="student-field student-picker-v86__search"><span>Buscar estudiante</span><div class="student-picker-v86__searchbox"><i class="fa-solid fa-magnifying-glass"></i><input id="reg-v86-search" type="search" placeholder="Escribe nombre o cédula"></div></label>
+          <label class="student-field"><span>Año</span><select id="reg-v86-year"><option value="">Todos</option><option value="1ero">1er Año</option><option value="2do">2do Año</option><option value="3ero">3er Año</option><option value="4to">4to Año</option><option value="5to">5to Año</option></select></label>
+          <label class="student-field"><span>Sección</span><select id="reg-v86-section"><option value="">Todas</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+          <label class="student-field"><span>Turno</span><select id="reg-v86-shift"><option value="">Todos</option><option value="Manana">Mañana</option><option value="Tarde">Tarde</option></select></label>
+         </div>
+         <div class="student-picker-v86__summary"><strong id="reg-v86-count">0 estudiantes</strong><span>Haz clic en una ficha para completarla o corregirla.</span></div>
+         <div id="reg-v86-list" class="student-picker-v86__list"><div class="student-picker-v86__empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes...</div></div>
+        </section>
+
+        <div class="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 student-picker-v86__legacy">
+         <div class="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
           <label class="student-field"><span>Completar una ficha ya registrada <em>Opcional</em></span>
            <select id="reg-estudiante-existente"><option value="">Nueva ficha de estudiante</option></select>
           </label>
