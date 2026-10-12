@@ -21631,3 +21631,5 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(init,350),{once:true});
   else setTimeout(init,180);
 })();
+
+// EduGestion build V8.9.1 - Planificacion organizada

@@ -14279,3 +14279,5 @@ function confirmarSolicitudReunionRepresentante_(docente, payload) {
   return {status:'success', message:'Reunión confirmada. El representante verá la fecha y hora en su portal.', id:id, estado:'CONFIRMADA', fechaConfirmada:fecha, horaConfirmada:hora};
 }
 /* EDUGESTION_SOLICITUDES_REUNION_V87_END */
+
+// EduGestion build V8.9.1 - Planificacion organizada
