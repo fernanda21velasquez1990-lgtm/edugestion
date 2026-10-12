@@ -2851,14 +2851,17 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     function renderListaEstudiantesRegistroV86() {
-      const host = document.getElementById('reg-v86-list');
-      if (!host) return;
+      const selector = document.getElementById('reg-v861-student');
+      const preview = document.getElementById('reg-v861-selected');
+      if (!selector) return;
+
       const q = String(document.getElementById('reg-v86-search')?.value || '').trim().toLowerCase();
       const ano = document.getElementById('reg-v86-year')?.value || '';
       const seccion = document.getElementById('reg-v86-section')?.value || '';
       const turno = document.getElementById('reg-v86-shift')?.value || '';
+      const actual = String(selector.value || '');
 
-      let lista = alumnosRegistroCache.filter(a => {
+      const lista = alumnosRegistroCache.filter(a => {
         if (ano && String(a.ano || '') !== ano) return false;
         if (seccion && String(a.seccion || '').toUpperCase() !== seccion.toUpperCase()) return false;
         if (turno && normalizarTurnoRegistroV86(a.turno) !== turno) return false;
@@ -2867,39 +2870,71 @@ const SESSION_KEY = 'edugestion_session_v2';
       });
 
       const count = document.getElementById('reg-v86-count');
-      if (count) count.textContent = `${lista.length} ${lista.length === 1 ? 'estudiante' : 'estudiantes'}`;
+      if (count) count.textContent = `${lista.length} ${lista.length === 1 ? 'estudiante disponible' : 'estudiantes disponibles'}`;
 
-      if (!lista.length) {
-        host.innerHTML = `<div class="student-picker-v86__empty"><i class="fa-solid fa-user-slash"></i><strong>No encontramos estudiantes con esos filtros.</strong><span>Prueba otro nombre, año, sección o turno.</span></div>`;
+      selector.innerHTML = '<option value="">-- Selecciona un estudiante --</option>';
+      lista.forEach(a => {
+        const op = document.createElement('option');
+        op.value = String(a.id || '');
+        const curso = `${a.ano || ''} · Sección ${a.seccion || ''} · ${normalizarTurnoRegistroV86(a.turno)==='Manana'?'Mañana':'Tarde'}`;
+        const ci = String(a.cedula || '').trim();
+        op.textContent = `${a.nombre || 'Estudiante'} — ${curso}${ci ? ` — C.I. ${ci}` : ''}`;
+        selector.appendChild(op);
+      });
+
+      if (actual && lista.some(a => String(a.id) === actual)) selector.value = actual;
+      else selector.value = '';
+      actualizarSeleccionRegistroV861();
+    }
+
+    function actualizarSeleccionRegistroV861() {
+      const selector = document.getElementById('reg-v861-student');
+      const preview = document.getElementById('reg-v861-selected');
+      const btn = document.getElementById('reg-v861-load');
+      const legacy = document.getElementById('reg-estudiante-existente');
+      if (!selector || !preview) return;
+
+      const id = String(selector.value || '');
+      if (legacy) legacy.value = id;
+      if (btn) btn.disabled = !id;
+
+      const a = alumnosRegistroCache.find(x => String(x.id) === id);
+      if (!a) {
+        preview.classList.add('hidden');
+        preview.innerHTML = '';
         return;
       }
 
-      host.innerHTML = lista.map(a => {
-        const pct = porcentajeFichaRegistroV86(a);
-        const rep = String(a.representante || '').trim();
-        const tel = String(a.telefonoRepresentante || '').trim();
-        const ci = String(a.cedula || '').trim();
-        const clase = pct >= 80 ? 'is-complete' : pct >= 50 ? 'is-medium' : 'is-incomplete';
-        return `<article class="student-picker-v86__card ${clase}" data-reg-v86-card="${escaparHTML(String(a.id || ''))}">
-          <div class="student-picker-v86__avatar">${escaparHTML(String(a.nombre || 'E').trim().charAt(0).toUpperCase() || 'E')}</div>
-          <div class="student-picker-v86__main">
-            <strong>${escaparHTML(a.nombre || 'Estudiante')}</strong>
-            <span>${escaparHTML(a.ano || '')} · Sección ${escaparHTML(a.seccion || '')} · ${normalizarTurnoRegistroV86(a.turno)==='Manana'?'Mañana':'Tarde'}</span>
-            <small>${ci ? `C.I. ${escaparHTML(ci)}` : 'Sin cédula'} · ${rep ? `Rep.: ${escaparHTML(rep)}` : 'Representante pendiente'}${tel ? ` · ${escaparHTML(tel)}` : ''}</small>
-            <div class="student-picker-v86__progress"><span style="width:${pct}%"></span></div>
-          </div>
-          <div class="student-picker-v86__status"><b>${pct}%</b><span>completada</span></div>
-          <button type="button" class="student-picker-v86__edit" data-reg-v86-edit="${escaparHTML(String(a.id || ''))}"><i class="fa-solid fa-pen-to-square"></i> Editar ficha</button>
-        </article>`;
-      }).join('');
+      const pct = porcentajeFichaRegistroV86(a);
+      const rep = String(a.representante || '').trim();
+      const tel = String(a.telefonoRepresentante || '').trim();
+      const ci = String(a.cedula || '').trim();
+      preview.classList.remove('hidden');
+      preview.innerHTML = `
+        <div class="student-picker-v861__avatar">${escaparHTML(String(a.nombre || 'E').trim().charAt(0).toUpperCase() || 'E')}</div>
+        <div class="student-picker-v861__selected-main">
+          <span>Estudiante seleccionado</span>
+          <strong>${escaparHTML(a.nombre || 'Estudiante')}</strong>
+          <small>${escaparHTML(a.ano || '')} · Sección ${escaparHTML(a.seccion || '')} · ${normalizarTurnoRegistroV86(a.turno)==='Manana'?'Mañana':'Tarde'}${ci ? ` · C.I. ${escaparHTML(ci)}` : ''}</small>
+          <small>${rep ? `Representante: ${escaparHTML(rep)}` : 'Representante pendiente'}${tel ? ` · ${escaparHTML(tel)}` : ''}</small>
+        </div>
+        <div class="student-picker-v861__percent"><b>${pct}%</b><span>Ficha completada</span></div>`;
+    }
 
-      host.querySelectorAll('[data-reg-v86-edit]').forEach(btn => btn.addEventListener('click', () => {
-        const alumno = alumnosRegistroCache.find(a => String(a.id) === String(btn.dataset.regV86Edit));
-        if (!alumno) return;
-        cargarFichaRegistro(alumno);
-        mostrarToast('Ficha cargada. Ya puedes completar o corregir los datos.', 'success', 'Editando estudiante');
-        document.querySelector('.student-form-card--academic')?.scrollIntoView({behavior:'smooth', block:'start'});
-      }));
+    function cargarSeleccionRegistroV861() {
+      const id = String(document.getElementById('reg-v861-student')?.value || '');
+      if (!id) {
+        mostrarToast('Selecciona un estudiante para cargar su ficha.', 'warning', 'Selecciona estudiante');
+        return;
+      }
+      const alumno = alumnosRegistroCache.find(a => String(a.id) === id);
+      if (!alumno) {
+        mostrarToast('No se encontró esa ficha. Pulsa Actualizar e inténtalo nuevamente.', 'warning', 'Ficha no encontrada');
+        return;
+      }
+      cargarFichaRegistro(alumno);
+      mostrarToast('Ficha cargada. Ya puedes completar o corregir los datos.', 'success', 'Editando estudiante');
+      document.querySelector('.student-form-card--academic')?.scrollIntoView({behavior:'smooth', block:'start'});
     }
 
     async function cargarEstudiantesRegistro(forzar = false) {
@@ -2960,6 +2995,9 @@ const SESSION_KEY = 'edugestion_session_v2';
       establecerValorRegistro('reg-observaciones', alumno.observaciones || '');
       const select = document.getElementById('reg-estudiante-existente');
       if (select) select.value = alumno.id || '';
+      const selectorV861 = document.getElementById('reg-v861-student');
+      if (selectorV861) selectorV861.value = alumno.id || '';
+      actualizarSeleccionRegistroV861();
       actualizarRegistroInteractivo();
       actualizarModoRegistro();
       document.getElementById('reg-nombre')?.focus();
@@ -2970,6 +3008,9 @@ const SESSION_KEY = 'edugestion_session_v2';
       establecerValorRegistro('reg-id', '');
       const select = document.getElementById('reg-estudiante-existente');
       if (select) select.value = '';
+      const selectorV861 = document.getElementById('reg-v861-student');
+      if (selectorV861) selectorV861.value = '';
+      actualizarSeleccionRegistroV861();
       actualizarRegistroInteractivo();
       actualizarModoRegistro();
       document.getElementById('reg-nombre')?.focus();
@@ -3199,6 +3240,15 @@ const SESSION_KEY = 'edugestion_session_v2';
     });
 
     document.getElementById('btn-nueva-ficha')?.addEventListener('click', nuevaFichaRegistro);
+    document.getElementById('reg-v861-student')?.addEventListener('change', actualizarSeleccionRegistroV861);
+    document.getElementById('reg-v861-load')?.addEventListener('click', cargarSeleccionRegistroV861);
+    document.getElementById('reg-v861-new')?.addEventListener('click', () => {
+      const sel = document.getElementById('reg-v861-student');
+      if (sel) sel.value = '';
+      actualizarSeleccionRegistroV861();
+      nuevaFichaRegistro();
+      document.querySelector('.student-form-card--academic')?.scrollIntoView({behavior:'smooth', block:'start'});
+    });
 
     const btnLimpiarRegistro = document.getElementById('btn-limpiar-registro');
     if (btnLimpiarRegistro) {

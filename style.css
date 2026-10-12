@@ -10058,3 +10058,45 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
 .student-picker-v86__legacy{opacity:.94}
 @media(max-width:1050px){.student-picker-v86__filters{grid-template-columns:1fr 1fr}.student-picker-v86__list{grid-template-columns:1fr}.student-picker-v86__card{grid-template-columns:48px minmax(0,1fr) auto}.student-picker-v86__status{display:none}.student-picker-v86__edit{grid-column:2/-1;justify-self:start}}
 @media(max-width:640px){.student-picker-v86__head{align-items:flex-start;flex-direction:column}.student-picker-v86__head>div>strong{font-size:19px}.student-picker-v86__filters{grid-template-columns:1fr;padding:13px}.student-picker-v86__summary{align-items:flex-start;flex-direction:column;padding:0 13px 10px}.student-picker-v86__list{padding:3px 13px 14px}.student-picker-v86__card{grid-template-columns:42px minmax(0,1fr)}.student-picker-v86__avatar{width:40px;height:40px}.student-picker-v86__edit{grid-column:1/-1;width:100%}}
+
+
+/* =========================================================
+   V8.6.1 · Selector simple de estudiante (sin listado completo)
+   ========================================================= */
+.student-picker-v861{
+  margin-bottom:18px;
+  border:1px solid #cbddeb;
+  border-radius:18px;
+  background:#fff;
+  overflow:hidden;
+  box-shadow:0 8px 24px rgba(45,91,128,.06);
+}
+.student-picker-v861__head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  padding:18px 20px 16px;background:linear-gradient(135deg,#f4f9fd,#eef7ff);
+  border-bottom:1px solid #dce8f1;
+}
+.student-picker-v861__head>div>span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:950;color:#47769f}
+.student-picker-v861__head>div>strong{display:block;margin-top:4px;font-size:23px;line-height:1.2;color:#173f63}
+.student-picker-v861__head p{margin:7px 0 0;font-size:14px;line-height:1.55;color:#617a91;max-width:760px}
+.student-picker-v861__refresh{border:1px solid #bed4e5;background:#fff;color:#275f8c;border-radius:11px;padding:10px 14px;font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap}
+.student-picker-v861__filters{display:grid;grid-template-columns:repeat(3,minmax(120px,.55fr)) minmax(240px,1.35fr);gap:11px;padding:16px 20px 10px}
+.student-picker-v861__filters .student-field>span,.student-picker-v861__selectrow .student-field>span{font-size:11px!important}
+.student-picker-v861__filters select,.student-picker-v861__filters input,.student-picker-v861__selectrow select{height:46px!important;font-size:14px!important}
+.student-picker-v861__searchbox{position:relative}.student-picker-v861__searchbox i{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#7891a8}.student-picker-v861__searchbox input{padding-left:38px!important;width:100%}
+.student-picker-v861__selectrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:end;padding:8px 20px 10px}
+.student-picker-v861__student-select select{font-weight:850;color:#294b68;background:#fbfdff}
+.student-picker-v861__selectrow .student-btn{height:46px;min-width:138px;justify-content:center}
+.student-picker-v861__summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 20px 12px;color:#72879a}
+.student-picker-v861__summary strong{font-size:13px;color:#315b80}.student-picker-v861__summary span{font-size:11px;font-weight:800}
+.student-picker-v861__selected{margin:0 20px 18px;display:grid;grid-template-columns:54px minmax(0,1fr) auto;gap:13px;align-items:center;padding:14px;border:1px solid #bcd9ed;border-radius:14px;background:#f5fbff}
+.student-picker-v861__avatar{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;background:#dfeefa;color:#245d8c;font-size:20px;font-weight:950}
+.student-picker-v861__selected-main>span,.student-picker-v861__selected-main>strong,.student-picker-v861__selected-main>small{display:block}
+.student-picker-v861__selected-main>span{font-size:9px;text-transform:uppercase;letter-spacing:.07em;font-weight:900;color:#6c88a0}
+.student-picker-v861__selected-main>strong{margin-top:2px;font-size:17px;color:#23435f}
+.student-picker-v861__selected-main>small{margin-top:3px;font-size:11px;line-height:1.4;color:#71879a}
+.student-picker-v861__percent{text-align:center;min-width:92px}.student-picker-v861__percent b{display:block;font-size:19px;color:#275d88}.student-picker-v861__percent span{display:block;font-size:8px;font-weight:900;color:#8393a2}
+.student-picker-v861__compat{display:none!important}
+.student-picker-v86__legacy{display:none!important}
+@media(max-width:900px){.student-picker-v861__filters{grid-template-columns:1fr 1fr}.student-picker-v861__search{grid-column:1/-1}.student-picker-v861__selectrow{grid-template-columns:1fr 1fr}.student-picker-v861__student-select{grid-column:1/-1}}
+@media(max-width:640px){.student-picker-v861__head{flex-direction:column}.student-picker-v861__head>div>strong{font-size:20px}.student-picker-v861__filters{grid-template-columns:1fr;padding:14px}.student-picker-v861__search{grid-column:auto}.student-picker-v861__selectrow{grid-template-columns:1fr;padding:6px 14px 10px}.student-picker-v861__student-select{grid-column:auto}.student-picker-v861__selectrow .student-btn{width:100%}.student-picker-v861__summary{align-items:flex-start;flex-direction:column;padding:0 14px 10px}.student-picker-v861__selected{margin:0 14px 14px;grid-template-columns:46px 1fr}.student-picker-v861__percent{grid-column:1/-1;text-align:left;display:flex;gap:7px;align-items:baseline}.student-picker-v861__avatar{width:44px;height:44px}}

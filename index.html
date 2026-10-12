@@ -1555,23 +1555,35 @@
           </div>
          </div>
         </div>
-        <section class="student-picker-v86" id="student-picker-v86">
-         <div class="student-picker-v86__head">
+        <section class="student-picker-v861" id="student-picker-v86">
+         <div class="student-picker-v861__head">
           <div>
            <span>Editar o completar una ficha existente</span>
-           <strong>Selecciona al estudiante</strong>
-           <p>Busca por nombre o filtra por año, sección y turno. Al pulsar <b>Editar ficha</b>, todos sus datos se cargarán automáticamente abajo.</p>
+           <strong>Busca y selecciona un estudiante</strong>
+           <p>Ya no se mostrará toda la lista. Filtra la sección, elige <b>un solo estudiante</b> y pulsa <b>Cargar ficha</b>.</p>
           </div>
-          <button type="button" id="reg-v86-refresh" class="student-picker-v86__refresh"><i class="fa-solid fa-rotate"></i> Actualizar lista</button>
+          <button type="button" id="reg-v86-refresh" class="student-picker-v861__refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button>
          </div>
-         <div class="student-picker-v86__filters">
-          <label class="student-field student-picker-v86__search"><span>Buscar estudiante</span><div class="student-picker-v86__searchbox"><i class="fa-solid fa-magnifying-glass"></i><input id="reg-v86-search" type="search" placeholder="Escribe nombre o cédula"></div></label>
+
+         <div class="student-picker-v861__filters">
           <label class="student-field"><span>Año</span><select id="reg-v86-year"><option value="">Todos</option><option value="1ero">1er Año</option><option value="2do">2do Año</option><option value="3ero">3er Año</option><option value="4to">4to Año</option><option value="5to">5to Año</option></select></label>
           <label class="student-field"><span>Sección</span><select id="reg-v86-section"><option value="">Todas</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
           <label class="student-field"><span>Turno</span><select id="reg-v86-shift"><option value="">Todos</option><option value="Manana">Mañana</option><option value="Tarde">Tarde</option></select></label>
+          <label class="student-field student-picker-v861__search"><span>Buscar por nombre o cédula</span><div class="student-picker-v861__searchbox"><i class="fa-solid fa-magnifying-glass"></i><input id="reg-v86-search" type="search" placeholder="Ej.: Alcalá o 32145678"></div></label>
          </div>
-         <div class="student-picker-v86__summary"><strong id="reg-v86-count">0 estudiantes</strong><span>Haz clic en una ficha para completarla o corregirla.</span></div>
-         <div id="reg-v86-list" class="student-picker-v86__list"><div class="student-picker-v86__empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando estudiantes...</div></div>
+
+         <div class="student-picker-v861__selectrow">
+          <label class="student-field student-picker-v861__student-select">
+           <span>Estudiante</span>
+           <select id="reg-v861-student"><option value="">-- Selecciona un estudiante --</option></select>
+          </label>
+          <button type="button" id="reg-v861-load" class="student-btn student-btn--primary" disabled><i class="fa-solid fa-pen-to-square"></i><span>Cargar ficha</span></button>
+          <button type="button" id="reg-v861-new" class="student-btn student-btn--ghost"><i class="fa-solid fa-file-circle-plus"></i><span>Nueva ficha</span></button>
+         </div>
+
+         <div class="student-picker-v861__summary"><strong id="reg-v86-count">0 estudiantes disponibles</strong><span>Solo se mostrará el estudiante que selecciones.</span></div>
+         <div id="reg-v861-selected" class="student-picker-v861__selected hidden"></div>
+         <div id="reg-v86-list" class="student-picker-v861__compat hidden"></div>
         </section>
 
         <div class="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 student-picker-v86__legacy">
