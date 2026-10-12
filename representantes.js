@@ -44,8 +44,37 @@
     });
   }
 
+  function gradoNumeroPortal_(valor){
+    const m=String(valor||'').match(/\d+/);
+    return m?Number(m[0]):0;
+  }
+
+  function materiasEsperadasPortal_(){
+    const cursos=Array.isArray(data?.alumno?.cursos)?data.alumno.cursos:[];
+    const grados=[...new Set(cursos.map(c=>gradoNumeroPortal_(c.ano)).filter(Boolean))];
+    const tieneSegundoOCuarto=grados.some(g=>g===2||g===4);
+    return tieneSegundoOCuarto
+      ? ['Educación Física','Orientación y Convivencia']
+      : ['Educación Física'];
+  }
+
   function buildFilters(){
-    const subjects=[...new Set((data?.actividades||[]).map(x=>String(x.materia||'')).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+    const esperadas=materiasEsperadasPortal_();
+    const presentes=[...new Set([
+      ...(data?.actividades||[]).map(x=>String(x.materia||'').trim()),
+      ...(data?.materias||[]).map(x=>String(x.materia||'').trim()),
+      ...((data?.resumen?.asistencia?.materias)||[]).map(x=>String(x.materia||'').trim())
+    ].filter(Boolean))];
+
+    // Regla institucional del profesor Eliu Flores:
+    // 2.º y 4.º año ven Educación Física + Orientación y Convivencia.
+    // Los demás años ven únicamente Educación Física.
+    const permitidas=new Set(esperadas.map(x=>x.toLocaleLowerCase('es')));
+    const subjects=[...new Set([
+      ...esperadas,
+      ...presentes.filter(x=>permitidas.has(x.toLocaleLowerCase('es')))
+    ])];
+
     const periods=[...new Set((data?.actividades||[]).map(x=>String(x.lapso||'')).filter(Boolean))];
     $('rep-filter-subject').innerHTML='<option value="">Todas las materias</option>'+subjects.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
     $('rep-filter-period').innerHTML='<option value="">Todos los lapsos</option>'+periods.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
