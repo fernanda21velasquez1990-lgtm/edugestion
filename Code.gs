@@ -435,6 +435,11 @@ function doPost(e) {
       return json_(consultaRepresentantePublica_(payload));
     }
 
+    // V8.10 · Actividades semanales visibles para representantes.
+    if (action === 'obtenerActividadesSemanalesRepresentante') {
+      return json_(obtenerActividadesSemanalesRepresentante_(payload));
+    }
+
     // V8.5 · Confirmación y consulta de calificaciones por representantes.
     if (action === 'confirmarVistaNotaRepresentante') {
       return json_(confirmarVistaNotaRepresentante_(payload));
@@ -751,6 +756,15 @@ function doPost(e) {
         break;
       case 'actualizarEstadoCompromisoAcademico':
         respuesta = actualizarEstadoCompromisoAcademico_(sesion.docente, payload);
+        break;
+      case 'obtenerActividadesSemanalesDocente':
+        respuesta = obtenerActividadesSemanalesDocente_(sesion.docente, payload);
+        break;
+      case 'guardarActividadSemanal':
+        respuesta = guardarActividadSemanal_(sesion.docente, payload);
+        break;
+      case 'eliminarActividadSemanal':
+        respuesta = eliminarActividadSemanal_(sesion.docente, payload);
         break;
       case 'guardarPlanificacion':
         respuesta = guardarPlanificacion_(sesion.docente, payload);
@@ -7320,6 +7334,11 @@ function doPost(e) {
       return json_(consultaRepresentantePublica_(payload));
     }
 
+    // V8.10 · Actividades semanales visibles para representantes.
+    if (action === 'obtenerActividadesSemanalesRepresentante') {
+      return json_(obtenerActividadesSemanalesRepresentante_(payload));
+    }
+
     // V8.5 · Confirmación y consulta de calificaciones por representantes.
     if (action === 'confirmarVistaNotaRepresentante') {
       return json_(confirmarVistaNotaRepresentante_(payload));
@@ -7651,6 +7670,15 @@ function doPost(e) {
         break;
       case 'actualizarEstadoCompromisoAcademico':
         respuesta = actualizarEstadoCompromisoAcademico_(sesion.docente, payload);
+        break;
+      case 'obtenerActividadesSemanalesDocente':
+        respuesta = obtenerActividadesSemanalesDocente_(sesion.docente, payload);
+        break;
+      case 'guardarActividadSemanal':
+        respuesta = guardarActividadSemanal_(sesion.docente, payload);
+        break;
+      case 'eliminarActividadSemanal':
+        respuesta = eliminarActividadSemanal_(sesion.docente, payload);
         break;
       case 'guardarPlanificacion':
         respuesta = guardarPlanificacion_(sesion.docente, payload);
@@ -14319,3 +14347,56 @@ function confirmarSolicitudReunionRepresentante_(docente, payload) {
 /* EDUGESTION_SOLICITUDES_REUNION_V87_END */
 
 // EduGestion build V8.9.2 - Planificacion manual completa por seccion
+
+/* V8.10 · Actividades semanales para representantes */
+var EG_ACTIVIDADES_SEMANALES_HOJA_ = 'ActividadesSemanales';
+var EG_ACTIVIDADES_SEMANALES_HEADERS_ = ['id','idProfesor','docente','materia','ano','seccion','turno','semana','area','titulo','descripcion','fechaInicio','fechaFin','archivoId','archivoNombre','mimeType','imagenUrl','descargaUrl','activo','creadoEn','actualizadoEn'];
+
+function asegurarActividadesSemanales_(){ asegurarHoja_(getDb_(),EG_ACTIVIDADES_SEMANALES_HOJA_,EG_ACTIVIDADES_SEMANALES_HEADERS_); }
+function carpetaActividadesSemanales_(){
+  var props=PropertiesService.getScriptProperties(),key='EDUGESTION_ACTIVIDADES_SEMANALES_FOLDER_ID',id=String(props.getProperty(key)||'');
+  if(id){try{return DriveApp.getFolderById(id);}catch(e){}}
+  var it=DriveApp.getFoldersByName('EduGestion_Actividades_Semanales');
+  var folder=it.hasNext()?it.next():DriveApp.createFolder('EduGestion_Actividades_Semanales');
+  props.setProperty(key,folder.getId()); return folder;
+}
+function limpiarBase64Semanal_(raw){var s=String(raw||''),i=s.indexOf('base64,');return i>=0?s.substring(i+7):s;}
+
+function guardarActividadSemanal_(docente,payload){
+  asegurarActividadesSemanales_();
+  var ano=String(payload.ano||'').trim(),seccion=String(payload.seccion||'').trim().toUpperCase(),turno=normalizarTurno_(payload.turno||docente.turno||'Manana');
+  var semana=Number(payload.semana||0),area=String(payload.area||docente.materia||'').trim(),titulo=String(payload.titulo||'').trim();
+  var descripcion=String(payload.descripcion||'').trim().slice(0,1500),fechaInicio=String(payload.fechaInicio||'').trim(),fechaFin=String(payload.fechaFin||'').trim();
+  if(!ano||!seccion||semana<1||semana>20||!area||!titulo) lanzar_('Completa año, sección, semana, área y título.','VALIDATION_ERROR');
+  var archivoId='',archivoNombre='',mimeType='',imagenUrl='',descargaUrl='',base64=limpiarBase64Semanal_(payload.archivoBase64||'');
+  if(base64){
+    mimeType=String(payload.mimeType||'image/jpeg'); if(mimeType.indexOf('image/')!==0) lanzar_('Solo se permiten imágenes.','VALIDATION_ERROR');
+    archivoNombre=String(payload.archivoNombre||('actividad-semana-'+semana+'.jpg')).replace(/[\\/:*?"<>|]+/g,'-').slice(0,140);
+    var bytes; try{bytes=Utilities.base64Decode(base64);}catch(e){lanzar_('La imagen no pudo procesarse.','INVALID_FILE');}
+    if(bytes.length>8*1024*1024) lanzar_('La imagen supera el límite de 8 MB.','FILE_TOO_LARGE');
+    var file=carpetaActividadesSemanales_().createFile(Utilities.newBlob(bytes,mimeType,archivoNombre)); archivoId=file.getId();
+    try{file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);}catch(e){}
+    imagenUrl='https://drive.google.com/uc?export=view&id='+encodeURIComponent(archivoId); descargaUrl='https://drive.google.com/uc?export=download&id='+encodeURIComponent(archivoId);
+  }else if(payload.imagenUrl){imagenUrl=String(payload.imagenUrl||'').trim();descargaUrl=String(payload.descargaUrl||imagenUrl).trim();}
+  else lanzar_('Selecciona una imagen de la actividad.','VALIDATION_ERROR');
+  var id=Utilities.getUuid(),ahora=ahora_();
+  anexarObjeto_(EG_ACTIVIDADES_SEMANALES_HOJA_,{id:id,idProfesor:String(docente.id||''),docente:String(docente.nombre||''),materia:String(docente.materia||''),ano:ano,seccion:seccion,turno:turno,semana:semana,area:area,titulo:titulo,descripcion:descripcion,fechaInicio:fechaInicio,fechaFin:fechaFin,archivoId:archivoId,archivoNombre:archivoNombre,mimeType:mimeType,imagenUrl:imagenUrl,descargaUrl:descargaUrl,activo:'SI',creadoEn:ahora,actualizadoEn:ahora});
+  return {status:'success',id:id,message:'Actividad semanal publicada para representantes.'};
+}
+function obtenerActividadesSemanalesDocente_(docente,payload){
+  asegurarActividadesSemanales_();
+  var rows=leerObjetos_(EG_ACTIVIDADES_SEMANALES_HOJA_).objetos.filter(function(r){if(String(r.idProfesor||'')!==String(docente.id||''))return false;if(String(r.activo||'SI').toUpperCase()==='NO')return false;if(payload.ano&&String(r.ano||'')!==String(payload.ano))return false;if(payload.seccion&&String(r.seccion||'').toUpperCase()!==String(payload.seccion).toUpperCase())return false;return true;}).map(function(r){delete r.__row;return r;});
+  rows.sort(function(a,b){return Number(b.semana||0)-Number(a.semana||0)||String(b.creadoEn||'').localeCompare(String(a.creadoEn||''));});return {status:'success',actividades:rows};
+}
+function eliminarActividadSemanal_(docente,payload){
+  asegurarActividadesSemanales_();var id=String(payload.id||''),tabla=leerObjetos_(EG_ACTIVIDADES_SEMANALES_HOJA_);var row=tabla.objetos.filter(function(r){return String(r.id||'')===id&&String(r.idProfesor||'')===String(docente.id||'');})[0];
+  if(!row) lanzar_('No se encontró la actividad semanal.','NOT_FOUND');actualizarFilaObjeto_(EG_ACTIVIDADES_SEMANALES_HOJA_,row.__row,{activo:'NO',actualizadoEn:ahora_()});return {status:'success',message:'Actividad semanal retirada del portal de representantes.'};
+}
+function obtenerActividadesSemanalesRepresentante_(payload){
+  var cedula=normalizarCedulaRepresentante_(payload.cedula);validarAccesoRepresentantePublico_(cedula,payload.codigo);asegurarActividadesSemanales_();
+  var alumnos=leerObjetos_(EG.SHEETS.ALUMNOS).objetos.filter(function(a){return normalizarCedulaRepresentante_(a.cedula)===cedula;});if(!alumnos.length)lanzar_('No se encontró el estudiante.','NOT_FOUND');
+  var cursos={};alumnos.forEach(function(a){cursos[[String(a.ano||''),String(a.seccion||'').toUpperCase(),normalizarTurno_(a.turno||'')].join('|')]=true;});
+  var rows=leerObjetos_(EG_ACTIVIDADES_SEMANALES_HOJA_).objetos.filter(function(r){if(String(r.activo||'SI').toUpperCase()==='NO')return false;var key=[String(r.ano||''),String(r.seccion||'').toUpperCase(),normalizarTurno_(r.turno||'')].join('|');return !!cursos[key];}).map(function(r){return{id:String(r.id||''),semana:Number(r.semana||0),area:String(r.area||r.materia||''),titulo:String(r.titulo||''),descripcion:String(r.descripcion||''),fechaInicio:String(r.fechaInicio||''),fechaFin:String(r.fechaFin||''),ano:String(r.ano||''),seccion:String(r.seccion||''),imagenUrl:String(r.imagenUrl||''),descargaUrl:String(r.descargaUrl||r.imagenUrl||''),docente:String(r.docente||'')};});
+  rows.sort(function(a,b){return Number(a.semana||0)-Number(b.semana||0)||String(a.area||'').localeCompare(String(b.area||''));});return {status:'success',actividades:rows};
+}
+

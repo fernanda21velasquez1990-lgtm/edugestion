@@ -121,6 +121,7 @@
         <button data-view="calificaciones">Calificaciones</button>
         <button data-view="asistencia">Asistencia</button>
         <button data-view="compromisos">Compromisos</button>
+        <button data-view="semanales">📚 Actividades de la semana</button>
         <button data-view="reunion">Solicitar reunión</button>
       </nav>
 
@@ -179,6 +180,19 @@
           <div><span>Seguimiento</span><h2>Compromisos académicos</h2></div>
         </div>
         <div id="rep-commitments" class="rep-commitments"></div>
+      </section>
+
+
+      <section id="rep-view-semanales" class="rep-view hidden">
+        <div class="rep-section-title rep-week-title">
+          <div><span>Material para realizar en casa</span><h2>Actividades de la semana</h2><p>Seleccione una semana para consultar, guardar, descargar o imprimir las actividades publicadas por sus docentes.</p></div>
+        </div>
+        <div class="rep-week-toolbar">
+          <label><span>Semana</span><select id="rep-week-filter"><option value="">Todas las semanas</option></select></label>
+          <label><span>Área</span><select id="rep-week-area"><option value="">Todas las áreas</option><option>Educación Física</option><option>Orientación y Convivencia</option><option>Recreación</option></select></label>
+          <button type="button" id="rep-week-refresh">↻ Actualizar actividades</button>
+        </div>
+        <div id="rep-weekly-activities" class="rep-weekly-grid"><div class="rep-empty">Cargando actividades semanales…</div></div>
       </section>
 
       <section id="rep-view-reunion" class="rep-view hidden">

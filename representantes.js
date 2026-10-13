@@ -419,6 +419,67 @@
     $('rep-view-compromisos')?.classList.toggle('privacy-hidden',!map.compromisos);
   }
 
+
+  let weeklyActivities=[];
+
+  function semanaEtiquetaV810(n){
+    const num=Number(n||0);const ord=['','Primera semana','Segunda semana','Tercera semana','Cuarta semana','Quinta semana','Sexta semana','Séptima semana','Octava semana','Novena semana','Décima semana'];
+    return ord[num]||`Semana ${num||''}`;
+  }
+
+  async function cargarActividadesSemanalesV810(silencioso=false){
+    if(!currentCedula||!currentCodigo)return;
+    const host=$('rep-weekly-activities');
+    if(host&&!silencioso)host.innerHTML='<div class="rep-empty">Cargando actividades semanales…</div>';
+    try{
+      const r=await api('obtenerActividadesSemanalesRepresentante',{cedula:currentCedula,codigo:currentCodigo});
+      weeklyActivities=Array.isArray(r?.actividades)?r.actividades:[];
+      construirFiltrosSemanalesV810();
+      renderActividadesSemanalesV810();
+    }catch(e){
+      if(host)host.innerHTML=`<div class="rep-empty">${esc(e?.message||'No fue posible cargar las actividades de la semana.')}</div>`;
+    }
+  }
+
+  function construirFiltrosSemanalesV810(){
+    const sel=$('rep-week-filter'); if(!sel)return;
+    const actual=sel.value;
+    const nums=[...new Set(weeklyActivities.map(x=>Number(x.semana||0)).filter(Boolean))].sort((a,b)=>a-b);
+    sel.innerHTML='<option value="">Todas las semanas</option>'+nums.map(n=>`<option value="${n}">${esc(semanaEtiquetaV810(n))}</option>`).join('');
+    if(nums.includes(Number(actual)))sel.value=actual;
+    else if(nums.length)sel.value=String(nums[nums.length-1]);
+  }
+
+  function imagenSemanalUrlV810(x){return String(x.imagenUrl||x.urlImagen||'').trim();}
+  function descargaSemanalUrlV810(x){return String(x.descargaUrl||x.imagenUrl||'').trim();}
+
+  function imprimirActividadSemanalV810(id){
+    const x=weeklyActivities.find(a=>String(a.id)===String(id));if(!x)return;
+    const img=imagenSemanalUrlV810(x);const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(x.titulo||'Actividad semanal')}</title><style>body{font-family:Arial;padding:22px;color:#234}h1{font-size:20px;margin:0 0 6px}.meta{font-size:12px;color:#667;margin-bottom:15px}img{display:block;max-width:100%;max-height:76vh;margin:auto;object-fit:contain;border:1px solid #ddd}.note{font-size:12px;margin-top:12px}</style></head><body><h1>${esc(x.titulo||'Actividad semanal')}</h1><div class="meta">${esc(semanaEtiquetaV810(x.semana))} · ${esc(x.area||'')} · ${esc(x.ano||'')} Sección ${esc(x.seccion||'')}</div>${img?`<img src="${esc(img)}" alt="Actividad semanal">`:''}<div class="note">${esc(x.descripcion||'')}</div><script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script></body></html>`);w.document.close();
+  }
+  window.imprimirActividadSemanalV810=imprimirActividadSemanalV810;
+
+  function renderActividadesSemanalesV810(){
+    const host=$('rep-weekly-activities');if(!host)return;
+    const sem=Number($('rep-week-filter')?.value||0);const area=String($('rep-week-area')?.value||'');
+    let rows=weeklyActivities.slice().filter(x=>(!sem||Number(x.semana)===sem)&&(!area||String(x.area)===area));
+    rows.sort((a,b)=>Number(a.semana||0)-Number(b.semana||0)||String(a.area||'').localeCompare(String(b.area||''),'es'));
+    if(!rows.length){host.innerHTML='<div class="rep-empty good-empty">No se han publicado actividades para la selección indicada.</div>';return;}
+    host.innerHTML=rows.map(x=>{const img=imagenSemanalUrlV810(x),down=descargaSemanalUrlV810(x);return `<article class="rep-week-card">
+      <header><div><span>${esc(semanaEtiquetaV810(x.semana))}</span><strong>${esc(x.area||'Actividad')}</strong></div><small>${esc(x.fechaInicio||'')}${x.fechaFin?' al '+esc(x.fechaFin):''}</small></header>
+      <h3>${esc(x.titulo||'Actividad de la semana')}</h3>
+      ${img?`<button type="button" class="rep-week-image" data-week-open="${esc(img)}"><img src="${esc(img)}" alt="${esc(x.titulo||'Actividad semanal')}" loading="lazy"></button>`:'<div class="rep-week-noimage">Imagen no disponible</div>'}
+      ${x.descripcion?`<p>${esc(x.descripcion)}</p>`:''}
+      <div class="rep-week-actions">
+        ${img?`<a href="${esc(img)}" target="_blank" rel="noopener">👁 Ver grande</a><a href="${esc(img)}" target="_blank" rel="noopener">💾 Guardar imagen</a>`:''}
+        ${down?`<a href="${esc(down)}" target="_blank" rel="noopener">⬇ Descargar</a>`:''}
+        <button type="button" data-week-print="${esc(x.id)}">🖨 Imprimir</button>
+      </div></article>`}).join('');
+    host.querySelectorAll('[data-week-open]').forEach(b=>b.addEventListener('click',()=>window.open(b.dataset.weekOpen,'_blank','noopener')));
+    host.querySelectorAll('[data-week-print]').forEach(b=>b.addEventListener('click',()=>imprimirActividadSemanalV810(b.dataset.weekPrint)));
+  }
+
   function renderAll(){
     aplicarVisibilidadV81();
     renderSummaryCards();
@@ -429,6 +490,7 @@
     renderAttendance();
     renderCommitments();
     renderMeetingsV87();
+    if(weeklyActivities.length) renderActividadesSemanalesV810();
     const meetingDate=$('rep-meeting-date');if(meetingDate)meetingDate.min=new Date().toISOString().slice(0,10);
     $('rep-privacy').textContent=data.privacidad||'';
   }
@@ -504,5 +566,13 @@
     $('rep-login-view').classList.remove('hidden');
     $('rep-codigo').value='';
     window.scrollTo({top:0,behavior:'smooth'});
+  });
+
+
+  document.addEventListener('DOMContentLoaded',()=>{
+    $('rep-week-filter')?.addEventListener('change',renderActividadesSemanalesV810);
+    $('rep-week-area')?.addEventListener('change',renderActividadesSemanalesV810);
+    $('rep-week-refresh')?.addEventListener('click',()=>cargarActividadesSemanalesV810());
+    document.querySelector('[data-view="semanales"]')?.addEventListener('click',()=>cargarActividadesSemanalesV810(true));
   });
 })();

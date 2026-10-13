@@ -21743,3 +21743,54 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 // EduGestion build V8.9.1 - Planificacion organizada
 
 // EduGestion build V8.9.2 - Detalle manual de plan de evaluacion a ancho completo
+
+/* =========================================================
+   V8.10 · Publicación de actividades semanales a representantes
+   ========================================================= */
+(()=>{
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  let archivoProcesado=null;
+  function toast(msg,type='success'){
+    if(typeof window.mostrarToast==='function')return window.mostrarToast(msg,type,type==='success'?'Actividades semanales':'Aviso');
+    window.alert(msg);
+  }
+  function crearUI(){
+    const acciones=document.querySelector('.planning-detail-toolbar-v892__actions');
+    if(acciones&&!$('btn-publicar-semanal-v810')){
+      const b=document.createElement('button');b.type='button';b.id='btn-publicar-semanal-v810';b.className='is-weekly-v810';b.innerHTML='<i class="fa-solid fa-image"></i> Publicar actividad semanal';b.addEventListener('click',abrir);acciones.prepend(b);
+    }
+    if($('modal-actividad-semanal-v810'))return;
+    document.body.insertAdjacentHTML('beforeend',`<div id="modal-actividad-semanal-v810" class="weekly-modal-v810 hidden">
+      <div class="weekly-modal-card-v810">
+        <header><div><span>Portal de representantes</span><h3>Publicar actividad de la semana</h3><p>Sube la imagen que podrán ver, guardar, descargar e imprimir los representantes de la sección.</p></div><button type="button" id="weekly-close-v810">×</button></header>
+        <form id="weekly-form-v810">
+          <div class="weekly-grid-v810">
+            <label><span>Año</span><select id="weekly-ano-v810"><option value="1ero">1er Año</option><option value="2do">2do Año</option><option value="3ero">3er Año</option><option value="4to">4to Año</option><option value="5to">5to Año</option></select></label>
+            <label><span>Sección</span><select id="weekly-seccion-v810"><option>A</option><option>B</option><option>C</option></select></label>
+            <label><span>Semana</span><select id="weekly-semana-v810">${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}ª semana</option>`).join('')}</select></label>
+            <label><span>Área</span><select id="weekly-area-v810"><option>Educación Física</option><option>Orientación y Convivencia</option><option>Recreación</option><option>Otra</option></select></label>
+          </div>
+          <label class="weekly-full-v810"><span>Título de la actividad</span><input id="weekly-titulo-v810" maxlength="160" placeholder="Ej.: Entrenamiento funcional en casa" required></label>
+          <div class="weekly-grid-v810"><label><span>Fecha inicial</span><input id="weekly-desde-v810" type="date"></label><label><span>Fecha final / entrega</span><input id="weekly-hasta-v810" type="date"></label></div>
+          <label class="weekly-full-v810"><span>Descripción opcional</span><textarea id="weekly-desc-v810" rows="3" maxlength="1500" placeholder="Indicaciones breves para el representante."></textarea></label>
+          <label class="weekly-upload-v810"><span>Imagen de la actividad</span><input id="weekly-image-v810" type="file" accept="image/*" required><small>JPG, PNG o WEBP. La imagen se optimiza automáticamente antes de subir.</small><div id="weekly-preview-v810"></div></label>
+          <button class="weekly-submit-v810" id="weekly-submit-v810" type="submit"><i class="fa-solid fa-cloud-arrow-up"></i> Publicar para representantes</button>
+        </form>
+        <section class="weekly-published-v810"><div class="weekly-published-head-v810"><strong>Publicaciones recientes de esta sección</strong><button type="button" id="weekly-refresh-v810">Actualizar</button></div><div id="weekly-list-v810"><div class="weekly-empty-v810">Aún no se ha consultado.</div></div></section>
+      </div></div>`);
+    $('weekly-close-v810').onclick=cerrar;$('weekly-refresh-v810').onclick=cargarLista;$('weekly-form-v810').addEventListener('submit',guardar);$('weekly-image-v810').addEventListener('change',procesarImagen);
+    $('modal-actividad-semanal-v810').addEventListener('click',e=>{if(e.target.id==='modal-actividad-semanal-v810')cerrar();});
+  }
+  function contexto(){return {ano:$('plan-ano')?.value||'1ero',seccion:$('plan-seccion')?.value||'A',turno:window.profesorActual?.turno||'Manana'};}
+  function abrir(){crearUI();const c=contexto();$('weekly-ano-v810').value=c.ano;$('weekly-seccion-v810').value=c.seccion;const materia=String(window.profesorActual?.materia||'');if(/orient/i.test(materia))$('weekly-area-v810').value='Orientación y Convivencia';else if(/recre/i.test(materia))$('weekly-area-v810').value='Recreación';else $('weekly-area-v810').value='Educación Física';$('modal-actividad-semanal-v810').classList.remove('hidden');cargarLista();}
+  function cerrar(){$('modal-actividad-semanal-v810')?.classList.add('hidden');}
+  function procesarImagen(e){archivoProcesado=null;const f=e.target.files?.[0];const prev=$('weekly-preview-v810');if(!f){prev.innerHTML='';return;}if(!f.type.startsWith('image/')){toast('Selecciona un archivo de imagen.','error');e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const max=1800,scale=Math.min(1,max/Math.max(img.width,img.height)),w=Math.round(img.width*scale),h=Math.round(img.height*scale),cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);const data=cv.toDataURL('image/jpeg',.86);archivoProcesado={archivoBase64:data,mimeType:'image/jpeg',archivoNombre:(f.name.replace(/\.[^.]+$/,'')||'actividad')+'.jpg'};prev.innerHTML=`<img src="${data}" alt="Vista previa"><small>${w} × ${h}px</small>`;};img.src=rd.result;};rd.readAsDataURL(f);}
+  async function guardar(e){e.preventDefault();if(!archivoProcesado){toast('Selecciona la imagen de la actividad.','warning');return;}const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function'){toast('No está disponible la conexión con el servidor.','error');return;}const btn=$('weekly-submit-v810');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Publicando…';try{const payload={ano:$('weekly-ano-v810').value,seccion:$('weekly-seccion-v810').value,turno:window.profesorActual?.turno||'Manana',semana:Number($('weekly-semana-v810').value),area:$('weekly-area-v810').value,titulo:$('weekly-titulo-v810').value.trim(),descripcion:$('weekly-desc-v810').value.trim(),fechaInicio:$('weekly-desde-v810').value,fechaFin:$('weekly-hasta-v810').value,...archivoProcesado};await api('guardarActividadSemanal',payload);toast('La actividad ya está disponible en el Portal de Representantes.','success');$('weekly-titulo-v810').value='';$('weekly-desc-v810').value='';$('weekly-image-v810').value='';$('weekly-preview-v810').innerHTML='';archivoProcesado=null;await cargarLista();}catch(err){toast(err?.message||'No se pudo publicar la actividad.','error');}finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Publicar para representantes';}}
+  async function cargarLista(){const api=window.EDUGESTION_API_REQUEST,host=$('weekly-list-v810');if(typeof api!=='function'||!host)return;host.innerHTML='<div class="weekly-empty-v810">Cargando…</div>';try{const r=await api('obtenerActividadesSemanalesDocente',{ano:$('weekly-ano-v810').value,seccion:$('weekly-seccion-v810').value});const rows=Array.isArray(r?.actividades)?r.actividades:[];host.innerHTML=rows.length?rows.map(x=>`<article><img src="${esc(x.imagenUrl||'')}" alt=""><div><strong>${esc(x.titulo||'Actividad')}</strong><span>Semana ${Number(x.semana||0)} · ${esc(x.area||'')}</span><small>${esc(x.fechaInicio||'')}${x.fechaFin?' al '+esc(x.fechaFin):''}</small></div><button type="button" data-week-delete-v810="${esc(x.id)}" title="Retirar del portal"><i class="fa-solid fa-trash"></i></button></article>`).join(''):'<div class="weekly-empty-v810">No hay publicaciones para esta sección.</div>';host.querySelectorAll('[data-week-delete-v810]').forEach(b=>b.onclick=()=>eliminar(b.dataset.weekDeleteV810));}catch(err){host.innerHTML=`<div class="weekly-empty-v810">${esc(err?.message||'No se pudo cargar.')}</div>`;}}
+  async function eliminar(id){if(!confirm('¿Retirar esta actividad del Portal de Representantes?'))return;try{await window.EDUGESTION_API_REQUEST('eliminarActividadSemanal',{id});toast('Actividad retirada.','success');cargarLista();}catch(e){toast(e?.message||'No se pudo retirar.','error');}}
+  function init(){crearUI();const obs=new MutationObserver(()=>crearUI());obs.observe(document.body,{childList:true,subtree:true});setTimeout(()=>obs.disconnect(),12000);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+
+// EduGestion build V8.10 - Actividades semanales para representantes
