@@ -463,8 +463,10 @@
 
   function imprimirActividadSemanalV810(id){
     const x=weeklyActivities.find(a=>String(a.id)===String(id));if(!x)return;
-    const img=imagenSemanalUrlV810(x);const w=window.open('','_blank');if(!w)return;
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(x.titulo||'Actividad semanal')}</title><style>body{font-family:Arial;padding:22px;color:#234}h1{font-size:20px;margin:0 0 6px}.meta{font-size:12px;color:#667;margin-bottom:15px}img{display:block;max-width:100%;max-height:76vh;margin:auto;object-fit:contain;border:1px solid #ddd}.note{font-size:12px;margin-top:12px}</style></head><body><h1>${esc(x.titulo||'Actividad semanal')}</h1><div class="meta">${esc(semanaEtiquetaV810(x.semana))} · ${esc(x.area||'')} · ${esc(x.ano||'')} Sección ${esc(x.seccion||'')}</div>${img?`<img src="${esc(img)}" alt="Actividad semanal">`:''}<div class="note">${esc(x.descripcion||'')}</div><script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script></body></html>`);w.document.close();
+    const img=imagenSemanalUrlV810(x);
+    const esWord=/word|msword/i.test(String(x.mimeType||''))||/\.docx?$/i.test(String(x.archivoNombre||''));
+    const w=window.open('','_blank');if(!w)return;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(x.titulo||'Actividad semanal')}</title><style>body{font-family:Arial;padding:22px;color:#234}h1{font-size:20px;margin:0 0 6px}.meta{font-size:12px;color:#667;margin-bottom:15px}img{display:block;max-width:100%;max-height:76vh;margin:auto;object-fit:contain;border:1px solid #ddd}.file{padding:24px;border:1px solid #d8e1ea;border-radius:12px;background:#f7f9fc;margin:18px 0}.file strong{display:block;margin-bottom:6px}.note{font-size:12px;margin-top:12px}</style></head><body><h1>${esc(x.titulo||'Actividad semanal')}</h1><div class="meta">${esc(semanaEtiquetaV810(x.semana))} · ${esc(x.area||'')} · ${esc(x.ano||'')} Sección ${esc(x.seccion||'')}</div>${img?`<img src="${esc(img)}" alt="Actividad semanal">`:esWord?`<div class="file"><strong>Documento de Word adjunto</strong>${esc(x.archivoNombre||'Actividad.docx')}<br><small>Descárguelo desde el Portal de Representantes para ver su contenido completo.</small></div>`:''}<div class="note">${esc(x.descripcion||'')}</div><script>window.onload=()=>setTimeout(()=>window.print(),500);<\/script></body></html>`);w.document.close();
   }
   window.imprimirActividadSemanalV810=imprimirActividadSemanalV810;
 
@@ -474,15 +476,15 @@
     let rows=weeklyActivities.slice().filter(x=>(!sem||Number(x.semana)===sem)&&(!area||String(x.area)===area));
     rows.sort((a,b)=>Number(a.semana||0)-Number(b.semana||0)||String(a.area||'').localeCompare(String(b.area||''),'es'));
     if(!rows.length){host.innerHTML='<div class="rep-empty good-empty">No se han publicado actividades para la selección indicada.</div>';return;}
-    host.innerHTML=rows.map(x=>{const img=imagenSemanalUrlV810(x),down=descargaSemanalUrlV810(x);return `<article class="rep-week-card">
+    host.innerHTML=rows.map(x=>{const img=imagenSemanalUrlV810(x),down=descargaSemanalUrlV810(x),esWord=/word|msword/i.test(String(x.mimeType||''))||/\.docx?$/i.test(String(x.archivoNombre||''));return `<article class="rep-week-card">
       <header><div><span>${esc(semanaEtiquetaV810(x.semana))}</span><strong>${esc(x.area||'Actividad')}</strong></div><small>${esc(x.fechaInicio||'')}${x.fechaFin?' al '+esc(x.fechaFin):''}</small></header>
       <h3>${esc(x.titulo||'Actividad de la semana')}</h3>
-      ${img?`<button type="button" class="rep-week-image" data-week-open="${esc(img)}"><img src="${esc(img)}" alt="${esc(x.titulo||'Actividad semanal')}" loading="lazy"></button>`:'<div class="rep-week-noimage">Imagen no disponible</div>'}
+      ${img?`<button type="button" class="rep-week-image" data-week-open="${esc(img)}"><img src="${esc(img)}" alt="${esc(x.titulo||'Actividad semanal')}" loading="lazy"></button>`:esWord?`<div class="rep-week-file-v8121"><span>W</span><div><strong>Documento de Word</strong><small>${esc(x.archivoNombre||'Actividad.docx')}</small></div></div>`:'<div class="rep-week-noimage">Archivo disponible para descargar</div>'}
       ${x.descripcion?`<p>${esc(x.descripcion)}</p>`:''}
       <div class="rep-week-actions">
         ${img?`<a href="${esc(img)}" target="_blank" rel="noopener">👁 Ver grande</a><a href="${esc(img)}" target="_blank" rel="noopener">💾 Guardar imagen</a>`:''}
-        ${down?`<a href="${esc(down)}" target="_blank" rel="noopener">⬇ Descargar</a>`:''}
-        <button type="button" data-week-print="${esc(x.id)}">🖨 Imprimir</button>
+        ${down?`<a href="${esc(down)}" target="_blank" rel="noopener">${esWord?'📄 Descargar Word':'⬇ Descargar'}</a>`:''}
+        <button type="button" data-week-print="${esc(x.id)}">🖨 Imprimir ficha</button>
       </div></article>`}).join('');
     host.querySelectorAll('[data-week-open]').forEach(b=>b.addEventListener('click',()=>window.open(b.dataset.weekOpen,'_blank','noopener')));
     host.querySelectorAll('[data-week-print]').forEach(b=>b.addEventListener('click',()=>imprimirActividadSemanalV810(b.dataset.weekPrint)));

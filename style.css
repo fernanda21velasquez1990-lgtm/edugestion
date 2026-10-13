@@ -10559,3 +10559,17 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
   .registro-notificacion-cambios__row span:nth-child(3)::before { content:"AHORA:"; }
   .registro-notificacion-datos-grid { grid-template-columns:1fr; }
 }
+
+
+/* V8.12.1 · Archivos Word en actividades semanales */
+.weekly-file-preview-v8121{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;margin-top:10px;
+  border:1px solid #cbd5e1;border-radius:14px;background:#f8fafc;color:#173b67;
+}
+.weekly-file-preview-v8121>i{font-size:2rem;color:#2563eb}
+.weekly-file-preview-v8121 strong,.weekly-file-preview-v8121 small{display:block}
+.weekly-file-preview-v8121 small{margin-top:3px;color:#64748b}
+.weekly-file-icon-v8121{
+  width:58px;height:58px;display:flex;align-items:center;justify-content:center;
+  border-radius:12px;background:#eef4ff;color:#2563eb;font-size:1.8rem;flex:0 0 58px;
+}
