@@ -2023,13 +2023,46 @@ const SESSION_KEY = 'edugestion_session_v2';
     const statPlanSecciones = document.getElementById('stat-plan-secciones');
     const statPlanProxima = document.getElementById('stat-plan-proxima');
 
+    let planEditandoId = '';
+
+    function actualizarBotonGuardarPlanV893(editando = false) {
+      const btn = document.getElementById('btn-guardar-plan');
+      if (!btn) return;
+      btn.innerHTML = editando
+        ? '<i class="fa-solid fa-floppy-disk"></i> Guardar cambios'
+        : '<i class="fa-solid fa-floppy-disk"></i> Guardar Evaluación';
+    }
+
     window.mostrarFormularioPlan = function(fechaSugerida = '') {
+      planEditandoId = '';
+      formPlanificacion?.reset();
       panelListaPlan.classList.add('hidden');
       accionesPlan.classList.add('hidden');
       panelFormPlan.classList.remove('hidden');
       planningLayoutV89?.classList.remove('is-plan-detail');
       seccionPlanViendo = null;
+      actualizarBotonGuardarPlanV893(false);
       if (fechaSugerida) document.getElementById('plan-fecha').value = fechaSugerida;
+      setTimeout(() => document.getElementById('plan-actividad')?.focus(), 40);
+    };
+
+    window.editarPlanificacionLocal = function(idPlan) {
+      const plan = (Array.isArray(planesProfesor) ? planesProfesor : []).find(p => String(p.id) === String(idPlan));
+      if (!plan) return mostrarToast('No se encontró la evaluación seleccionada.', 'error', 'No se puede editar');
+      window.mostrarFormularioPlan();
+      planEditandoId = String(plan.id || '');
+      document.getElementById('plan-ano').value = String(plan.ano || '');
+      document.getElementById('plan-seccion').value = String(plan.seccion || '').toUpperCase();
+      document.getElementById('plan-actividad').value = String(plan.actividad || '');
+      const tipo = tipoEvaluacionPlanV88(plan);
+      const selectTipo = document.getElementById('plan-tipo-evaluacion');
+      if (selectTipo) {
+        const existe = [...selectTipo.options].some(o => o.value === tipo);
+        selectTipo.value = existe ? tipo : 'Otro';
+      }
+      document.getElementById('plan-puntos').value = Number(plan.puntos || 0);
+      document.getElementById('plan-fecha').value = String(plan.fecha || '');
+      actualizarBotonGuardarPlanV893(true);
       setTimeout(() => document.getElementById('plan-actividad')?.focus(), 40);
     };
 
@@ -2176,8 +2209,9 @@ const SESSION_KEY = 'edugestion_session_v2';
           const fecha = fechaLocalDesdeISO(p.fecha);
           const fechaStr = fecha ? fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : escaparHTML(p.fecha);
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="px-4 py-3 text-center font-black text-gray-500">${index+1}</td><td class="px-4 py-3 text-gray-700"><strong class="planning-eval-name-v88">${escaparHTML(p.actividad || 'Evaluación')}</strong></td><td class="px-4 py-3 text-gray-600"><span class="planning-eval-type-v88">${escaparHTML(tipoEvaluacionPlanV88(p))}</span></td><td class="px-4 py-3 text-center font-black text-indigo-600">${Number(p.puntos||0)} pts</td><td class="px-4 py-3 font-semibold text-gray-800"><span class="planning-table-date">${fechaStr}</span></td><td class="px-4 py-3 text-center no-pdf"><button type="button" class="text-red-400 hover:text-red-600 transition" aria-label="Eliminar evaluación"><i class="fa-solid fa-trash-can"></i></button></td>`;
-          tr.querySelector('button').addEventListener('click', () => eliminarPlanLocal(index, ano, seccion));
+          tr.innerHTML = `<td class="px-4 py-3 text-center font-black text-gray-500">${index+1}</td><td class="px-4 py-3 text-gray-700"><strong class="planning-eval-name-v88">${escaparHTML(p.actividad || 'Evaluación')}</strong></td><td class="px-4 py-3 text-gray-600"><span class="planning-eval-type-v88">${escaparHTML(tipoEvaluacionPlanV88(p))}</span></td><td class="px-4 py-3 text-center font-black text-indigo-600">${Number(p.puntos||0)} pts</td><td class="px-4 py-3 font-semibold text-gray-800"><span class="planning-table-date">${fechaStr}</span></td><td class="px-4 py-3 text-center no-pdf"><div class="planning-row-actions-v893"><button type="button" class="planning-row-action-v893 is-edit" data-plan-edit="${escaparHTML(p.id || '')}" title="Editar evaluación" aria-label="Editar evaluación"><i class="fa-solid fa-pen"></i><span>Editar</span></button><button type="button" class="planning-row-action-v893 is-delete" data-plan-delete="${index}" title="Borrar evaluación" aria-label="Borrar evaluación"><i class="fa-solid fa-trash-can"></i><span>Borrar</span></button></div></td>`;
+          tr.querySelector('[data-plan-edit]')?.addEventListener('click', () => editarPlanificacionLocal(p.id));
+          tr.querySelector('[data-plan-delete]')?.addEventListener('click', () => eliminarPlanLocal(index, ano, seccion));
           tablaBodyPlan.appendChild(tr);
         });
       }
@@ -2550,6 +2584,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     formPlanificacion.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btnPlan = document.getElementById('btn-guardar-plan');
+      const idEdicion = String(planEditandoId || '');
       const objPlan = {
         ano: document.getElementById('plan-ano').value,
         seccion: document.getElementById('plan-seccion').value,
@@ -2558,7 +2593,8 @@ const SESSION_KEY = 'edugestion_session_v2';
         puntos: document.getElementById('plan-puntos').value,
         fecha: document.getElementById('plan-fecha').value
       };
-      const acumuladoActual = planesProfesor.filter(p => p.ano === objPlan.ano && p.seccion === objPlan.seccion).reduce((total, p) => total + Number(p.puntos || 0), 0);
+      if (idEdicion) objPlan.id = idEdicion;
+      const acumuladoActual = planesProfesor.filter(p => p.ano === objPlan.ano && p.seccion === objPlan.seccion && String(p.id || '') !== idEdicion).reduce((total, p) => total + Number(p.puntos || 0), 0);
       const acumulado = acumuladoActual + Number(objPlan.puntos || 0);
       if (Number(objPlan.puntos||0) > 20) return mostrarToast('Una evaluación no puede superar 20 puntos.','warning','Revisa el puntaje');
       if (acumulado > META_PUNTOS_PLAN_V88 && !confirm(`Esta sección quedará con ${acumulado} puntos, es decir ${acumulado-META_PUNTOS_PLAN_V88} puntos por encima de la meta de 20. ¿Deseas continuar?`)) return;
@@ -2566,20 +2602,26 @@ const SESSION_KEY = 'edugestion_session_v2';
       btnPlan.innerHTML = '<i class="fa-solid fa-circle-notch animate-spin"></i> Guardando...';
       try {
         const resultado = await apiRequest('guardarPlanificacion', objPlan);
-        planesProfesor.push(resultado.plan || objPlan);
+        const planGuardado = resultado.plan || objPlan;
+        if (idEdicion) {
+          planesProfesor = planesProfesor.map(p => String(p.id || '') === idEdicion ? { ...p, ...planGuardado } : p);
+        } else {
+          planesProfesor.push(planGuardado);
+        }
         const fechaNueva = fechaLocalDesdeISO(objPlan.fecha);
         if (fechaNueva) calendarioPlanFecha = new Date(fechaNueva.getFullYear(), fechaNueva.getMonth(), 1);
         calendarioDiaSeleccionado = objPlan.fecha;
         formPlanificacion.reset();
+        planEditandoId = '';
         actualizarUIPlanificacion();
         mostrarListaPlan(objPlan.ano, objPlan.seccion);
-        mostrarToast('La evaluación quedó guardada y ya aparece en el calendario.', 'success', 'Evaluación programada');
+        mostrarToast(idEdicion ? 'Los cambios de la evaluación fueron guardados correctamente.' : 'La evaluación quedó guardada y ya aparece en el calendario.', 'success', idEdicion ? 'Evaluación actualizada' : 'Evaluación programada');
       } catch (error) {
         console.error('No se guardó la planificación:', error);
         mostrarToast(error.message, 'error', 'No se guardó la evaluación');
       } finally {
         btnPlan.disabled = false;
-        btnPlan.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Guardar Evaluación';
+        actualizarBotonGuardarPlanV893(Boolean(planEditandoId));
       }
     });
 

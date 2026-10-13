@@ -2763,20 +2763,39 @@ function guardarAsistencia_(docente, payload) {
 
 function guardarPlanificacion_(docente, payload) {
   var ahora = ahora_();
-  var plan = {
-    id: Utilities.getUuid(),
-    idProfesor: docente.id,
+  var idExistente = String(payload.id || '').trim();
+  var datos = {
     ano: limpiarRequerido_(payload.ano, 'año'),
     seccion: limpiarRequerido_(payload.seccion, 'sección').toUpperCase(),
     actividad: limpiarRequerido_(payload.actividad, 'actividad'),
     tipoEvaluacion: String(payload.tipoEvaluacion || 'Actividad evaluativa').trim().slice(0, 100),
     puntos: numeroEntre_(payload.puntos, 0, 20, 'puntos'),
     fecha: limpiarRequerido_(payload.fecha, 'fecha'),
-    creadoEn: ahora,
     actualizadoEn: ahora
   };
+
+  if (idExistente) {
+    var tabla = leerObjetos_(EG.SHEETS.PLANIFICACION);
+    var existente = tabla.objetos.filter(function(p) {
+      return String(p.id) === idExistente && String(p.idProfesor) === String(docente.id);
+    })[0];
+    if (!existente) lanzar_('No se encontró la evaluación que deseas editar.', 'NOT_FOUND');
+    actualizarFilaObjeto_(EG.SHEETS.PLANIFICACION, existente.__row, datos);
+    var actualizado = Object.assign({}, limpiarMeta_(existente), datos, {
+      id: existente.id,
+      idProfesor: docente.id,
+      creadoEn: existente.creadoEn || ahora
+    });
+    return { status: 'success', plan: actualizado, actualizado: true };
+  }
+
+  var plan = Object.assign({
+    id: Utilities.getUuid(),
+    idProfesor: docente.id,
+    creadoEn: ahora
+  }, datos);
   anexarObjeto_(EG.SHEETS.PLANIFICACION, plan);
-  return { status: 'success', plan: limpiarMeta_(plan) };
+  return { status: 'success', plan: limpiarMeta_(plan), actualizado: false };
 }
 
 function guardarHorario_(docente, payload) {
@@ -9644,20 +9663,39 @@ function guardarAsistencia_(docente, payload) {
 
 function guardarPlanificacion_(docente, payload) {
   var ahora = ahora_();
-  var plan = {
-    id: Utilities.getUuid(),
-    idProfesor: docente.id,
+  var idExistente = String(payload.id || '').trim();
+  var datos = {
     ano: limpiarRequerido_(payload.ano, 'año'),
     seccion: limpiarRequerido_(payload.seccion, 'sección').toUpperCase(),
     actividad: limpiarRequerido_(payload.actividad, 'actividad'),
     tipoEvaluacion: String(payload.tipoEvaluacion || 'Actividad evaluativa').trim().slice(0, 100),
     puntos: numeroEntre_(payload.puntos, 0, 20, 'puntos'),
     fecha: limpiarRequerido_(payload.fecha, 'fecha'),
-    creadoEn: ahora,
     actualizadoEn: ahora
   };
+
+  if (idExistente) {
+    var tabla = leerObjetos_(EG.SHEETS.PLANIFICACION);
+    var existente = tabla.objetos.filter(function(p) {
+      return String(p.id) === idExistente && String(p.idProfesor) === String(docente.id);
+    })[0];
+    if (!existente) lanzar_('No se encontró la evaluación que deseas editar.', 'NOT_FOUND');
+    actualizarFilaObjeto_(EG.SHEETS.PLANIFICACION, existente.__row, datos);
+    var actualizado = Object.assign({}, limpiarMeta_(existente), datos, {
+      id: existente.id,
+      idProfesor: docente.id,
+      creadoEn: existente.creadoEn || ahora
+    });
+    return { status: 'success', plan: actualizado, actualizado: true };
+  }
+
+  var plan = Object.assign({
+    id: Utilities.getUuid(),
+    idProfesor: docente.id,
+    creadoEn: ahora
+  }, datos);
   anexarObjeto_(EG.SHEETS.PLANIFICACION, plan);
-  return { status: 'success', plan: limpiarMeta_(plan) };
+  return { status: 'success', plan: limpiarMeta_(plan), actualizado: false };
 }
 
 function guardarHorario_(docente, payload) {
