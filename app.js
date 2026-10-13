@@ -21794,3 +21794,276 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 })();
 
 // EduGestion build V8.10 - Actividades semanales para representantes
+
+
+// ============================================================================
+// V8.12 · CAMPANA DE NOTIFICACIONES DEL REGISTRO DE REPRESENTANTES
+// ============================================================================
+(function instalarNotificacionesRegistroRepresentantesV812() {
+  const boton = document.getElementById('registro-notificaciones-button');
+  const badge = document.getElementById('registro-notificaciones-badge');
+  const panel = document.getElementById('registro-notificaciones-panel');
+  const lista = document.getElementById('registro-notificaciones-lista');
+  const marcarTodas = document.getElementById('registro-notificaciones-marcar-todas');
+  const modal = document.getElementById('registro-notificacion-modal');
+  const modalBody = document.getElementById('registro-notificacion-modal-body');
+  const modalTitulo = document.getElementById('registro-notificacion-modal-title');
+  const modalCerrar = document.getElementById('registro-notificacion-modal-cerrar');
+  const modalOk = document.getElementById('registro-notificacion-modal-ok');
+  const modalVerFicha = document.getElementById('registro-notificacion-ver-ficha');
+
+  if (!boton || !badge || !panel || !lista || !modal) return;
+
+  let notificaciones = [];
+  let notificacionActiva = null;
+  let temporizador = null;
+
+  function escapar(valor) {
+    return String(valor ?? '').replace(/[&<>'"]/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[c]));
+  }
+
+  function formatearFecha(valor) {
+    if (!valor) return '';
+    const fecha = new Date(valor);
+    if (Number.isNaN(fecha.getTime())) return String(valor);
+    return fecha.toLocaleString('es-VE', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function apiDisponible() {
+    return typeof window.EDUGESTION_API_REQUEST === 'function';
+  }
+
+  function iconoEstado(item) {
+    const estado = String(item.estado || '').toLowerCase();
+    if (estado === 'pendiente') {
+      return '<span class="registro-notificacion-item__icon registro-notificacion-item__icon--warning"><i class="fa-solid fa-triangle-exclamation"></i></span>';
+    }
+    if (estado === 'sin cambios') {
+      return '<span class="registro-notificacion-item__icon registro-notificacion-item__icon--info"><i class="fa-solid fa-circle-info"></i></span>';
+    }
+    return '<span class="registro-notificacion-item__icon registro-notificacion-item__icon--success"><i class="fa-solid fa-circle-check"></i></span>';
+  }
+
+  function renderizar() {
+    const noLeidas = notificaciones.filter(n => String(n.leido || '').toLowerCase() !== 'si').length;
+    badge.textContent = String(noLeidas);
+    badge.classList.toggle('hidden', noLeidas === 0);
+    boton.classList.toggle('has-unread', noLeidas > 0);
+
+    if (!notificaciones.length) {
+      lista.innerHTML = `
+        <div class="registro-notificaciones__vacio">
+          <i class="fa-regular fa-bell-slash"></i>
+          <strong>Sin novedades</strong>
+          <span>Aquí aparecerán los registros enviados por los representantes.</span>
+        </div>`;
+      return;
+    }
+
+    lista.innerHTML = notificaciones.map(item => {
+      const noLeida = String(item.leido || '').toLowerCase() !== 'si';
+      const cambios = Array.isArray(item.cambios) ? item.cambios.length : 0;
+      return `
+        <button class="registro-notificacion-item ${noLeida ? 'is-unread' : ''}" data-notificacion-id="${escapar(item.id)}" type="button">
+          ${iconoEstado(item)}
+          <span class="registro-notificacion-item__content">
+            <strong>${escapar(item.alumno || 'Estudiante')}</strong>
+            <small>${escapar(item.ano || '')} ${escapar(item.seccion || '')} · ${escapar(item.turno || '')}</small>
+            <span>${escapar(item.resumen || item.titulo || 'Registro recibido')}</span>
+            <em>${escapar(formatearFecha(item.creadoEn))}${cambios ? ` · ${cambios} cambio(s)` : ''}</em>
+          </span>
+          ${noLeida ? '<span class="registro-notificacion-item__dot" aria-label="No leída"></span>' : ''}
+        </button>`;
+    }).join('');
+  }
+
+  async function cargar(silencioso = true) {
+    if (!apiDisponible()) return;
+    const dashboard = document.getElementById('dashboard-screen');
+    if (!dashboard || dashboard.classList.contains('hidden')) return;
+
+    try {
+      const res = await window.EDUGESTION_API_REQUEST('obtenerNotificacionesRegistro', { limite: 50 });
+      notificaciones = Array.isArray(res.notificaciones) ? res.notificaciones : [];
+      renderizar();
+    } catch (error) {
+      if (!silencioso) console.error('Notificaciones de representantes:', error);
+    }
+  }
+
+  function cerrarPanel() {
+    panel.classList.add('hidden');
+    boton.setAttribute('aria-expanded', 'false');
+  }
+
+  function abrirPanel() {
+    panel.classList.remove('hidden');
+    boton.setAttribute('aria-expanded', 'true');
+    cargar(true);
+  }
+
+  function cerrarModal() {
+    modal.classList.add('hidden');
+    notificacionActiva = null;
+  }
+
+  function datosCompletosHtml(item) {
+    const d = item && item.datos ? item.datos : {};
+    const filas = [
+      ['Cédula del estudiante', d.cedulaEstudiante],
+      ['Fecha de nacimiento', d.fechaNacimiento],
+      ['Dirección', d.direccion],
+      ['Tipo de sangre', d.tipoSangre],
+      ['Alergias', d.alergias],
+      ['Condición médica', d.condicionMedica],
+      ['Contacto de emergencia', d.contactoEmergencia],
+      ['Estatura', d.estatura],
+      ['Peso', d.peso],
+      ['Talla de camisa', d.tallaCamisa],
+      ['Talla de pantalón', d.tallaPantalon],
+      ['Talla de calzado', d.tallaZapatos],
+      ['Representante', d.nombreRepresentante],
+      ['Cédula del representante', d.cedulaRepresentante],
+      ['Parentesco', d.parentesco],
+      ['WhatsApp / teléfono', d.telefonoRepresentante],
+      ['Correo', d.emailRepresentante]
+    ].filter(([, valor]) => String(valor ?? '').trim());
+
+    if (!filas.length) return '';
+
+    return `
+      <details class="registro-notificacion-datos-completos">
+        <summary>Ver datos recibidos del representante</summary>
+        <div class="registro-notificacion-datos-grid">
+          ${filas.map(([etiqueta, valor]) => `
+            <div><span>${escapar(etiqueta)}</span><strong>${escapar(valor)}</strong></div>
+          `).join('')}
+        </div>
+      </details>`;
+  }
+
+  function abrirDetalle(item) {
+    notificacionActiva = item;
+    const cambios = Array.isArray(item.cambios) ? item.cambios : [];
+    const pendiente = String(item.estado || '').toLowerCase() === 'pendiente';
+
+    modalTitulo.textContent = item.alumno || 'Registro de representante';
+
+    let cambiosHtml = '';
+    if (pendiente) {
+      cambiosHtml = `
+        <div class="registro-notificacion-alerta registro-notificacion-alerta--warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <div><strong>Registro pendiente de vincular</strong><span>${escapar(item.resumen || 'No se encontró una coincidencia segura con la nómina del docente.')}</span></div>
+        </div>`;
+    } else if (!cambios.length) {
+      cambiosHtml = `
+        <div class="registro-notificacion-alerta registro-notificacion-alerta--info">
+          <i class="fa-solid fa-circle-check"></i>
+          <div><strong>Ficha ya actualizada</strong><span>El representante completó el registro, pero los datos recibidos ya coincidían con EduGestión.</span></div>
+        </div>`;
+    } else {
+      cambiosHtml = `
+        <div class="registro-notificacion-cambios">
+          <div class="registro-notificacion-cambios__head"><span>Dato</span><span>Antes</span><span>Ahora</span></div>
+          ${cambios.map(c => `
+            <div class="registro-notificacion-cambios__row">
+              <strong>${escapar(c.etiqueta || c.campo)}</strong>
+              <span>${escapar(c.antes || 'Vacío')}</span>
+              <span>${escapar(c.ahora || 'Vacío')}</span>
+            </div>`).join('')}
+        </div>`;
+    }
+
+    modalBody.innerHTML = `
+      <div class="registro-notificacion-resumen">
+        <div><span>Estudiante</span><strong>${escapar(item.alumno || '—')}</strong></div>
+        <div><span>Cédula</span><strong>${escapar(item.cedula || item.datos?.cedulaEstudiante || '—')}</strong></div>
+        <div><span>Sección</span><strong>${escapar(item.ano || '')} ${escapar(item.seccion || '')} · ${escapar(item.turno || '')}</strong></div>
+        <div><span>Recibido</span><strong>${escapar(formatearFecha(item.creadoEn) || '—')}</strong></div>
+      </div>
+      <h3 class="registro-notificacion-subtitulo">Datos actualizados en EduGestión</h3>
+      ${cambiosHtml}
+      ${datosCompletosHtml(item)}`;
+
+    modal.classList.remove('hidden');
+
+    if (String(item.leido || '').toLowerCase() !== 'si') marcarLeida(item.id);
+  }
+
+  async function marcarLeida(id) {
+    if (!apiDisponible() || !id) return;
+    try {
+      await window.EDUGESTION_API_REQUEST('marcarNotificacionRegistroLeida', { idNotificacion: id });
+      const item = notificaciones.find(n => String(n.id) === String(id));
+      if (item) item.leido = 'Si';
+      renderizar();
+    } catch (error) {
+      console.error('No se pudo marcar la notificación:', error);
+    }
+  }
+
+  boton.addEventListener('click', event => {
+    event.stopPropagation();
+    panel.classList.contains('hidden') ? abrirPanel() : cerrarPanel();
+  });
+
+  panel.addEventListener('click', event => {
+    event.stopPropagation();
+    const itemBtn = event.target.closest('[data-notificacion-id]');
+    if (!itemBtn) return;
+    const item = notificaciones.find(n => String(n.id) === String(itemBtn.dataset.notificacionId));
+    if (item) {
+      cerrarPanel();
+      abrirDetalle(item);
+    }
+  });
+
+  marcarTodas?.addEventListener('click', async event => {
+    event.stopPropagation();
+    if (!apiDisponible()) return;
+    try {
+      await window.EDUGESTION_API_REQUEST('marcarTodasNotificacionesRegistroLeidas', {});
+      notificaciones.forEach(n => { n.leido = 'Si'; });
+      renderizar();
+    } catch (error) {
+      console.error('No se pudieron marcar las notificaciones:', error);
+    }
+  });
+
+  document.addEventListener('click', event => {
+    if (!panel.classList.contains('hidden') && !panel.contains(event.target) && event.target !== boton) cerrarPanel();
+  });
+
+  modalCerrar?.addEventListener('click', cerrarModal);
+  modalOk?.addEventListener('click', cerrarModal);
+  modal.querySelector('[data-registro-notificacion-cerrar="true"]')?.addEventListener('click', cerrarModal);
+
+  modalVerFicha?.addEventListener('click', () => {
+    document.getElementById('tab-registro')?.click();
+    cerrarModal();
+  });
+
+  window.addEventListener('edugestion:session', event => {
+    if (event.detail?.profesor) {
+      setTimeout(() => cargar(true), 700);
+      if (!temporizador) temporizador = setInterval(() => cargar(true), 60000);
+    } else if (temporizador) {
+      clearInterval(temporizador);
+      temporizador = null;
+      notificaciones = [];
+      renderizar();
+      cerrarPanel();
+      cerrarModal();
+    }
+  });
+
+  window.addEventListener('edugestion:data-loaded', () => {
+    setTimeout(() => cargar(true), 500);
+  });
+})();

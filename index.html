@@ -17,7 +17,7 @@
   <link href="https://fonts.googleapis.com" rel="preconnect">
   <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="style.css?v=20260924-55" rel="stylesheet">
+  <link href="style.css?v=20261013-v812" rel="stylesheet">
  </head>
  <body class="min-h-screen">
   <!-- PANTALLA 1: LOGIN -->
@@ -327,6 +327,21 @@
        <span id="current-date">
         Hoy
        </span>
+      </div>
+      <div class="registro-notificaciones" id="registro-notificaciones">
+       <button aria-label="Notificaciones de registros de representantes" class="registro-notificaciones__button" id="registro-notificaciones-button" title="Registros de representantes" type="button">
+        <i class="fa-solid fa-bell"></i>
+        <span class="registro-notificaciones__badge hidden" id="registro-notificaciones-badge">0</span>
+       </button>
+       <div class="hidden registro-notificaciones__panel" id="registro-notificaciones-panel">
+        <div class="registro-notificaciones__header">
+         <div><strong>Registros de representantes</strong><small>Actualizaciones de fichas estudiantiles</small></div>
+         <button id="registro-notificaciones-marcar-todas" type="button">Marcar todas como leídas</button>
+        </div>
+        <div class="registro-notificaciones__lista" id="registro-notificaciones-lista">
+         <div class="registro-notificaciones__vacio">No hay notificaciones nuevas.</div>
+        </div>
+       </div>
       </div>
       <div class="teacher-chip">
        <span class="teacher-avatar">
@@ -2252,7 +2267,7 @@
   </div>
   <script src="config.js">
   </script>
-  <script src="app.js?v=20260924-55">
+  <script src="app.js?v=20261013-v812">
   </script>
  
   <div aria-hidden="true" class="user-guide-modal hidden" id="user-guide-modal">
@@ -2329,7 +2344,26 @@
    </section>
   </div>
 
-</body>
+
+   <div class="hidden registro-notificacion-modal" id="registro-notificacion-modal" role="dialog" aria-modal="true" aria-labelledby="registro-notificacion-modal-title">
+    <div class="registro-notificacion-modal__backdrop" data-registro-notificacion-cerrar="true"></div>
+    <section class="registro-notificacion-modal__card">
+     <div class="registro-notificacion-modal__header">
+      <div>
+       <span class="registro-notificacion-modal__eyebrow"><i class="fa-solid fa-people-roof"></i> Registro de representante</span>
+       <h2 id="registro-notificacion-modal-title">Datos actualizados</h2>
+      </div>
+      <button aria-label="Cerrar" id="registro-notificacion-modal-cerrar" type="button"><i class="fa-solid fa-xmark"></i></button>
+     </div>
+     <div class="registro-notificacion-modal__body" id="registro-notificacion-modal-body"></div>
+     <div class="registro-notificacion-modal__footer">
+      <button class="registro-notificacion-modal__secondary" id="registro-notificacion-ver-ficha" type="button"><i class="fa-solid fa-user-graduate"></i> Ir a Estudiantes</button>
+      <button class="registro-notificacion-modal__primary" id="registro-notificacion-modal-ok" type="button">Entendido</button>
+     </div>
+    </section>
+   </div>
+
+ </body>
 </html>
 
 <!-- EduGestion build V8.9.1 - Planificacion organizada para despliegue Vercel -->
