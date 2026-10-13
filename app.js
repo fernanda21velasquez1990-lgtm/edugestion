@@ -2034,15 +2034,27 @@ const SESSION_KEY = 'edugestion_session_v2';
     }
 
     window.mostrarFormularioPlan = function(fechaSugerida = '') {
+      const contextoSeccion = seccionPlanViendo ? { ...seccionPlanViendo } : null;
       planEditandoId = '';
       formPlanificacion?.reset();
       panelListaPlan.classList.add('hidden');
       accionesPlan.classList.add('hidden');
       panelFormPlan.classList.remove('hidden');
       planningLayoutV89?.classList.remove('is-plan-detail');
+      if (contextoSeccion) {
+        const anoEl = document.getElementById('plan-ano');
+        const seccionEl = document.getElementById('plan-seccion');
+        if (anoEl) anoEl.value = String(contextoSeccion.ano || '');
+        if (seccionEl) seccionEl.value = String(contextoSeccion.seccion || '').toUpperCase();
+      }
       seccionPlanViendo = null;
+      const tipoOtroWrap = document.getElementById('plan-tipo-otro-wrap');
+      const tipoOtroInput = document.getElementById('plan-tipo-otro');
+      tipoOtroWrap?.classList.add('hidden');
+      if (tipoOtroInput) tipoOtroInput.value = '';
       actualizarBotonGuardarPlanV893(false);
       if (fechaSugerida) document.getElementById('plan-fecha').value = fechaSugerida;
+      renderCintilloSeccionesV894(contextoSeccion);
       setTimeout(() => document.getElementById('plan-actividad')?.focus(), 40);
     };
 
@@ -2057,8 +2069,12 @@ const SESSION_KEY = 'edugestion_session_v2';
       const tipo = tipoEvaluacionPlanV88(plan);
       const selectTipo = document.getElementById('plan-tipo-evaluacion');
       if (selectTipo) {
-        const existe = [...selectTipo.options].some(o => o.value === tipo);
+        const existe = [...selectTipo.options].some(o => o.value === tipo && o.value !== 'Otro');
         selectTipo.value = existe ? tipo : 'Otro';
+        const wrapOtro = document.getElementById('plan-tipo-otro-wrap');
+        const inputOtro = document.getElementById('plan-tipo-otro');
+        wrapOtro?.classList.toggle('hidden', existe);
+        if (inputOtro) inputOtro.value = existe ? '' : (tipo === 'Otro' ? '' : tipo);
       }
       document.getElementById('plan-puntos').value = Number(plan.puntos || 0);
       document.getElementById('plan-fecha').value = String(plan.fecha || '');
@@ -2135,6 +2151,33 @@ const SESSION_KEY = 'edugestion_session_v2';
       });
     }
 
+    function renderCintilloSeccionesV894(activa = seccionPlanViendo) {
+      const host = document.getElementById('planning-section-strip-list-v894');
+      if (!host) return;
+      const secciones = seccionesPlanificacionV88();
+      if (!secciones.length) {
+        host.innerHTML = '<span class="planning-section-strip-v894__empty">Aún no hay secciones registradas.</span>';
+        return;
+      }
+      const activaAno = String(activa?.ano || document.getElementById('plan-ano')?.value || '');
+      const activaSec = String(activa?.seccion || document.getElementById('plan-seccion')?.value || '').toUpperCase();
+      host.innerHTML = secciones.map(sec => {
+        const r = resumenSeccionPlanV88(sec.ano, sec.seccion);
+        const selected = String(sec.ano) === activaAno && String(sec.seccion).toUpperCase() === activaSec;
+        return `<button type="button" class="planning-section-chip-v894${selected ? ' is-active' : ''}" data-plan-strip-key="${escaparHTML(sec.key)}"><span>${escaparHTML(String(sec.ano).replace('ero','ro'))} ${escaparHTML(sec.seccion)}</span><small>${r.evaluaciones.length} eval. · ${r.total}/20</small></button>`;
+      }).join('');
+      host.querySelectorAll('[data-plan-strip-key]').forEach(btn => btn.addEventListener('click', () => {
+        const sec = secciones.find(item => item.key === btn.dataset.planStripKey);
+        if (!sec) return;
+        cambiarVistaPlanificacionV89('plan');
+        mostrarListaPlan(sec.ano, sec.seccion);
+        document.getElementById('plan-ano').value = sec.ano;
+        document.getElementById('plan-seccion').value = sec.seccion;
+        renderCintilloSeccionesV894(sec);
+        panelListaPlan?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }));
+    }
+
     function resumenSeccionPlanV88(ano,seccion) {
       const evaluaciones=(Array.isArray(planesProfesor)?planesProfesor:[])
         .filter(p=>String(p.ano)===String(ano)&&String(p.seccion).toUpperCase()===String(seccion).toUpperCase())
@@ -2197,6 +2240,11 @@ const SESSION_KEY = 'edugestion_session_v2';
       accionesPlan.classList.remove('hidden');
       planningLayoutV89?.classList.add('is-plan-detail');
       seccionPlanViendo = { ano, seccion };
+      const anoPlanEl = document.getElementById('plan-ano');
+      const seccionPlanEl = document.getElementById('plan-seccion');
+      if (anoPlanEl) anoPlanEl.value = String(ano || '');
+      if (seccionPlanEl) seccionPlanEl.value = String(seccion || '').toUpperCase();
+      renderCintilloSeccionesV894(seccionPlanViendo);
       tituloPlan.textContent = 'Plan de Evaluación por Sección';
       subtituloPlan.textContent = `${ano} - Sección “${seccion}” · meta 20 puntos`;
       tablaBodyPlan.innerHTML = '';
@@ -2440,6 +2488,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     function actualizarUIPlanificacion() {
       if (!calendarioDiaSeleccionado) calendarioDiaSeleccionado = fechaISODesdeLocal(new Date());
       renderMenuPlanificacion();
+      renderCintilloSeccionesV894(seccionPlanViendo);
       renderControlSeccionesPlanificacionV88();
       renderCalendario();
       renderResumenDiaCompacto(calendarioDiaSeleccionado);
@@ -2581,15 +2630,30 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     cargarAcumuladoPonderacion();
 
+    const tipoEvaluacionSelectV894 = document.getElementById('plan-tipo-evaluacion');
+    const tipoOtroWrapV894 = document.getElementById('plan-tipo-otro-wrap');
+    const tipoOtroInputV894 = document.getElementById('plan-tipo-otro');
+    tipoEvaluacionSelectV894?.addEventListener('change', () => {
+      const esOtro = tipoEvaluacionSelectV894.value === 'Otro';
+      tipoOtroWrapV894?.classList.toggle('hidden', !esOtro);
+      if (!esOtro && tipoOtroInputV894) tipoOtroInputV894.value = '';
+      if (esOtro) setTimeout(() => tipoOtroInputV894?.focus(), 20);
+    });
+
     formPlanificacion.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btnPlan = document.getElementById('btn-guardar-plan');
       const idEdicion = String(planEditandoId || '');
+      const tipoSelectPlan = document.getElementById('plan-tipo-evaluacion');
+      const tipoOtroPlan = document.getElementById('plan-tipo-otro');
+      const tipoSeleccionadoPlan = String(tipoSelectPlan?.value || 'Actividad evaluativa');
+      const tipoFinalPlan = tipoSeleccionadoPlan === 'Otro' ? String(tipoOtroPlan?.value || '').trim() : tipoSeleccionadoPlan;
+      if (tipoSeleccionadoPlan === 'Otro' && !tipoFinalPlan) return mostrarToast('Escribe el tipo de evaluación que deseas agregar.', 'warning', 'Falta el tipo de evaluación');
       const objPlan = {
         ano: document.getElementById('plan-ano').value,
         seccion: document.getElementById('plan-seccion').value,
         actividad: document.getElementById('plan-actividad').value.trim(),
-        tipoEvaluacion: document.getElementById('plan-tipo-evaluacion')?.value || 'Actividad evaluativa',
+        tipoEvaluacion: tipoFinalPlan || 'Actividad evaluativa',
         puntos: document.getElementById('plan-puntos').value,
         fecha: document.getElementById('plan-fecha').value
       };
