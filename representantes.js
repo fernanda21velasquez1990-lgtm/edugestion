@@ -432,12 +432,20 @@
     const host=$('rep-weekly-activities');
     if(host&&!silencioso)host.innerHTML='<div class="rep-empty">Cargando actividades semanales…</div>';
     try{
-      const r=await api('obtenerActividadesSemanalesRepresentante',{cedula:currentCedula,codigo:currentCodigo});
-      weeklyActivities=Array.isArray(r?.actividades)?r.actividades:[];
+      // V8.10.1: las actividades semanales viajan dentro de la consulta principal
+      // del portal. Evita una segunda petición a Apps Script (causa frecuente de
+      // "Failed to fetch" en algunos navegadores/despliegues).
+      if(Array.isArray(data?.actividadesSemanales)){
+        weeklyActivities=data.actividadesSemanales;
+      }else{
+        const nuevo=await api('consultaRepresentantePublica',{cedula:currentCedula,codigo:currentCodigo});
+        data=nuevo;
+        weeklyActivities=Array.isArray(nuevo?.actividadesSemanales)?nuevo.actividadesSemanales:[];
+      }
       construirFiltrosSemanalesV810();
       renderActividadesSemanalesV810();
     }catch(e){
-      if(host)host.innerHTML=`<div class="rep-empty">${esc(e?.message||'No fue posible cargar las actividades de la semana.')}</div>`;
+      if(host)host.innerHTML=`<div class="rep-empty"><strong>No se pudieron actualizar las actividades.</strong><br>${esc(e?.message||'Revise la conexión e inténtelo nuevamente.')}</div>`;
     }
   }
 
@@ -572,7 +580,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     $('rep-week-filter')?.addEventListener('change',renderActividadesSemanalesV810);
     $('rep-week-area')?.addEventListener('change',renderActividadesSemanalesV810);
-    $('rep-week-refresh')?.addEventListener('click',()=>cargarActividadesSemanalesV810());
+    $('rep-week-refresh')?.addEventListener('click',async()=>{ if(data) delete data.actividadesSemanales; await cargarActividadesSemanalesV810(); });
     document.querySelector('[data-view="semanales"]')?.addEventListener('click',()=>cargarActividadesSemanalesV810(true));
   });
 })();

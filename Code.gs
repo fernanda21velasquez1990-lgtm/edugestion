@@ -6862,6 +6862,47 @@ function consultaRepresentantePublica_(payload) {
     docentesReunionMap[idp] = { idProfesor:idp, docente:String(d.nombre || 'Docente'), materia:String(d.materia || 'Materia') };
   });
 
+  // V8.10.1 · Las actividades semanales se incluyen en la misma respuesta
+  // pública del portal. De esta forma el representante no depende de una
+  // segunda llamada fetch para ver las imágenes de la semana.
+  var actividadesSemanalesPublicas = [];
+  try {
+    var hojaSemanal = getDb_().getSheetByName('ActividadesSemanales');
+    if (hojaSemanal) {
+      actividadesSemanalesPublicas = leerObjetos_('ActividadesSemanales').objetos
+        .filter(function(r) {
+          if (String(r.activo || 'SI').toUpperCase() === 'NO') return false;
+          var key = [
+            String(r.ano || ''),
+            String(r.seccion || '').toUpperCase(),
+            normalizarTurno_(r.turno || '')
+          ].join('|');
+          return !!cursosMap[key];
+        })
+        .map(function(r) {
+          return {
+            id:String(r.id || ''),
+            semana:Number(r.semana || 0),
+            area:String(r.area || r.materia || ''),
+            titulo:String(r.titulo || ''),
+            descripcion:String(r.descripcion || ''),
+            fechaInicio:String(serializarValor_(r.fechaInicio, 'fecha') || r.fechaInicio || ''),
+            fechaFin:String(serializarValor_(r.fechaFin, 'fecha') || r.fechaFin || ''),
+            ano:String(r.ano || ''),
+            seccion:String(r.seccion || ''),
+            imagenUrl:String(r.imagenUrl || ''),
+            descargaUrl:String(r.descargaUrl || r.imagenUrl || ''),
+            docente:String(r.docente || '')
+          };
+        });
+      actividadesSemanalesPublicas.sort(function(a,b) {
+        return Number(a.semana || 0) - Number(b.semana || 0) || String(a.area || '').localeCompare(String(b.area || ''), 'es');
+      });
+    }
+  } catch (e) {
+    actividadesSemanalesPublicas = [];
+  }
+
   return {
     status: 'success',
     alumno: {
@@ -13843,6 +13884,7 @@ function consultaRepresentantePublica_(payload) {
     compromisos: compromisosPublicos,
     docentesReunion: Object.keys(docentesReunionMap).map(function(k){ return docentesReunionMap[k]; }),
     solicitudesReunion: solicitudesReunion,
+    actividadesSemanales: actividadesSemanalesPublicas,
     visibilidad: {
       notas: algunoPermite_('mostrarNotas'),
       asistencia: algunoPermite_('mostrarAsistencia'),
