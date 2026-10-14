@@ -20117,22 +20117,139 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     return {ano:parts[0]||'',seccion:parts[1]||'',turno:parts[2]||'',lapso:$('eval-v66-lapso')?.value||'1er Lapso'};
   }
 
+  function normalizarAnoEvalV8122(valor){
+    const t=norm(valor);
+    const m=t.match(/[1-5]/);
+    return m?m[0]:t;
+  }
+
+  function rangoLapsoLocalV8122(lapso){
+    const t=norm(lapso);
+    if(t.startsWith('2')||t.includes('seg'))return {desde:'2027-01-11',hasta:'2027-04-30'};
+    if(t.startsWith('3')||t.includes('ter'))return {desde:'2027-05-03',hasta:'2027-07-16'};
+    return {desde:'2026-09-21',hasta:'2026-12-15'};
+  }
+
+  function planesLocalesEvalV8122(c){
+    const rango=rangoLapsoLocalV8122(c.lapso);
+    return (Array.isArray(planesProfesor)?planesProfesor:[]).filter(p=>{
+      const fecha=String(p.fecha||'').slice(0,10);
+      return normalizarAnoEvalV8122(p.ano)===normalizarAnoEvalV8122(c.ano) &&
+        String(p.seccion||'').trim().toUpperCase()===String(c.seccion||'').trim().toUpperCase() &&
+        (!fecha||(fecha>=rango.desde&&fecha<=rango.hasta));
+    }).map(p=>({
+      id:String(p.id||''),
+      nombre:String(p.actividad||p.nombre||'Actividad evaluativa'),
+      tipoEvaluacion:String(p.tipoEvaluacion||'Actividad evaluativa'),
+      puntos:Number(p.puntos||p.ponderacion||0),
+      fecha:String(p.fecha||'').slice(0,10),
+      ano:String(p.ano||c.ano||''),
+      seccion:String(p.seccion||c.seccion||'').toUpperCase()
+    }));
+  }
+
+  function aplicarPlanesLocalesEvalV8122(c){
+    if(!data)data={};
+    const locales=planesLocalesEvalV8122(c);
+    if((data.actividades||[]).length||!locales.length)return false;
+    data.actividades=locales;
+    data.registros=data.registros||{};
+    data.asistenciaPorActividad=data.asistenciaPorActividad||{};
+    const puntos=locales.reduce((s,a)=>s+Number(a.puntos||0),0);
+    data.resumen=data.resumen||{};
+    data.resumen.totalActividades=locales.length;
+    data.resumen.puntosPlanificados=Math.round(puntos*100)/100;
+    data.resumen.totalEstudiantes=(data.alumnos||[]).length;
+    data.resumen.alertas=Number(data.resumen.alertas||0);
+    data.resumen.estudiantes=Array.isArray(data.resumen.estudiantes)?data.resumen.estudiantes:[];
+    return true;
+  }
+
   async function cargar(){
     const c=contexto();
     if(!c.ano||!c.seccion)return;
-    const host=$('eval-v66-content');if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando expediente académico…</div>';
+    const host=$('eval-v66-content');
+    if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i><strong>Cargando estudiantes y evaluaciones…</strong><span>Estamos enlazando la planificación de esta sección.</span></div>';
+    if($('eval-v71-section-status'))$('eval-v71-section-status').textContent='Cargando…';
+    if($('eval-v71-plan-status'))$('eval-v71-plan-status').textContent='Cargando…';
+
     try{
-      data=await api('obtenerGestionEvaluaciones',c);
-      complemento68=await api('obtenerComplementoEvaluacionesV68',c);
-      try{
-        const cr=await api('obtenerCompromisosAcademicos',c);
-        compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
-      }catch(_){compromisos69=[];}
-      actividadActual=(data.actividades||[]).some(a=>a.id===actividadActual)?actividadActual:(data.actividades?.[0]?.id||'');
+      const resultados=await Promise.allSettled([
+        api('obtenerGestionEvaluaciones',c),
+        api('obtenerComplementoEvaluacionesV68',c),
+        api('obtenerCompromisosAcademicos',c)
+      ]);
+
+      if(resultados[0].status==='rejected') throw resultados[0].reason;
+
+      data=resultados[0].value||{};
+      complemento68=resultados[1].status==='fulfilled'?(resultados[1].value||{}):{};
+      const cr=resultados[2].status==='fulfilled'?resultados[2].value:null;
+      compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
+
+      if(!(data.alumnos||[]).length){
+        try{
+          const ra=await api('obtenerAlumnos',{ano:c.ano,seccion:c.seccion,turno:c.turno});
+          data.alumnos=Array.isArray(ra?.alumnos)?ra.alumnos.map((a,i)=>({
+            id:String(a.id||''),
+            numeroLista:i+1,
+            nombre:String(a.nombre||''),
+            cedula:String(a.cedula||''),
+            representante:String(a.representante||''),
+            telefonoRepresentante:String(a.telefonoRepresentante||'')
+          })):[];
+          data.resumen=data.resumen||{};
+          data.resumen.totalEstudiantes=data.alumnos.length;
+        }catch(_){}
+      }
+
+      const recuperado=aplicarPlanesLocalesEvalV8122(c);
+
+      actividadActual=(data.actividades||[]).some(a=>a.id===actividadActual)
+        ?actividadActual
+        :(data.actividades?.[0]?.id||'');
+
       renderTodo();
+
+      if(recuperado && typeof window.mostrarToast==='function'){
+        window.mostrarToast('La planificación de la sección fue recuperada y enlazada con Evaluaciones y Notas.','success','Evaluaciones cargadas');
+      }
+
+      if(!(data.actividades||[]).length && typeof window.mostrarToast==='function'){
+        window.mostrarToast('No se encontraron actividades del lapso para esta sección. Revisa año, sección y fechas en Planificación.','warning','Sin actividades');
+      }
     }catch(e){
-      console.error(e);
-      if(host)host.innerHTML=`<div class="eval-v66-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar Evaluaciones y Notas.</strong><span>${esc(e?.message||'Actualiza el Code.gs de la V6.6 y vuelve a intentarlo.')}</span></div>`;
+      console.error('Evaluaciones y Notas:',e);
+
+      try{
+        const ra=await api('obtenerAlumnos',{ano:c.ano,seccion:c.seccion,turno:c.turno});
+        data={
+          status:'success',
+          ano:c.ano,seccion:c.seccion,turno:c.turno,lapso:c.lapso,
+          alumnos:Array.isArray(ra?.alumnos)?ra.alumnos.map((a,i)=>({
+            id:String(a.id||''),numeroLista:i+1,nombre:String(a.nombre||''),
+            cedula:String(a.cedula||''),representante:String(a.representante||''),
+            telefonoRepresentante:String(a.telefonoRepresentante||'')
+          })):[],
+          actividades:[],registros:{},asistenciaPorActividad:{},
+          resumen:{totalActividades:0,totalEstudiantes:0,puntosPlanificados:0,alertas:0,estudiantes:[]},
+          alertas:[]
+        };
+        aplicarPlanesLocalesEvalV8122(c);
+        complemento68={};
+        compromisos69=[];
+        actividadActual=data.actividades?.[0]?.id||'';
+        renderTodo();
+        if(typeof window.mostrarToast==='function'){
+          window.mostrarToast('Se cargó la sección con un modo de recuperación. Ya puedes visualizar alumnos y actividades.','warning','Carga recuperada');
+        }
+      }catch(e2){
+        console.error('Recuperación Evaluaciones y Notas:',e2);
+        if($('eval-v71-section-status'))$('eval-v71-section-status').textContent='Error';
+        if($('eval-v71-plan-status'))$('eval-v71-plan-status').textContent='Error';
+        if(host)host.innerHTML=`<div class="eval-v66-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar Evaluaciones y Notas.</strong><span>${esc(e?.message||e2?.message||'Error de conexión con el servidor.')}</span><button type="button" id="eval-v8122-retry">Reintentar carga</button></div>`;
+        $('eval-v8122-retry')?.addEventListener('click',cargar);
+      }
     }
   }
 
@@ -21763,7 +21880,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if($('modal-actividad-semanal-v810'))return;
     document.body.insertAdjacentHTML('beforeend',`<div id="modal-actividad-semanal-v810" class="weekly-modal-v810 hidden">
       <div class="weekly-modal-card-v810">
-        <header><div><span>Portal de representantes</span><h3>Publicar actividad de la semana</h3><p>Sube una imagen o un archivo de Word para que los representantes puedan consultarlo y descargarlo.</p></div><button type="button" id="weekly-close-v810">×</button></header>
+        <header><div><span>Portal de representantes</span><h3>Publicar actividad de la semana</h3><p>Sube la imagen que podrán ver, guardar, descargar e imprimir los representantes de la sección.</p></div><button type="button" id="weekly-close-v810">×</button></header>
         <form id="weekly-form-v810">
           <div class="weekly-grid-v810">
             <label><span>Año</span><select id="weekly-ano-v810"><option value="1ero">1er Año</option><option value="2do">2do Año</option><option value="3ero">3er Año</option><option value="4to">4to Año</option><option value="5to">5to Año</option></select></label>
@@ -21774,7 +21891,7 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
           <label class="weekly-full-v810"><span>Título de la actividad</span><input id="weekly-titulo-v810" maxlength="160" placeholder="Ej.: Entrenamiento funcional en casa" required></label>
           <div class="weekly-grid-v810"><label><span>Fecha inicial</span><input id="weekly-desde-v810" type="date"></label><label><span>Fecha final / entrega</span><input id="weekly-hasta-v810" type="date"></label></div>
           <label class="weekly-full-v810"><span>Descripción opcional</span><textarea id="weekly-desc-v810" rows="3" maxlength="1500" placeholder="Indicaciones breves para el representante."></textarea></label>
-          <label class="weekly-upload-v810"><span>Archivo de la actividad</span><input id="weekly-image-v810" type="file" accept="image/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required><small>Admite JPG, PNG, WEBP y Word (.DOC, .DOCX). Máximo 8 MB.</small><div id="weekly-preview-v810"></div></label>
+          <label class="weekly-upload-v810"><span>Imagen de la actividad</span><input id="weekly-image-v810" type="file" accept="image/*" required><small>JPG, PNG o WEBP. La imagen se optimiza automáticamente antes de subir.</small><div id="weekly-preview-v810"></div></label>
           <button class="weekly-submit-v810" id="weekly-submit-v810" type="submit"><i class="fa-solid fa-cloud-arrow-up"></i> Publicar para representantes</button>
         </form>
         <section class="weekly-published-v810"><div class="weekly-published-head-v810"><strong>Publicaciones recientes de esta sección</strong><button type="button" id="weekly-refresh-v810">Actualizar</button></div><div id="weekly-list-v810"><div class="weekly-empty-v810">Aún no se ha consultado.</div></div></section>
@@ -21785,58 +21902,9 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function contexto(){return {ano:$('plan-ano')?.value||'1ero',seccion:$('plan-seccion')?.value||'A',turno:window.profesorActual?.turno||'Manana'};}
   function abrir(){crearUI();const c=contexto();$('weekly-ano-v810').value=c.ano;$('weekly-seccion-v810').value=c.seccion;const materia=String(window.profesorActual?.materia||'');if(/orient/i.test(materia))$('weekly-area-v810').value='Orientación y Convivencia';else if(/recre/i.test(materia))$('weekly-area-v810').value='Recreación';else $('weekly-area-v810').value='Educación Física';$('modal-actividad-semanal-v810').classList.remove('hidden');cargarLista();}
   function cerrar(){$('modal-actividad-semanal-v810')?.classList.add('hidden');}
-  function procesarImagen(e){
-    archivoProcesado=null;
-    const f=e.target.files?.[0];
-    const prev=$('weekly-preview-v810');
-    if(!f){prev.innerHTML='';return;}
-    if(f.size>8*1024*1024){toast('El archivo supera el máximo de 8 MB.','error');e.target.value='';prev.innerHTML='';return;}
-    const nombre=String(f.name||'').toLowerCase();
-    const esImagen=String(f.type||'').startsWith('image/');
-    const esWord=/\.(doc|docx)$/i.test(nombre)||
-      f.type==='application/msword'||
-      f.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    if(!esImagen&&!esWord){
-      toast('Solo puedes subir imágenes o archivos de Word (.doc, .docx).','error');
-      e.target.value='';prev.innerHTML='';return;
-    }
-    const rd=new FileReader();
-    if(esImagen){
-      rd.onload=()=>{
-        const img=new Image();
-        img.onload=()=>{
-          const max=1800,scale=Math.min(1,max/Math.max(img.width,img.height)),
-            w=Math.round(img.width*scale),h=Math.round(img.height*scale),
-            cv=document.createElement('canvas');
-          cv.width=w;cv.height=h;
-          cv.getContext('2d').drawImage(img,0,0,w,h);
-          const data=cv.toDataURL('image/jpeg',.86);
-          archivoProcesado={
-            archivoBase64:data,
-            mimeType:'image/jpeg',
-            archivoNombre:(f.name.replace(/\.[^.]+$/,'')||'actividad')+'.jpg'
-          };
-          prev.innerHTML=`<img src="${data}" alt="Vista previa"><small>${w} × ${h}px · Imagen lista para publicar</small>`;
-        };
-        img.src=rd.result;
-      };
-      rd.readAsDataURL(f);
-      return;
-    }
-    rd.onload=()=>{
-      archivoProcesado={
-        archivoBase64:rd.result,
-        mimeType:f.type||(/\.docx$/i.test(f.name)
-          ?'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          :'application/msword'),
-        archivoNombre:f.name||'actividad.docx'
-      };
-      prev.innerHTML=`<div class="weekly-file-preview-v8121"><i class="fa-solid fa-file-word"></i><div><strong>${esc(f.name)}</strong><small>Archivo de Word · ${(f.size/1024/1024).toFixed(2)} MB</small></div></div>`;
-    };
-    rd.readAsDataURL(f);
-  }
-  async function guardar(e){e.preventDefault();if(!archivoProcesado){toast('Selecciona una imagen o un archivo de Word.','warning');return;}const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function'){toast('No está disponible la conexión con el servidor.','error');return;}const btn=$('weekly-submit-v810');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Publicando…';try{const payload={ano:$('weekly-ano-v810').value,seccion:$('weekly-seccion-v810').value,turno:window.profesorActual?.turno||'Manana',semana:Number($('weekly-semana-v810').value),area:$('weekly-area-v810').value,titulo:$('weekly-titulo-v810').value.trim(),descripcion:$('weekly-desc-v810').value.trim(),fechaInicio:$('weekly-desde-v810').value,fechaFin:$('weekly-hasta-v810').value,...archivoProcesado};await api('guardarActividadSemanal',payload);toast('La actividad ya está disponible en el Portal de Representantes.','success');$('weekly-titulo-v810').value='';$('weekly-desc-v810').value='';$('weekly-image-v810').value='';$('weekly-preview-v810').innerHTML='';archivoProcesado=null;await cargarLista();}catch(err){toast(err?.message||'No se pudo publicar la actividad.','error');}finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Publicar para representantes';}}
-  async function cargarLista(){const api=window.EDUGESTION_API_REQUEST,host=$('weekly-list-v810');if(typeof api!=='function'||!host)return;host.innerHTML='<div class="weekly-empty-v810">Cargando…</div>';try{const r=await api('obtenerActividadesSemanalesDocente',{ano:$('weekly-ano-v810').value,seccion:$('weekly-seccion-v810').value});const rows=Array.isArray(r?.actividades)?r.actividades:[];host.innerHTML=rows.length?rows.map(x=>{const esImg=String(x.mimeType||'').startsWith('image/')||!!x.imagenUrl;const archivo=esc(x.archivoNombre||'Archivo');return `<article>${esImg?`<img src="${esc(x.imagenUrl||'')}" alt="">`:`<div class="weekly-file-icon-v8121"><i class="fa-solid fa-file-word"></i></div>`}<div><strong>${esc(x.titulo||'Actividad')}</strong><span>Semana ${Number(x.semana||0)} · ${esc(x.area||'')}</span><small>${esImg?'Imagen':archivo}${x.fechaInicio?' · '+esc(x.fechaInicio):''}${x.fechaFin?' al '+esc(x.fechaFin):''}</small></div><button type="button" data-week-delete-v810="${esc(x.id)}" title="Retirar del portal"><i class="fa-solid fa-trash"></i></button></article>`}).join(''):'<div class="weekly-empty-v810">No hay publicaciones para esta sección.</div>';host.querySelectorAll('[data-week-delete-v810]').forEach(b=>b.onclick=()=>eliminar(b.dataset.weekDeleteV810));}catch(err){host.innerHTML=`<div class="weekly-empty-v810">${esc(err?.message||'No se pudo cargar.')}</div>`;}}
+  function procesarImagen(e){archivoProcesado=null;const f=e.target.files?.[0];const prev=$('weekly-preview-v810');if(!f){prev.innerHTML='';return;}if(!f.type.startsWith('image/')){toast('Selecciona un archivo de imagen.','error');e.target.value='';return;}const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{const max=1800,scale=Math.min(1,max/Math.max(img.width,img.height)),w=Math.round(img.width*scale),h=Math.round(img.height*scale),cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);const data=cv.toDataURL('image/jpeg',.86);archivoProcesado={archivoBase64:data,mimeType:'image/jpeg',archivoNombre:(f.name.replace(/\.[^.]+$/,'')||'actividad')+'.jpg'};prev.innerHTML=`<img src="${data}" alt="Vista previa"><small>${w} × ${h}px</small>`;};img.src=rd.result;};rd.readAsDataURL(f);}
+  async function guardar(e){e.preventDefault();if(!archivoProcesado){toast('Selecciona la imagen de la actividad.','warning');return;}const api=window.EDUGESTION_API_REQUEST;if(typeof api!=='function'){toast('No está disponible la conexión con el servidor.','error');return;}const btn=$('weekly-submit-v810');btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Publicando…';try{const payload={ano:$('weekly-ano-v810').value,seccion:$('weekly-seccion-v810').value,turno:window.profesorActual?.turno||'Manana',semana:Number($('weekly-semana-v810').value),area:$('weekly-area-v810').value,titulo:$('weekly-titulo-v810').value.trim(),descripcion:$('weekly-desc-v810').value.trim(),fechaInicio:$('weekly-desde-v810').value,fechaFin:$('weekly-hasta-v810').value,...archivoProcesado};await api('guardarActividadSemanal',payload);toast('La actividad ya está disponible en el Portal de Representantes.','success');$('weekly-titulo-v810').value='';$('weekly-desc-v810').value='';$('weekly-image-v810').value='';$('weekly-preview-v810').innerHTML='';archivoProcesado=null;await cargarLista();}catch(err){toast(err?.message||'No se pudo publicar la actividad.','error');}finally{btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Publicar para representantes';}}
+  async function cargarLista(){const api=window.EDUGESTION_API_REQUEST,host=$('weekly-list-v810');if(typeof api!=='function'||!host)return;host.innerHTML='<div class="weekly-empty-v810">Cargando…</div>';try{const r=await api('obtenerActividadesSemanalesDocente',{ano:$('weekly-ano-v810').value,seccion:$('weekly-seccion-v810').value});const rows=Array.isArray(r?.actividades)?r.actividades:[];host.innerHTML=rows.length?rows.map(x=>`<article><img src="${esc(x.imagenUrl||'')}" alt=""><div><strong>${esc(x.titulo||'Actividad')}</strong><span>Semana ${Number(x.semana||0)} · ${esc(x.area||'')}</span><small>${esc(x.fechaInicio||'')}${x.fechaFin?' al '+esc(x.fechaFin):''}</small></div><button type="button" data-week-delete-v810="${esc(x.id)}" title="Retirar del portal"><i class="fa-solid fa-trash"></i></button></article>`).join(''):'<div class="weekly-empty-v810">No hay publicaciones para esta sección.</div>';host.querySelectorAll('[data-week-delete-v810]').forEach(b=>b.onclick=()=>eliminar(b.dataset.weekDeleteV810));}catch(err){host.innerHTML=`<div class="weekly-empty-v810">${esc(err?.message||'No se pudo cargar.')}</div>`;}}
   async function eliminar(id){if(!confirm('¿Retirar esta actividad del Portal de Representantes?'))return;try{await window.EDUGESTION_API_REQUEST('eliminarActividadSemanal',{id});toast('Actividad retirada.','success');cargarLista();}catch(e){toast(e?.message||'No se pudo retirar.','error');}}
   function init(){crearUI();const obs=new MutationObserver(()=>crearUI());obs.observe(document.body,{childList:true,subtree:true});setTimeout(()=>obs.disconnect(),12000);}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
@@ -21844,275 +21912,4 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 
 // EduGestion build V8.10 - Actividades semanales para representantes
 
-
-// ============================================================================
-// V8.12 · CAMPANA DE NOTIFICACIONES DEL REGISTRO DE REPRESENTANTES
-// ============================================================================
-(function instalarNotificacionesRegistroRepresentantesV812() {
-  const boton = document.getElementById('registro-notificaciones-button');
-  const badge = document.getElementById('registro-notificaciones-badge');
-  const panel = document.getElementById('registro-notificaciones-panel');
-  const lista = document.getElementById('registro-notificaciones-lista');
-  const marcarTodas = document.getElementById('registro-notificaciones-marcar-todas');
-  const modal = document.getElementById('registro-notificacion-modal');
-  const modalBody = document.getElementById('registro-notificacion-modal-body');
-  const modalTitulo = document.getElementById('registro-notificacion-modal-title');
-  const modalCerrar = document.getElementById('registro-notificacion-modal-cerrar');
-  const modalOk = document.getElementById('registro-notificacion-modal-ok');
-  const modalVerFicha = document.getElementById('registro-notificacion-ver-ficha');
-
-  if (!boton || !badge || !panel || !lista || !modal) return;
-
-  let notificaciones = [];
-  let notificacionActiva = null;
-  let temporizador = null;
-
-  function escapar(valor) {
-    return String(valor ?? '').replace(/[&<>'"]/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    }[c]));
-  }
-
-  function formatearFecha(valor) {
-    if (!valor) return '';
-    const fecha = new Date(valor);
-    if (Number.isNaN(fecha.getTime())) return String(valor);
-    return fecha.toLocaleString('es-VE', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
-  }
-
-  function apiDisponible() {
-    return typeof window.EDUGESTION_API_REQUEST === 'function';
-  }
-
-  function iconoEstado(item) {
-    const estado = String(item.estado || '').toLowerCase();
-    if (estado === 'pendiente') {
-      return '<span class="registro-notificacion-item__icon registro-notificacion-item__icon--warning"><i class="fa-solid fa-triangle-exclamation"></i></span>';
-    }
-    if (estado === 'sin cambios') {
-      return '<span class="registro-notificacion-item__icon registro-notificacion-item__icon--info"><i class="fa-solid fa-circle-info"></i></span>';
-    }
-    return '<span class="registro-notificacion-item__icon registro-notificacion-item__icon--success"><i class="fa-solid fa-circle-check"></i></span>';
-  }
-
-  function renderizar() {
-    const noLeidas = notificaciones.filter(n => String(n.leido || '').toLowerCase() !== 'si').length;
-    badge.textContent = String(noLeidas);
-    badge.classList.toggle('hidden', noLeidas === 0);
-    boton.classList.toggle('has-unread', noLeidas > 0);
-
-    if (!notificaciones.length) {
-      lista.innerHTML = `
-        <div class="registro-notificaciones__vacio">
-          <i class="fa-regular fa-bell-slash"></i>
-          <strong>Sin novedades</strong>
-          <span>Aquí aparecerán los registros enviados por los representantes.</span>
-        </div>`;
-      return;
-    }
-
-    lista.innerHTML = notificaciones.map(item => {
-      const noLeida = String(item.leido || '').toLowerCase() !== 'si';
-      const cambios = Array.isArray(item.cambios) ? item.cambios.length : 0;
-      return `
-        <button class="registro-notificacion-item ${noLeida ? 'is-unread' : ''}" data-notificacion-id="${escapar(item.id)}" type="button">
-          ${iconoEstado(item)}
-          <span class="registro-notificacion-item__content">
-            <strong>${escapar(item.alumno || 'Estudiante')}</strong>
-            <small>${escapar(item.ano || '')} ${escapar(item.seccion || '')} · ${escapar(item.turno || '')}</small>
-            <span>${escapar(item.resumen || item.titulo || 'Registro recibido')}</span>
-            <em>${escapar(formatearFecha(item.creadoEn))}${cambios ? ` · ${cambios} cambio(s)` : ''}</em>
-          </span>
-          ${noLeida ? '<span class="registro-notificacion-item__dot" aria-label="No leída"></span>' : ''}
-        </button>`;
-    }).join('');
-  }
-
-  async function cargar(silencioso = true) {
-    if (!apiDisponible()) return;
-    const dashboard = document.getElementById('dashboard-screen');
-    if (!dashboard || dashboard.classList.contains('hidden')) return;
-
-    try {
-      const res = await window.EDUGESTION_API_REQUEST('obtenerNotificacionesRegistro', { limite: 50 });
-      notificaciones = Array.isArray(res.notificaciones) ? res.notificaciones : [];
-      renderizar();
-    } catch (error) {
-      if (!silencioso) console.error('Notificaciones de representantes:', error);
-    }
-  }
-
-  function cerrarPanel() {
-    panel.classList.add('hidden');
-    boton.setAttribute('aria-expanded', 'false');
-  }
-
-  function abrirPanel() {
-    panel.classList.remove('hidden');
-    boton.setAttribute('aria-expanded', 'true');
-    cargar(true);
-  }
-
-  function cerrarModal() {
-    modal.classList.add('hidden');
-    notificacionActiva = null;
-  }
-
-  function datosCompletosHtml(item) {
-    const d = item && item.datos ? item.datos : {};
-    const filas = [
-      ['Cédula del estudiante', d.cedulaEstudiante],
-      ['Fecha de nacimiento', d.fechaNacimiento],
-      ['Dirección', d.direccion],
-      ['Tipo de sangre', d.tipoSangre],
-      ['Alergias', d.alergias],
-      ['Condición médica', d.condicionMedica],
-      ['Contacto de emergencia', d.contactoEmergencia],
-      ['Estatura', d.estatura],
-      ['Peso', d.peso],
-      ['Talla de camisa', d.tallaCamisa],
-      ['Talla de pantalón', d.tallaPantalon],
-      ['Talla de calzado', d.tallaZapatos],
-      ['Representante', d.nombreRepresentante],
-      ['Cédula del representante', d.cedulaRepresentante],
-      ['Parentesco', d.parentesco],
-      ['WhatsApp / teléfono', d.telefonoRepresentante],
-      ['Correo', d.emailRepresentante]
-    ].filter(([, valor]) => String(valor ?? '').trim());
-
-    if (!filas.length) return '';
-
-    return `
-      <details class="registro-notificacion-datos-completos">
-        <summary>Ver datos recibidos del representante</summary>
-        <div class="registro-notificacion-datos-grid">
-          ${filas.map(([etiqueta, valor]) => `
-            <div><span>${escapar(etiqueta)}</span><strong>${escapar(valor)}</strong></div>
-          `).join('')}
-        </div>
-      </details>`;
-  }
-
-  function abrirDetalle(item) {
-    notificacionActiva = item;
-    const cambios = Array.isArray(item.cambios) ? item.cambios : [];
-    const pendiente = String(item.estado || '').toLowerCase() === 'pendiente';
-
-    modalTitulo.textContent = item.alumno || 'Registro de representante';
-
-    let cambiosHtml = '';
-    if (pendiente) {
-      cambiosHtml = `
-        <div class="registro-notificacion-alerta registro-notificacion-alerta--warning">
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          <div><strong>Registro pendiente de vincular</strong><span>${escapar(item.resumen || 'No se encontró una coincidencia segura con la nómina del docente.')}</span></div>
-        </div>`;
-    } else if (!cambios.length) {
-      cambiosHtml = `
-        <div class="registro-notificacion-alerta registro-notificacion-alerta--info">
-          <i class="fa-solid fa-circle-check"></i>
-          <div><strong>Ficha ya actualizada</strong><span>El representante completó el registro, pero los datos recibidos ya coincidían con EduGestión.</span></div>
-        </div>`;
-    } else {
-      cambiosHtml = `
-        <div class="registro-notificacion-cambios">
-          <div class="registro-notificacion-cambios__head"><span>Dato</span><span>Antes</span><span>Ahora</span></div>
-          ${cambios.map(c => `
-            <div class="registro-notificacion-cambios__row">
-              <strong>${escapar(c.etiqueta || c.campo)}</strong>
-              <span>${escapar(c.antes || 'Vacío')}</span>
-              <span>${escapar(c.ahora || 'Vacío')}</span>
-            </div>`).join('')}
-        </div>`;
-    }
-
-    modalBody.innerHTML = `
-      <div class="registro-notificacion-resumen">
-        <div><span>Estudiante</span><strong>${escapar(item.alumno || '—')}</strong></div>
-        <div><span>Cédula</span><strong>${escapar(item.cedula || item.datos?.cedulaEstudiante || '—')}</strong></div>
-        <div><span>Sección</span><strong>${escapar(item.ano || '')} ${escapar(item.seccion || '')} · ${escapar(item.turno || '')}</strong></div>
-        <div><span>Recibido</span><strong>${escapar(formatearFecha(item.creadoEn) || '—')}</strong></div>
-      </div>
-      <h3 class="registro-notificacion-subtitulo">Datos actualizados en EduGestión</h3>
-      ${cambiosHtml}
-      ${datosCompletosHtml(item)}`;
-
-    modal.classList.remove('hidden');
-
-    if (String(item.leido || '').toLowerCase() !== 'si') marcarLeida(item.id);
-  }
-
-  async function marcarLeida(id) {
-    if (!apiDisponible() || !id) return;
-    try {
-      await window.EDUGESTION_API_REQUEST('marcarNotificacionRegistroLeida', { idNotificacion: id });
-      const item = notificaciones.find(n => String(n.id) === String(id));
-      if (item) item.leido = 'Si';
-      renderizar();
-    } catch (error) {
-      console.error('No se pudo marcar la notificación:', error);
-    }
-  }
-
-  boton.addEventListener('click', event => {
-    event.stopPropagation();
-    panel.classList.contains('hidden') ? abrirPanel() : cerrarPanel();
-  });
-
-  panel.addEventListener('click', event => {
-    event.stopPropagation();
-    const itemBtn = event.target.closest('[data-notificacion-id]');
-    if (!itemBtn) return;
-    const item = notificaciones.find(n => String(n.id) === String(itemBtn.dataset.notificacionId));
-    if (item) {
-      cerrarPanel();
-      abrirDetalle(item);
-    }
-  });
-
-  marcarTodas?.addEventListener('click', async event => {
-    event.stopPropagation();
-    if (!apiDisponible()) return;
-    try {
-      await window.EDUGESTION_API_REQUEST('marcarTodasNotificacionesRegistroLeidas', {});
-      notificaciones.forEach(n => { n.leido = 'Si'; });
-      renderizar();
-    } catch (error) {
-      console.error('No se pudieron marcar las notificaciones:', error);
-    }
-  });
-
-  document.addEventListener('click', event => {
-    if (!panel.classList.contains('hidden') && !panel.contains(event.target) && event.target !== boton) cerrarPanel();
-  });
-
-  modalCerrar?.addEventListener('click', cerrarModal);
-  modalOk?.addEventListener('click', cerrarModal);
-  modal.querySelector('[data-registro-notificacion-cerrar="true"]')?.addEventListener('click', cerrarModal);
-
-  modalVerFicha?.addEventListener('click', () => {
-    document.getElementById('tab-registro')?.click();
-    cerrarModal();
-  });
-
-  window.addEventListener('edugestion:session', event => {
-    if (event.detail?.profesor) {
-      setTimeout(() => cargar(true), 700);
-      if (!temporizador) temporizador = setInterval(() => cargar(true), 60000);
-    } else if (temporizador) {
-      clearInterval(temporizador);
-      temporizador = null;
-      notificaciones = [];
-      renderizar();
-      cerrarPanel();
-      cerrarModal();
-    }
-  });
-
-  window.addEventListener('edugestion:data-loaded', () => {
-    setTimeout(() => cargar(true), 500);
-  });
-})();
+/* EDUGESTION_EVALUACIONES_FIX_V8122 */
