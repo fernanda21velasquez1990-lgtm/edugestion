@@ -19921,6 +19921,161 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   let cursos=[];
   let studentActual='';
 
+  // V8.12.3 · Autoguardado seguro de entregas y notas.
+  // Cada cambio se protege primero en este navegador y luego se sincroniza
+  // automáticamente con Google Sheets en un solo lote.
+  const EVAL_DRAFT_PREFIX_V8123='edugestion_eval_draft_v8123';
+  let evalAutosaveTimerV8123=null;
+  let evalAutosaveInFlightV8123=false;
+  const evalDirtyRowsV8123=new Map();
+
+  function evalDraftKeyV8123(actId){
+    const c=contexto();
+    const docente=String(window.profesorActual?.id||window.profesorActual?.usuario||'docente');
+    return [EVAL_DRAFT_PREFIX_V8123,docente,c.ano,c.seccion,c.turno,c.lapso,actId].map(x=>String(x||'').replace(/[|]/g,'_')).join('|');
+  }
+
+  function leerDraftsV8123(actId){
+    try{
+      const raw=localStorage.getItem(evalDraftKeyV8123(actId));
+      const obj=raw?JSON.parse(raw):{};
+      return obj&&typeof obj==='object'?obj:{};
+    }catch(_){return {};}
+  }
+
+  function guardarDraftFilaV8123(actId,idAlumno,registro){
+    try{
+      const all=leerDraftsV8123(actId);
+      all[String(idAlumno)]={
+        ...registro,
+        guardadoLocalEn:new Date().toISOString()
+      };
+      localStorage.setItem(evalDraftKeyV8123(actId),JSON.stringify(all));
+    }catch(_){}
+  }
+
+  function limpiarDraftFilaV8123(actId,idAlumno){
+    try{
+      const key=evalDraftKeyV8123(actId);
+      const all=leerDraftsV8123(actId);
+      delete all[String(idAlumno)];
+      if(Object.keys(all).length)localStorage.setItem(key,JSON.stringify(all));
+      else localStorage.removeItem(key);
+    }catch(_){}
+  }
+
+  function setEstadoGuardadoV8123(texto,tipo='ok'){
+    const el=$('eval-v8123-save-state');
+    if(!el)return;
+    el.className='eval-v8123-save-state '+('is-'+tipo);
+    el.innerHTML=(tipo==='saving'?'<i class="fa-solid fa-spinner fa-spin"></i> ':tipo==='pending'?'<i class="fa-solid fa-clock"></i> ':tipo==='error'?'<i class="fa-solid fa-triangle-exclamation"></i> ':'<i class="fa-solid fa-cloud-check"></i> ')+esc(texto);
+  }
+
+  function leerFilaEvaluacionV8123(row){
+    return {
+      idAlumno:String(row?.dataset?.v66Row||''),
+      estadoEntrega:row?.querySelector('[data-v66-status]')?.value||'Pendiente',
+      fechaEntrega:row?.querySelector('[data-v66-date]')?.value||'',
+      nota:row?.querySelector('[data-v66-grade]')?.value??'',
+      observacion:row?.querySelector('[data-v66-note]')?.value||''
+    };
+  }
+
+  function registroVisibleV8123(actId,idAlumno,servidor){
+    const draft=leerDraftsV8123(actId)[String(idAlumno)];
+    return draft?{...(servidor||{}),...draft}:(servidor||{});
+  }
+
+  function marcarFilaPendienteV8123(row){
+    const act=(data?.actividades||[]).find(a=>a.id===actividadActual);
+    if(!act||!row)return;
+    const reg=leerFilaEvaluacionV8123(row);
+    if(!reg.idAlumno)return;
+
+    const key=`${act.id}|${reg.idAlumno}`;
+    data.registros=data.registros||{};
+    data.registros[key]={...(data.registros[key]||{}),...reg,idActividad:act.id,idAlumno:reg.idAlumno};
+
+    guardarDraftFilaV8123(act.id,reg.idAlumno,reg);
+    evalDirtyRowsV8123.set(reg.idAlumno,reg);
+    row.classList.add('is-pending-save');
+    setEstadoGuardadoV8123(`${evalDirtyRowsV8123.size} cambio(s) pendiente(s)`,'pending');
+
+    clearTimeout(evalAutosaveTimerV8123);
+    evalAutosaveTimerV8123=setTimeout(guardarPendientesV8123,850);
+  }
+
+  async function guardarPendientesV8123(){
+    if(evalAutosaveInFlightV8123||!evalDirtyRowsV8123.size)return;
+    const act=(data?.actividades||[]).find(a=>a.id===actividadActual);
+    if(!act)return;
+
+    const c=contexto();
+    const enviados=[...evalDirtyRowsV8123.values()].map(x=>({...x}));
+    const snapshot=new Map(enviados.map(x=>[String(x.idAlumno),JSON.stringify(x)]));
+
+    evalAutosaveInFlightV8123=true;
+    setEstadoGuardadoV8123('Guardando automáticamente…','saving');
+
+    try{
+      await api('guardarRegistrosEvaluacion',{
+        ...c,
+        idActividad:act.id,
+        registros:enviados,
+        origen:'AutoGuardado V8.12.3'
+      });
+
+      enviados.forEach(reg=>{
+        const id=String(reg.idAlumno);
+        const actual=evalDirtyRowsV8123.get(id);
+        if(actual&&JSON.stringify(actual)===snapshot.get(id)){
+          evalDirtyRowsV8123.delete(id);
+          limpiarDraftFilaV8123(act.id,id);
+          document.querySelector(`[data-v66-row="${CSS.escape(id)}"]`)?.classList.remove('is-pending-save','is-save-error');
+        }
+        const key=`${act.id}|${id}`;
+        data.registros=data.registros||{};
+        data.registros[key]={...(data.registros[key]||{}),...reg,idActividad:act.id,idAlumno:id,actualizadoEn:new Date().toISOString()};
+      });
+
+      renderSummary();
+      renderActividades();
+
+      if(evalDirtyRowsV8123.size){
+        setEstadoGuardadoV8123(`${evalDirtyRowsV8123.size} cambio(s) pendiente(s)`,'pending');
+        clearTimeout(evalAutosaveTimerV8123);
+        evalAutosaveTimerV8123=setTimeout(guardarPendientesV8123,500);
+      }else{
+        setEstadoGuardadoV8123('Todo guardado','ok');
+      }
+
+      // Métricas avanzadas se actualizan en segundo plano sin bloquear al docente.
+      api('obtenerComplementoEvaluacionesV68',c).then(r=>{
+        complemento68=r||{};
+        renderSummary();
+      }).catch(()=>{});
+    }catch(e){
+      console.error('Autoguardado Evaluaciones:',e);
+      enviados.forEach(reg=>{
+        document.querySelector(`[data-v66-row="${CSS.escape(String(reg.idAlumno))}"]`)?.classList.add('is-save-error');
+      });
+      setEstadoGuardadoV8123('Cambios protegidos localmente · pulsa Guardar para reintentar','error');
+    }finally{
+      evalAutosaveInFlightV8123=false;
+    }
+  }
+
+  function enlazarAutoguardadoFilasV8123(){
+    const host=$('eval-v66-content');
+    if(!host)return;
+    host.querySelectorAll('[data-v66-row]').forEach(row=>{
+      row.querySelectorAll('[data-v66-status],[data-v66-date],[data-v66-grade],[data-v66-note]').forEach(control=>{
+        const evento=control.matches('[data-v66-note],[data-v66-grade]')?'input':'change';
+        control.addEventListener(evento,()=>marcarFilaPendienteV8123(row));
+      });
+    });
+  }
+
   function esInstitucional(){
     const rol=String(window.profesorActual?.rol||'').toLowerCase();
     return rol==='director'||rol==='control_estudio';
@@ -20168,26 +20323,21 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   async function cargar(){
     const c=contexto();
     if(!c.ano||!c.seccion)return;
+
     const host=$('eval-v66-content');
-    if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i><strong>Cargando estudiantes y evaluaciones…</strong><span>Estamos enlazando la planificación de esta sección.</span></div>';
+    if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i><strong>Cargando sección…</strong><span>Primero mostramos alumnos y actividades; los indicadores avanzados se completan después.</span></div>';
     if($('eval-v71-section-status'))$('eval-v71-section-status').textContent='Cargando…';
     if($('eval-v71-plan-status'))$('eval-v71-plan-status').textContent='Cargando…';
 
+    clearTimeout(evalAutosaveTimerV8123);
+    evalDirtyRowsV8123.clear();
+    evalAutosaveInFlightV8123=false;
+
     try{
-      const resultados=await Promise.allSettled([
-        api('obtenerGestionEvaluaciones',c),
-        api('obtenerComplementoEvaluacionesV68',c),
-        api('obtenerCompromisosAcademicos',c)
-      ]);
+      // Carga rápida: una sola consulta indispensable.
+      data=await api('obtenerGestionEvaluaciones',c);
 
-      if(resultados[0].status==='rejected') throw resultados[0].reason;
-
-      data=resultados[0].value||{};
-      complemento68=resultados[1].status==='fulfilled'?(resultados[1].value||{}):{};
-      const cr=resultados[2].status==='fulfilled'?resultados[2].value:null;
-      compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
-
-      if(!(data.alumnos||[]).length){
+      if(!(data?.alumnos||[]).length){
         try{
           const ra=await api('obtenerAlumnos',{ano:c.ano,seccion:c.seccion,turno:c.turno});
           data.alumnos=Array.isArray(ra?.alumnos)?ra.alumnos.map((a,i)=>({
@@ -20204,20 +20354,38 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       }
 
       const recuperado=aplicarPlanesLocalesEvalV8122(c);
+      complemento68={};
+      compromisos69=[];
 
       actividadActual=(data.actividades||[]).some(a=>a.id===actividadActual)
         ?actividadActual
         :(data.actividades?.[0]?.id||'');
 
+      // La tabla usable aparece inmediatamente.
       renderTodo();
 
       if(recuperado && typeof window.mostrarToast==='function'){
-        window.mostrarToast('La planificación de la sección fue recuperada y enlazada con Evaluaciones y Notas.','success','Evaluaciones cargadas');
+        window.mostrarToast('La planificación de la sección fue recuperada y enlazada.','success','Evaluaciones cargadas');
       }
 
       if(!(data.actividades||[]).length && typeof window.mostrarToast==='function'){
-        window.mostrarToast('No se encontraron actividades del lapso para esta sección. Revisa año, sección y fechas en Planificación.','warning','Sin actividades');
+        window.mostrarToast('No se encontraron actividades del lapso para esta sección.','warning','Sin actividades');
       }
+
+      // Carga secundaria: no impide comenzar a marcar entregas y notas.
+      Promise.allSettled([
+        api('obtenerComplementoEvaluacionesV68',c),
+        api('obtenerCompromisosAcademicos',c)
+      ]).then(resultados=>{
+        if(resultados[0].status==='fulfilled') complemento68=resultados[0].value||{};
+        if(resultados[1].status==='fulfilled'){
+          const cr=resultados[1].value;
+          compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
+        }
+        // Actualiza solamente indicadores; no reconstruye la tabla ni borra lo que el docente esté escribiendo.
+        renderSummary();
+      }).catch(()=>{});
+
     }catch(e){
       console.error('Evaluaciones y Notas:',e);
 
@@ -20240,8 +20408,9 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
         compromisos69=[];
         actividadActual=data.actividades?.[0]?.id||'';
         renderTodo();
+
         if(typeof window.mostrarToast==='function'){
-          window.mostrarToast('Se cargó la sección con un modo de recuperación. Ya puedes visualizar alumnos y actividades.','warning','Carga recuperada');
+          window.mostrarToast('Se cargó la sección en modo de recuperación.','warning','Carga recuperada');
         }
       }catch(e2){
         console.error('Recuperación Evaluaciones y Notas:',e2);
@@ -20252,7 +20421,6 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       }
     }
   }
-
 
   function controlEstudioKeyV71(){
     const user=String(window.profesorActual?.id||window.profesorActual?.usuario||window.profesorActual?.email||'sin_usuario').replace(/[^a-z0-9_-]/gi,'_');
@@ -20377,12 +20545,12 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     if(!act){host.innerHTML='<div class="eval-v66-empty">Selecciona una actividad.</div>';return;}
     const alumnos=data?.alumnos||[];
     host.innerHTML=`
-      <div class="eval-v66-view-head"><div><span>Registro de actividad</span><h3>${esc(act.nombre)}</h3><p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b>${complemento68?.estadoActividades?.[act.id]?.cerrada?' · <b class="eval-v68-closed-text">Actividad cerrada</b>':''}</p></div><div class="eval-v68-head-actions"><button type="button" id="eval-v68-toggle-activity" class="${complemento68?.estadoActividades?.[act.id]?.cerrada?'is-reopen':''}"><i class="fa-solid ${complemento68?.estadoActividades?.[act.id]?.cerrada?'fa-lock-open':'fa-lock'}"></i> ${complemento68?.estadoActividades?.[act.id]?.cerrada?'Reabrir':'Cerrar actividad'}</button><button type="button" id="eval-v66-save-activity" ${(complemento68?.estadoActividades?.[act.id]?.cerrada||String(complemento68?.cierreLapso?.estado||'').toUpperCase()==='CERRADO')?'disabled':''}><i class="fa-solid fa-cloud-arrow-up"></i> Guardar entregas y notas</button></div></div>
+      <div class="eval-v66-view-head"><div><span>Registro de actividad</span><h3>${esc(act.nombre)}</h3><p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b>${complemento68?.estadoActividades?.[act.id]?.cerrada?' · <b class="eval-v68-closed-text">Actividad cerrada</b>':''}</p><span id="eval-v8123-save-state" class="eval-v8123-save-state is-ok"><i class="fa-solid fa-cloud-check"></i> Todo guardado</span></div><div class="eval-v68-head-actions"><button type="button" id="eval-v68-toggle-activity" class="${complemento68?.estadoActividades?.[act.id]?.cerrada?'is-reopen':''}"><i class="fa-solid ${complemento68?.estadoActividades?.[act.id]?.cerrada?'fa-lock-open':'fa-lock'}"></i> ${complemento68?.estadoActividades?.[act.id]?.cerrada?'Reabrir':'Cerrar actividad'}</button><button type="button" id="eval-v66-save-activity" ${(complemento68?.estadoActividades?.[act.id]?.cerrada||String(complemento68?.cierreLapso?.estado||'').toUpperCase()==='CERRADO')?'disabled':''}><i class="fa-solid fa-cloud-arrow-up"></i> Guardar ahora</button></div></div>
       <div class="eval-v68-activity-metrics">${(()=>{
         const st=(complemento68?.actividadStats||[]).find(x=>x.id===act.id)||{};
         return `<span><b>${Number(st.promedio||0).toFixed(2)}</b><small>Promedio</small></span><span><b>${Number(st.porcentaje||0)}%</b><small>Rendimiento</small></span><span><b>${Number(st.noEntrego||0)}</b><small>No entregaron</small></span>`;
       })()}</div>
-      <div class="eval-v66-help"><i class="fa-solid fa-circle-info"></i> Entrega y nota son datos distintos. Puedes marcar <b>Entregó</b> y dejar la nota vacía hasta corregir la actividad.</div>
+      <div class="eval-v66-help"><i class="fa-solid fa-circle-info"></i> <b>Autoguardado activo.</b> Marca la entrega, fecha o nota y EduGestión la guarda automáticamente. Si se corta Internet, el cambio queda protegido en este equipo para recuperarlo al volver.</div>
       <div class="eval-v67-toolbar">
         <input id="eval-v67-search" type="search" placeholder="Buscar estudiante">
         <select id="eval-v67-filter"><option value="">Todos los estados</option><option>Pendiente</option><option>Entrego</option><option>No entrego</option><option>Tardia</option><option>Justificada</option><option value="SIN_NOTA">Entregó sin nota</option></select>
@@ -20391,18 +20559,26 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       </div>
       <div class="eval-v66-table-wrap"><table class="eval-v66-table"><thead><tr><th>N°</th><th>Estudiante</th><th>Asistencia ese día</th><th>Estado de entrega</th><th>Fecha real</th><th>Nota / ${Number(act.puntos||0)}</th><th>Observación</th></tr></thead><tbody>
       ${alumnos.map((al,i)=>{
-        const r=data.registros?.[`${act.id}|${al.id}`]||{};
+        const rServidor=data.registros?.[`${act.id}|${al.id}`]||{};
+        const r=registroVisibleV8123(act.id,al.id,rServidor);
         const estado=r.estadoEntrega||'Pendiente';
         const asi=data.asistenciaPorActividad?.[act.id]?.[al.id]||'';
         return `<tr data-v66-row="${esc(al.id)}"><td>${al.numeroLista||i+1}</td><td><strong>${esc(al.nombre)}</strong><small>${esc(al.cedula||'Sin C.I.')}</small></td><td>${badgeAsistencia(asi)}${asi==='Ausente'?'<small class="eval-v66-absent-note">Ausente el día de la evaluación</small>':''}</td><td><select data-v66-status>${estadoOptions(estado)}</select></td><td><input data-v66-date type="date" value="${esc(r.fechaEntrega||'')}"></td><td><input data-v66-grade type="number" min="0" max="${Number(act.puntos||0)}" step="0.01" value="${r.nota===''||r.nota==null?'':esc(r.nota)}" placeholder="—"></td><td><input data-v66-note value="${esc(r.observacion||'')}" placeholder="Observación opcional"></td></tr>`;
       }).join('')}
       </tbody></table></div>`;
     $('eval-v66-save-activity')?.addEventListener('click',guardarActividad);
+    enlazarAutoguardadoFilasV8123();
+    if(Object.keys(leerDraftsV8123(act.id)).length){
+      setEstadoGuardadoV8123('Se recuperaron cambios pendientes de una sesión anterior','pending');
+    }
     $('eval-v68-toggle-activity')?.addEventListener('click',toggleActividadV68);
     $('eval-v67-search')?.addEventListener('input',filtrarFilasActividadV67);
     $('eval-v67-filter')?.addEventListener('change',filtrarFilasActividadV67);
     $('eval-v67-all-delivered')?.addEventListener('click',()=>{
-      document.querySelectorAll('[data-v66-row]').forEach(row=>{const s=row.querySelector('[data-v66-status]');if(s)s.value='Entrego';});
+      document.querySelectorAll('[data-v66-row]').forEach(row=>{
+        const s=row.querySelector('[data-v66-status]');
+        if(s){s.value='Entrego';marcarFilaPendienteV8123(row);}
+      });
       filtrarFilasActividadV67();
     });
     $('eval-v67-clear-grades')?.addEventListener('click',()=>{if($('eval-v67-search'))$('eval-v67-search').value='';if($('eval-v67-filter'))$('eval-v67-filter').value='';filtrarFilasActividadV67();});
@@ -20425,21 +20601,42 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   async function guardarActividad(){
     const act=(data?.actividades||[]).find(a=>a.id===actividadActual);if(!act)return;
     const c=contexto(),rows=[...document.querySelectorAll('[data-v66-row]')];
-    const registros=rows.map(row=>({
-      idAlumno:row.dataset.v66Row,
-      estadoEntrega:row.querySelector('[data-v66-status]')?.value||'Pendiente',
-      fechaEntrega:row.querySelector('[data-v66-date]')?.value||'',
-      nota:row.querySelector('[data-v66-grade]')?.value??'',
-      observacion:row.querySelector('[data-v66-note]')?.value||''
-    }));
-    const btn=$('eval-v66-save-activity');if(btn){btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Guardando…';}
+    const registros=rows.map(leerFilaEvaluacionV8123);
+    const btn=$('eval-v66-save-activity');
+
+    clearTimeout(evalAutosaveTimerV8123);
+    if(btn){btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Guardando…';}
+    setEstadoGuardadoV8123('Guardando todos los cambios…','saving');
+
     try{
-      await api('guardarRegistrosEvaluacion',{...c,idActividad:act.id,registros});
-      if(typeof mostrarToast==='function')mostrarToast('Entregas, notas y alertas fueron actualizadas.','success','Evaluación guardada');
-      await cargar();
+      await api('guardarRegistrosEvaluacion',{...c,idActividad:act.id,registros,origen:'Guardado manual V8.12.3'});
+
+      registros.forEach(reg=>{
+        const key=`${act.id}|${reg.idAlumno}`;
+        data.registros=data.registros||{};
+        data.registros[key]={...(data.registros[key]||{}),...reg,idActividad:act.id,idAlumno:reg.idAlumno,actualizadoEn:new Date().toISOString()};
+        evalDirtyRowsV8123.delete(String(reg.idAlumno));
+        limpiarDraftFilaV8123(act.id,reg.idAlumno);
+        document.querySelector(`[data-v66-row="${CSS.escape(String(reg.idAlumno))}"]`)?.classList.remove('is-pending-save','is-save-error');
+      });
+
+      renderSummary();
+      renderActividades();
+      setEstadoGuardadoV8123('Todo guardado','ok');
+
+      if(typeof mostrarToast==='function')mostrarToast('Todos los cambios quedaron guardados.','success','Evaluación guardada');
+
+      api('obtenerComplementoEvaluacionesV68',c).then(r=>{
+        complemento68=r||{};
+        renderSummary();
+      }).catch(()=>{});
     }catch(e){
-      if(typeof mostrarToast==='function')mostrarToast(e?.message||'No se pudo guardar.','error','Error');
-    }finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Guardar entregas y notas';}}
+      registros.forEach(reg=>guardarDraftFilaV8123(act.id,reg.idAlumno,reg));
+      setEstadoGuardadoV8123('No se pudo sincronizar · los cambios siguen protegidos en este equipo','error');
+      if(typeof mostrarToast==='function')mostrarToast(e?.message||'No se pudo guardar. Los cambios quedaron protegidos localmente.','error','Error');
+    }finally{
+      if(btn){btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-cloud-arrow-up"></i> Guardar ahora';}
+    }
   }
 
   function resumenAlumno(id){
@@ -21913,3 +22110,5 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 // EduGestion build V8.10 - Actividades semanales para representantes
 
 /* EDUGESTION_EVALUACIONES_FIX_V8122 */
+
+/* EDUGESTION_EVALUACIONES_AUTOGUARDADO_V8123 */
