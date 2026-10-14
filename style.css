@@ -10383,3 +10383,70 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
 .eval-v66-table tr.is-save-error td{background:rgba(254,226,226,.42)}
 .eval-v66-table tr.is-pending-save td:first-child{box-shadow:inset 4px 0 0 #f59e0b}
 .eval-v66-table tr.is-save-error td:first-child{box-shadow:inset 4px 0 0 #dc2626}
+
+
+/* =========================================================
+   V8.12.4 · Evaluaciones amigables, sin barra horizontal
+   ========================================================= */
+.eval-v8124-list-status{
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;
+  font-size:.72rem;color:#50657c
+}
+.eval-v8124-list-status b,
+.eval-v8124-list-status span{
+  display:inline-flex;align-items:center;gap:6px;padding:5px 9px;
+  border-radius:999px;background:#f3f7fb;border:1px solid #dce7f1
+}
+.eval-v8124-toolbar{
+  position:sticky;top:82px;z-index:8;background:rgba(248,251,255,.96);
+  backdrop-filter:blur(10px);padding:10px;border:1px solid #dbe7f2;
+  border-radius:16px;box-shadow:0 8px 20px rgba(23,59,103,.06)
+}
+.eval-v8124-student-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px
+}
+.eval-v8124-student-card{
+  border:1px solid #d9e5f0;border-radius:18px;background:#fff;
+  box-shadow:0 4px 14px rgba(23,59,103,.05);overflow:hidden
+}
+.eval-v8124-student-card>header{
+  display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+  padding:13px 14px;border-bottom:1px solid #edf2f7;background:#fbfdff
+}
+.eval-v8124-number{
+  display:flex;width:34px;height:34px;align-items:center;justify-content:center;
+  border-radius:10px;background:#eaf3fc;color:#173b67;font-weight:900;font-size:.82rem
+}
+.eval-v8124-student-name strong{display:block;color:#203a58;font-size:.86rem;line-height:1.35}
+.eval-v8124-student-name small{display:block;margin-top:3px;color:#8a9aab;font-size:.66rem}
+.eval-v8124-fields{
+  display:grid;grid-template-columns:1.2fr .75fr 1fr;gap:10px;padding:13px 14px
+}
+.eval-v8124-fields label{display:flex;flex-direction:column;gap:5px;min-width:0}
+.eval-v8124-fields label>span{
+  color:#5a7189;font-size:.64rem;font-weight:900;text-transform:uppercase;letter-spacing:.05em
+}
+.eval-v8124-fields select,
+.eval-v8124-fields input,
+.eval-v8124-fields textarea{
+  width:100%;min-width:0;border:1px solid #cfddea;border-radius:12px;
+  background:#fff;color:#243b53;padding:9px 10px;font-size:.8rem
+}
+.eval-v8124-fields textarea{resize:vertical;min-height:64px}
+.eval-v8124-fields .is-wide{grid-column:1/-1}
+.eval-v8124-student-card.is-pending-save{border-color:#f0b429}
+.eval-v8124-student-card.is-save-error{border-color:#dc4c4c}
+.eval-v8124-student-card.is-pending-save>header{background:#fffaf0}
+.eval-v8124-student-card.is-save-error>header{background:#fff4f4}
+@media(max-width:1050px){
+  .eval-v8124-student-grid{grid-template-columns:1fr}
+}
+@media(max-width:720px){
+  .eval-v8124-toolbar{position:static}
+  .eval-v8124-fields{grid-template-columns:1fr 1fr}
+  .eval-v8124-fields .is-wide{grid-column:1/-1}
+}
+@media(max-width:520px){
+  .eval-v8124-fields{grid-template-columns:1fr}
+  .eval-v8124-fields .is-wide{grid-column:auto}
+}

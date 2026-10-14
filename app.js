@@ -20320,105 +20320,218 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
     return true;
   }
 
+  // V8.12.4 · Evita que alumnos duplicados aparezcan dos veces en Notas.
+  // No borra información histórica: consolida la vista y reutiliza el registro más completo.
+  function claveAlumnoUnicoV8124(al){
+    const ci=String(al?.cedula||'').replace(/[^0-9a-z]/gi,'').toLowerCase();
+    if(ci)return 'ci:'+ci;
+    const nombre=norm(al?.nombre||'').replace(/\s+/g,' ');
+    return 'nom:'+nombre;
+  }
+
+  function puntajeAlumnoCanonicoV8124(al,origen){
+    let score=0;
+    const id=String(al?.id||'');
+    if(String(al?.cedula||'').trim())score+=10;
+    ['representante','telefonoRepresentante','emailRepresentante','direccion'].forEach(k=>{
+      if(String(al?.[k]||'').trim())score+=2;
+    });
+    Object.keys(origen?.registros||{}).forEach(k=>{
+      if(k.endsWith('|'+id))score+=25;
+    });
+    return score;
+  }
+
+  function consolidarAlumnosEvaluacionesV8124(origen){
+    if(!origen||!Array.isArray(origen.alumnos))return {duplicados:0,total:0};
+    const grupos=new Map();
+    origen.alumnos.forEach(al=>{
+      const key=claveAlumnoUnicoV8124(al);
+      if(!grupos.has(key))grupos.set(key,[]);
+      grupos.get(key).push(al);
+    });
+
+    let duplicados=0;
+    const unicos=[];
+
+    grupos.forEach(lista=>{
+      if(lista.length>1)duplicados+=lista.length-1;
+      lista.sort((a,b)=>puntajeAlumnoCanonicoV8124(b,origen)-puntajeAlumnoCanonicoV8124(a,origen));
+      const canon={...lista[0]};
+      const canonId=String(canon.id||'');
+
+      // Recupera registros que pudieran estar guardados bajo un ID duplicado.
+      lista.slice(1).forEach(dup=>{
+        const dupId=String(dup.id||'');
+        (origen.actividades||[]).forEach(act=>{
+          const kCanon=`${act.id}|${canonId}`;
+          const kDup=`${act.id}|${dupId}`;
+          const rDup=origen.registros?.[kDup];
+          const rCanon=origen.registros?.[kCanon];
+          if(rDup && (!rCanon || String(rDup.actualizadoEn||'')>String(rCanon.actualizadoEn||''))){
+            origen.registros=origen.registros||{};
+            origen.registros[kCanon]={...rDup,idAlumno:canonId};
+          }
+
+          const aDup=origen.asistenciaPorActividad?.[act.id]?.[dupId];
+          if(aDup && !origen.asistenciaPorActividad?.[act.id]?.[canonId]){
+            origen.asistenciaPorActividad=origen.asistenciaPorActividad||{};
+            origen.asistenciaPorActividad[act.id]=origen.asistenciaPorActividad[act.id]||{};
+            origen.asistenciaPorActividad[act.id][canonId]=aDup;
+          }
+        });
+
+        // Completa datos vacíos del registro canónico sin reemplazar lo ya existente.
+        ['cedula','representante','telefonoRepresentante','emailRepresentante','direccion'].forEach(k=>{
+          if(!String(canon[k]||'').trim() && String(dup[k]||'').trim())canon[k]=dup[k];
+        });
+      });
+
+      unicos.push(canon);
+    });
+
+    unicos.sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
+    unicos.forEach((a,i)=>a.numeroLista=i+1);
+    origen.alumnos=unicos;
+    origen.resumen=origen.resumen||{};
+    origen.resumen.totalEstudiantes=unicos.length;
+    origen._duplicadosOcultosV8124=duplicados;
+    return {duplicados,total:unicos.length};
+  }
+
+  function datosRapidosEvaluacionesV8124(c,alumnos){
+    const locales=planesLocalesEvalV8122(c);
+    return {
+      status:'success',
+      ano:c.ano,seccion:c.seccion,turno:c.turno,lapso:c.lapso,
+      materia:String(window.profesorActual?.materia||''),
+      alumnos:(alumnos||[]).map((a,i)=>({
+        id:String(a.id||''),
+        numeroLista:i+1,
+        nombre:String(a.nombre||''),
+        cedula:String(a.cedula||''),
+        representante:String(a.representante||''),
+        telefonoRepresentante:String(a.telefonoRepresentante||''),
+        emailRepresentante:String(a.emailRepresentante||''),
+        direccion:String(a.direccion||'')
+      })),
+      actividades:locales,
+      registros:{},
+      asistenciaPorActividad:{},
+      resumen:{
+        totalActividades:locales.length,
+        totalEstudiantes:(alumnos||[]).length,
+        puntosPlanificados:locales.reduce((s,a)=>s+Number(a.puntos||0),0),
+        alertas:0,estudiantes:[]
+      },
+      alertas:[]
+    };
+  }
+
   async function cargar(){
     const c=contexto();
     if(!c.ano||!c.seccion)return;
 
     const host=$('eval-v66-content');
-    if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i><strong>Cargando sección…</strong><span>Primero mostramos alumnos y actividades; los indicadores avanzados se completan después.</span></div>';
-    if($('eval-v71-section-status'))$('eval-v71-section-status').textContent='Cargando…';
-    if($('eval-v71-plan-status'))$('eval-v71-plan-status').textContent='Cargando…';
+    if(host)host.innerHTML='<div class="eval-v66-empty"><i class="fa-solid fa-spinner fa-spin"></i><strong>Preparando la lista…</strong><span>EduGestión mostrará primero alumnos y actividades; el resto se completa en segundo plano.</span></div>';
 
     clearTimeout(evalAutosaveTimerV8123);
     evalDirtyRowsV8123.clear();
     evalAutosaveInFlightV8123=false;
 
-    try{
-      // Carga rápida: una sola consulta indispensable.
-      data=await api('obtenerGestionEvaluaciones',c);
+    let listaRapida=[];
 
-      if(!(data?.alumnos||[]).length){
-        try{
-          const ra=await api('obtenerAlumnos',{ano:c.ano,seccion:c.seccion,turno:c.turno});
-          data.alumnos=Array.isArray(ra?.alumnos)?ra.alumnos.map((a,i)=>({
-            id:String(a.id||''),
-            numeroLista:i+1,
-            nombre:String(a.nombre||''),
-            cedula:String(a.cedula||''),
-            representante:String(a.representante||''),
-            telefonoRepresentante:String(a.telefonoRepresentante||'')
-          })):[];
-          data.resumen=data.resumen||{};
-          data.resumen.totalEstudiantes=data.alumnos.length;
-        }catch(_){}
+    try{
+      // 1. Lista y planificación primero: evita esperar todo el libro de notas.
+      const alumnosReq=api('obtenerAlumnos',{ano:c.ano,seccion:c.seccion,turno:c.turno});
+      const initReq=planesLocalesEvalV8122(c).length
+        ? Promise.resolve(null)
+        : api('obtenerDatosIniciales',{}).catch(()=>null);
+
+      const [ra,init]=await Promise.all([alumnosReq,initReq]);
+
+      if(Array.isArray(init?.planes)){
+        planesProfesor=init.planes;
       }
 
-      const recuperado=aplicarPlanesLocalesEvalV8122(c);
-      complemento68={};
-      compromisos69=[];
+      listaRapida=Array.isArray(ra?.alumnos)?ra.alumnos:[];
+      data=datosRapidosEvaluacionesV8124(c,listaRapida);
+      const consolidadoRapido=consolidarAlumnosEvaluacionesV8124(data);
 
       actividadActual=(data.actividades||[]).some(a=>a.id===actividadActual)
         ?actividadActual
         :(data.actividades?.[0]?.id||'');
 
-      // La tabla usable aparece inmediatamente.
+      complemento68={};
+      compromisos69=[];
       renderTodo();
 
-      if(recuperado && typeof window.mostrarToast==='function'){
-        window.mostrarToast('La planificación de la sección fue recuperada y enlazada.','success','Evaluaciones cargadas');
+      if(typeof window.mostrarToast==='function' && consolidadoRapido.duplicados){
+        window.mostrarToast(
+          `${consolidadoRapido.duplicados} registro(s) duplicado(s) fueron consolidados. La lista muestra ${consolidadoRapido.total} estudiantes únicos.`,
+          'info',
+          'Lista depurada'
+        );
       }
+
+      // 2. Trae entregas/notas guardadas sin bloquear la pantalla.
+      api('obtenerGestionEvaluaciones',c).then(servidor=>{
+        if(!servidor)return;
+
+        const hayCambiosLocales=evalDirtyRowsV8123.size>0;
+        const actAntes=actividadActual;
+
+        data=servidor;
+        aplicarPlanesLocalesEvalV8122(c);
+        consolidarAlumnosEvaluacionesV8124(data);
+
+        actividadActual=(data.actividades||[]).some(a=>a.id===actAntes)
+          ?actAntes
+          :(data.actividades?.[0]?.id||'');
+
+        // Si el docente aún no ha comenzado a escribir, actualiza toda la vista.
+        // Si ya está trabajando, no le mueve la pantalla.
+        if(!hayCambiosLocales){
+          renderTodo();
+        }else{
+          renderSummary();
+          renderActividades();
+        }
+
+        Promise.allSettled([
+          api('obtenerComplementoEvaluacionesV68',c),
+          api('obtenerCompromisosAcademicos',c)
+        ]).then(resultados=>{
+          if(resultados[0].status==='fulfilled') complemento68=resultados[0].value||{};
+          if(resultados[1].status==='fulfilled'){
+            const cr=resultados[1].value;
+            compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
+          }
+          renderSummary();
+        });
+      }).catch(err=>{
+        console.warn('No se pudo completar el libro de notas en segundo plano:',err);
+        if(typeof window.mostrarToast==='function'){
+          window.mostrarToast(
+            'La lista y las actividades están disponibles. Los registros históricos tardaron en responder; puedes seguir trabajando.',
+            'warning',
+            'Carga parcial'
+          );
+        }
+      });
 
       if(!(data.actividades||[]).length && typeof window.mostrarToast==='function'){
-        window.mostrarToast('No se encontraron actividades del lapso para esta sección.','warning','Sin actividades');
+        window.mostrarToast(
+          'Todavía no aparecen actividades para esta sección. Revisa que la planificación tenga año, sección, fecha y puntos.',
+          'warning',
+          'Planificación pendiente'
+        );
       }
-
-      // Carga secundaria: no impide comenzar a marcar entregas y notas.
-      Promise.allSettled([
-        api('obtenerComplementoEvaluacionesV68',c),
-        api('obtenerCompromisosAcademicos',c)
-      ]).then(resultados=>{
-        if(resultados[0].status==='fulfilled') complemento68=resultados[0].value||{};
-        if(resultados[1].status==='fulfilled'){
-          const cr=resultados[1].value;
-          compromisos69=Array.isArray(cr?.compromisos)?cr.compromisos:[];
-        }
-        // Actualiza solamente indicadores; no reconstruye la tabla ni borra lo que el docente esté escribiendo.
-        renderSummary();
-      }).catch(()=>{});
 
     }catch(e){
       console.error('Evaluaciones y Notas:',e);
-
-      try{
-        const ra=await api('obtenerAlumnos',{ano:c.ano,seccion:c.seccion,turno:c.turno});
-        data={
-          status:'success',
-          ano:c.ano,seccion:c.seccion,turno:c.turno,lapso:c.lapso,
-          alumnos:Array.isArray(ra?.alumnos)?ra.alumnos.map((a,i)=>({
-            id:String(a.id||''),numeroLista:i+1,nombre:String(a.nombre||''),
-            cedula:String(a.cedula||''),representante:String(a.representante||''),
-            telefonoRepresentante:String(a.telefonoRepresentante||'')
-          })):[],
-          actividades:[],registros:{},asistenciaPorActividad:{},
-          resumen:{totalActividades:0,totalEstudiantes:0,puntosPlanificados:0,alertas:0,estudiantes:[]},
-          alertas:[]
-        };
-        aplicarPlanesLocalesEvalV8122(c);
-        complemento68={};
-        compromisos69=[];
-        actividadActual=data.actividades?.[0]?.id||'';
-        renderTodo();
-
-        if(typeof window.mostrarToast==='function'){
-          window.mostrarToast('Se cargó la sección en modo de recuperación.','warning','Carga recuperada');
-        }
-      }catch(e2){
-        console.error('Recuperación Evaluaciones y Notas:',e2);
-        if($('eval-v71-section-status'))$('eval-v71-section-status').textContent='Error';
-        if($('eval-v71-plan-status'))$('eval-v71-plan-status').textContent='Error';
-        if(host)host.innerHTML=`<div class="eval-v66-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar Evaluaciones y Notas.</strong><span>${esc(e?.message||e2?.message||'Error de conexión con el servidor.')}</span><button type="button" id="eval-v8122-retry">Reintentar carga</button></div>`;
-        $('eval-v8122-retry')?.addEventListener('click',cargar);
-      }
+      if(host)host.innerHTML=`<div class="eval-v66-empty is-error"><i class="fa-solid fa-triangle-exclamation"></i><strong>No se pudo cargar la lista.</strong><span>${esc(e?.message||'Error de conexión con el servidor.')}</span><button type="button" id="eval-v8124-retry">Reintentar</button></div>`;
+      $('eval-v8124-retry')?.addEventListener('click',cargar);
     }
   }
 
@@ -20542,30 +20655,63 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
   function renderActividad(){
     const host=$('eval-v66-content');if(!host)return;
     const act=(data?.actividades||[]).find(a=>a.id===actividadActual);
-    if(!act){host.innerHTML='<div class="eval-v66-empty">Selecciona una actividad.</div>';return;}
+    if(!act){host.innerHTML='<div class="eval-v66-empty"><strong>No hay actividad seleccionada.</strong><span>Si ya la creaste en Planificación, pulsa “Cargar registro” o vuelve a seleccionar la sección.</span></div>';return;}
     const alumnos=data?.alumnos||[];
+    const duplicados=Number(data?._duplicadosOcultosV8124||0);
+
     host.innerHTML=`
-      <div class="eval-v66-view-head"><div><span>Registro de actividad</span><h3>${esc(act.nombre)}</h3><p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b>${complemento68?.estadoActividades?.[act.id]?.cerrada?' · <b class="eval-v68-closed-text">Actividad cerrada</b>':''}</p><span id="eval-v8123-save-state" class="eval-v8123-save-state is-ok"><i class="fa-solid fa-cloud-check"></i> Todo guardado</span></div><div class="eval-v68-head-actions"><button type="button" id="eval-v68-toggle-activity" class="${complemento68?.estadoActividades?.[act.id]?.cerrada?'is-reopen':''}"><i class="fa-solid ${complemento68?.estadoActividades?.[act.id]?.cerrada?'fa-lock-open':'fa-lock'}"></i> ${complemento68?.estadoActividades?.[act.id]?.cerrada?'Reabrir':'Cerrar actividad'}</button><button type="button" id="eval-v66-save-activity" ${(complemento68?.estadoActividades?.[act.id]?.cerrada||String(complemento68?.cierreLapso?.estado||'').toUpperCase()==='CERRADO')?'disabled':''}><i class="fa-solid fa-cloud-arrow-up"></i> Guardar ahora</button></div></div>
-      <div class="eval-v68-activity-metrics">${(()=>{
-        const st=(complemento68?.actividadStats||[]).find(x=>x.id===act.id)||{};
-        return `<span><b>${Number(st.promedio||0).toFixed(2)}</b><small>Promedio</small></span><span><b>${Number(st.porcentaje||0)}%</b><small>Rendimiento</small></span><span><b>${Number(st.noEntrego||0)}</b><small>No entregaron</small></span>`;
-      })()}</div>
-      <div class="eval-v66-help"><i class="fa-solid fa-circle-info"></i> <b>Autoguardado activo.</b> Marca la entrega, fecha o nota y EduGestión la guarda automáticamente. Si se corta Internet, el cambio queda protegido en este equipo para recuperarlo al volver.</div>
-      <div class="eval-v67-toolbar">
-        <input id="eval-v67-search" type="search" placeholder="Buscar estudiante">
+      <div class="eval-v66-view-head">
+        <div>
+          <span>Registro de actividad</span>
+          <h3>${esc(act.nombre)}</h3>
+          <p>${esc(act.fecha||'Sin fecha')} · Valor: <b>${Number(act.puntos||0)} puntos</b>${complemento68?.estadoActividades?.[act.id]?.cerrada?' · <b class="eval-v68-closed-text">Actividad cerrada</b>':''}</p>
+          <div class="eval-v8124-list-status">
+            <b>${alumnos.length} estudiantes únicos</b>
+            ${duplicados?`<span><i class="fa-solid fa-filter-circle-xmark"></i> ${duplicados} duplicado(s) consolidados</span>`:''}
+          </div>
+          <span id="eval-v8123-save-state" class="eval-v8123-save-state is-ok"><i class="fa-solid fa-cloud-check"></i> Todo guardado</span>
+        </div>
+        <div class="eval-v68-head-actions">
+          <button type="button" id="eval-v68-toggle-activity" class="${complemento68?.estadoActividades?.[act.id]?.cerrada?'is-reopen':''}"><i class="fa-solid ${complemento68?.estadoActividades?.[act.id]?.cerrada?'fa-lock-open':'fa-lock'}"></i> ${complemento68?.estadoActividades?.[act.id]?.cerrada?'Reabrir':'Cerrar actividad'}</button>
+          <button type="button" id="eval-v66-save-activity" ${(complemento68?.estadoActividades?.[act.id]?.cerrada||String(complemento68?.cierreLapso?.estado||'').toUpperCase()==='CERRADO')?'disabled':''}><i class="fa-solid fa-cloud-arrow-up"></i> Guardar ahora</button>
+        </div>
+      </div>
+
+      <div class="eval-v66-help"><i class="fa-solid fa-circle-info"></i> <b>Autoguardado activo.</b> No necesitas desplazarte horizontalmente. Cada alumno tiene todos sus datos en una tarjeta.</div>
+
+      <div class="eval-v67-toolbar eval-v8124-toolbar">
+        <input id="eval-v67-search" type="search" placeholder="Buscar estudiante por nombre o cédula">
         <select id="eval-v67-filter"><option value="">Todos los estados</option><option>Pendiente</option><option>Entrego</option><option>No entrego</option><option>Tardia</option><option>Justificada</option><option value="SIN_NOTA">Entregó sin nota</option></select>
         <button type="button" id="eval-v67-all-delivered"><i class="fa-solid fa-check-double"></i> Todos entregaron</button>
         <button type="button" id="eval-v67-clear-grades"><i class="fa-solid fa-eraser"></i> Limpiar filtro</button>
       </div>
-      <div class="eval-v66-table-wrap"><table class="eval-v66-table"><thead><tr><th>N°</th><th>Estudiante</th><th>Asistencia ese día</th><th>Estado de entrega</th><th>Fecha real</th><th>Nota / ${Number(act.puntos||0)}</th><th>Observación</th></tr></thead><tbody>
+
+      <div class="eval-v8124-student-grid">
       ${alumnos.map((al,i)=>{
         const rServidor=data.registros?.[`${act.id}|${al.id}`]||{};
         const r=registroVisibleV8123(act.id,al.id,rServidor);
         const estado=r.estadoEntrega||'Pendiente';
         const asi=data.asistenciaPorActividad?.[act.id]?.[al.id]||'';
-        return `<tr data-v66-row="${esc(al.id)}"><td>${al.numeroLista||i+1}</td><td><strong>${esc(al.nombre)}</strong><small>${esc(al.cedula||'Sin C.I.')}</small></td><td>${badgeAsistencia(asi)}${asi==='Ausente'?'<small class="eval-v66-absent-note">Ausente el día de la evaluación</small>':''}</td><td><select data-v66-status>${estadoOptions(estado)}</select></td><td><input data-v66-date type="date" value="${esc(r.fechaEntrega||'')}"></td><td><input data-v66-grade type="number" min="0" max="${Number(act.puntos||0)}" step="0.01" value="${r.nota===''||r.nota==null?'':esc(r.nota)}" placeholder="—"></td><td><input data-v66-note value="${esc(r.observacion||'')}" placeholder="Observación opcional"></td></tr>`;
+        return `<article class="eval-v8124-student-card" data-v66-row="${esc(al.id)}">
+          <header>
+            <span class="eval-v8124-number">${al.numeroLista||i+1}</span>
+            <div class="eval-v8124-student-name" data-v8124-name="${esc(al.nombre)} ${esc(al.cedula||'')}">
+              <strong>${esc(al.nombre)}</strong>
+              <small>${esc(al.cedula||'Sin C.I.')}</small>
+            </div>
+            <div class="eval-v8124-attendance">${badgeAsistencia(asi)}</div>
+          </header>
+
+          <div class="eval-v8124-fields">
+            <label><span>Estado de entrega</span><select data-v66-status>${estadoOptions(estado)}</select></label>
+            <label><span>Nota / ${Number(act.puntos||0)}</span><input data-v66-grade type="number" min="0" max="${Number(act.puntos||0)}" step="0.01" value="${r.nota===''||r.nota==null?'':esc(r.nota)}" placeholder="Nota"></label>
+            <label><span>Fecha real</span><input data-v66-date type="date" value="${esc(r.fechaEntrega||'')}"></label>
+            <label class="is-wide"><span>Observación</span><textarea data-v66-note rows="2" placeholder="Observación opcional">${esc(r.observacion||'')}</textarea></label>
+          </div>
+        </article>`;
       }).join('')}
-      </tbody></table></div>`;
+      </div>`;
+
     $('eval-v66-save-activity')?.addEventListener('click',guardarActividad);
     enlazarAutoguardadoFilasV8123();
     if(Object.keys(leerDraftsV8123(act.id)).length){
@@ -20581,15 +20727,18 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
       });
       filtrarFilasActividadV67();
     });
-    $('eval-v67-clear-grades')?.addEventListener('click',()=>{if($('eval-v67-search'))$('eval-v67-search').value='';if($('eval-v67-filter'))$('eval-v67-filter').value='';filtrarFilasActividadV67();});
+    $('eval-v67-clear-grades')?.addEventListener('click',()=>{
+      if($('eval-v67-search'))$('eval-v67-search').value='';
+      if($('eval-v67-filter'))$('eval-v67-filter').value='';
+      filtrarFilasActividadV67();
+    });
   }
-
 
   function filtrarFilasActividadV67(){
     const q=norm($('eval-v67-search')?.value||'');
     const f=$('eval-v67-filter')?.value||'';
     document.querySelectorAll('[data-v66-row]').forEach(row=>{
-      const nombre=norm(row.querySelector('td:nth-child(2)')?.textContent||'');
+      const nombre=norm(row.querySelector('[data-v8124-name]')?.textContent||row.textContent||'');
       const estado=row.querySelector('[data-v66-status]')?.value||'Pendiente';
       const nota=row.querySelector('[data-v66-grade]')?.value??'';
       const matchQ=!q||nombre.includes(q);
@@ -22112,3 +22261,5 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_EVALUACIONES_FIX_V8122 */
 
 /* EDUGESTION_EVALUACIONES_AUTOGUARDADO_V8123 */
+
+/* EDUGESTION_EVALUACIONES_AMIGABLES_V8124 */
