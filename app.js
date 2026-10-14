@@ -3093,16 +3093,36 @@ const SESSION_KEY = 'edugestion_session_v2';
         return `${a.nombre || ''} ${a.cedula || ''} ${a.representante || ''}`.toLowerCase().includes(q);
       });
 
+      const claveDup = a => {
+        const ci = String(a?.cedula || '').replace(/[^0-9a-z]/gi,'').toLowerCase();
+        if (ci) return 'ci:' + ci;
+        const nom = String(a?.nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+        return ['nom',nom,String(a?.ano||''),String(a?.seccion||'').toUpperCase(),normalizarTurnoRegistroV86(a?.turno||'')].join('|');
+      };
+      const frecuenciaDup = {};
+      lista.forEach(a => {
+        const k = claveDup(a);
+        frecuenciaDup[k] = (frecuenciaDup[k] || 0) + 1;
+      });
+      const duplicadosDetectados = Object.values(frecuenciaDup).reduce((n,c)=>n+(c>1?c-1:0),0);
+
       const count = document.getElementById('reg-v86-count');
-      if (count) count.textContent = `${lista.length} ${lista.length === 1 ? 'estudiante disponible' : 'estudiantes disponibles'}`;
+      if (count) {
+        count.textContent = `${lista.length} ${lista.length === 1 ? 'estudiante disponible' : 'estudiantes disponibles'}${duplicadosDetectados ? ` · ${duplicadosDetectados} duplicado(s) detectado(s)` : ''}`;
+      }
 
       selector.innerHTML = '<option value="">-- Selecciona un estudiante --</option>';
+      const vistosDup = {};
       lista.forEach(a => {
         const op = document.createElement('option');
         op.value = String(a.id || '');
         const curso = `${a.ano || ''} · Sección ${a.seccion || ''} · ${normalizarTurnoRegistroV86(a.turno)==='Manana'?'Mañana':'Tarde'}`;
         const ci = String(a.cedula || '').trim();
-        op.textContent = `${a.nombre || 'Estudiante'} — ${curso}${ci ? ` — C.I. ${ci}` : ''}`;
+        const k = claveDup(a);
+        vistosDup[k] = (vistosDup[k] || 0) + 1;
+        const esDuplicado = frecuenciaDup[k] > 1 && vistosDup[k] > 1;
+        op.textContent = `${esDuplicado ? '⚠ DUPLICADO · ' : ''}${a.nombre || 'Estudiante'} — ${curso}${ci ? ` — C.I. ${ci}` : ''}`;
+        if (esDuplicado) op.dataset.duplicado = 'true';
         selector.appendChild(op);
       });
 
@@ -3115,12 +3135,14 @@ const SESSION_KEY = 'edugestion_session_v2';
       const selector = document.getElementById('reg-v861-student');
       const preview = document.getElementById('reg-v861-selected');
       const btn = document.getElementById('reg-v861-load');
+      const btnDelete = document.getElementById('reg-v861-delete');
       const legacy = document.getElementById('reg-estudiante-existente');
       if (!selector || !preview) return;
 
       const id = String(selector.value || '');
       if (legacy) legacy.value = id;
       if (btn) btn.disabled = !id;
+      if (btnDelete) btnDelete.disabled = !id;
 
       const a = alumnosRegistroCache.find(x => String(x.id) === id);
       if (!a) {
@@ -3466,6 +3488,18 @@ const SESSION_KEY = 'edugestion_session_v2';
     document.getElementById('btn-nueva-ficha')?.addEventListener('click', nuevaFichaRegistro);
     document.getElementById('reg-v861-student')?.addEventListener('change', actualizarSeleccionRegistroV861);
     document.getElementById('reg-v861-load')?.addEventListener('click', cargarSeleccionRegistroV861);
+    document.getElementById('reg-v861-delete')?.addEventListener('click', () => {
+      const id = String(document.getElementById('reg-v861-student')?.value || '');
+      if (!id) {
+        mostrarToast('Selecciona primero el alumno que deseas eliminar.', 'warning', 'Sin estudiante');
+        return;
+      }
+      const legacy = document.getElementById('reg-estudiante-existente');
+      if (legacy) legacy.value = id;
+      const hiddenId = document.getElementById('reg-id');
+      if (hiddenId) hiddenId.value = id;
+      document.getElementById('btn-eliminar-estudiante')?.click();
+    });
     document.getElementById('reg-v861-new')?.addEventListener('click', () => {
       const sel = document.getElementById('reg-v861-student');
       if (sel) sel.value = '';
@@ -22263,3 +22297,5 @@ La secuencia debe sentirse como una sola planificación continua del lapso, no c
 /* EDUGESTION_EVALUACIONES_AUTOGUARDADO_V8123 */
 
 /* EDUGESTION_EVALUACIONES_AMIGABLES_V8124 */
+
+/* EDUGESTION_REGISTRO_ELIMINAR_FICHA_V8125 */

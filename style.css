@@ -10450,3 +10450,31 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
   .eval-v8124-fields{grid-template-columns:1fr}
   .eval-v8124-fields .is-wide{grid-column:auto}
 }
+
+
+/* V8.12.5 · Botón visible para eliminar fichas */
+.student-btn--danger{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-height:48px;
+  padding:0 18px;
+  border:1px solid #fecaca;
+  border-radius:13px;
+  color:#b42318;
+  background:#fff1f2;
+  font-weight:800;
+  box-shadow:0 4px 12px rgba(180,35,24,.06);
+  transition:.18s ease;
+}
+.student-btn--danger:hover:not(:disabled){
+  color:#fff;
+  background:#dc2626;
+  border-color:#dc2626;
+  transform:translateY(-1px);
+}
+.student-btn--danger:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
