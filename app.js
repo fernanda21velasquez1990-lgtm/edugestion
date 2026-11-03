@@ -957,18 +957,7 @@ const SESSION_KEY = 'edugestion_session_v2';
           confirmar: true
         });
 
-        alumnosSeccion = alumnosSeccion.filter(item => String(item.id) !== String(alumno.id));
-        delete asistenciaTemporal[alumno.id];
-        delete estadisticasAlumnos[alumno.id];
-        alumnosRegistroCache = [];
-
-        renderAsistencia();
-        actualizarStatsSeccion();
-        llenarSelectActaRapida();
-        const visibilidadActual = resumenVisibilidadListaV75(alumnosSeccionBase);
-        contadorAsistencia.textContent = visibilidadActual.ocultos
-          ? `${visibilidadActual.visibles}/${visibilidadActual.registrados} Alumnos`
-          : `${visibilidadActual.visibles} Alumnos`;
+        quitarAlumnoDeEstadoAsistenciaV812(alumno.id);
         mostrarToast(data.message || 'La ficha duplicada fue eliminada.', 'success', 'Duplicado eliminado');
       } catch (error) {
         console.error('No se pudo eliminar el estudiante duplicado:', error);
@@ -1161,7 +1150,7 @@ const SESSION_KEY = 'edugestion_session_v2';
             <span class="rounded-full px-2 py-1 text-[9px] font-black ${resumen.incompleta ? 'bg-orange-100 text-orange-700' : resumen.existe ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}">${escaparHTML(estado.texto)}</span>
           </span>
           <span class="mt-2 flex items-center justify-between text-[10px] font-bold text-slate-500">
-            <span>${resumen.ocultos ? `${resumen.total} visibles · ${resumen.ocultos} ocultos` : `${resumen.total} estudiantes`}</span>
+            <span>${resumen.total} estudiantes</span>
             <span>${resumen.existe ? `${resumen.presentes} P · ${resumen.ausentes} A · ${resumen.tardanzas||0} T · ${resumen.justificadas||0} J` : 'Abrir lista →'}</span>
           </span>`;
         boton.addEventListener('click', () => abrirClaseDesdeAgenda(clase, fechaISO));
@@ -1203,7 +1192,7 @@ const SESSION_KEY = 'edugestion_session_v2';
             <span><b>${resumen.tardanzas||0}</b><small>Tardanzas</small></span>
             <span><b>${resumen.justificadas||0}</b><small>Justificadas</small></span>
           </span>
-          <span class="attendance-class-card__meta"><i class="fa-solid fa-chart-simple"></i>Asistencia del día: <b>${resumen.existe && resumen.total ? Math.round(((resumen.presentes+(resumen.tardanzas||0))/resumen.total)*100) : 0}%</b> · ${resumen.ocultos ? `${resumen.total} visibles / ${resumen.totalRegistrados} registrados` : `${resumen.total} estudiantes`}</span>
+          <span class="attendance-class-card__meta"><i class="fa-solid fa-chart-simple"></i>Asistencia del día: <b>${resumen.existe && resumen.total ? Math.round(((resumen.presentes+(resumen.tardanzas||0))/resumen.total)*100) : 0}%</b> · ${resumen.total} estudiantes</span>
           <span class="attendance-class-card__action"><span>${resumen.incompleta ? 'Completar asistencia' : resumen.existe ? 'Consultar o editar' : 'Registrar asistencia'}</span><i class="fa-solid fa-arrow-right"></i></span>`;
         tarjeta.addEventListener('click', () => abrirClaseDesdeAgenda(clase, fechaISO));
         agendaClasesDia.appendChild(tarjeta);
@@ -1320,182 +1309,168 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     document.getElementById('btn-borrar-lista-seccion')?.addEventListener('click', borrarListaSeccionV72);
     document.getElementById('btn-recargar-lista-seccion')?.addEventListener('click', recargarListaSeccionV72);
-    document.getElementById('btn-ver-ocultos-seccion')?.addEventListener('click', verOcultosSeccionV75);
 
     btnCargarListaFiltrada.onclick = cargarAlumnosDeSeccion;
    
 
-    function attendanceRosterTeacherKeyV72() {
-      return String(profesorActual?.id || profesorActual?.usuario || profesorActual?.email || 'docente')
+    let eliminacionMasivaAsistenciaV812 = false;
+
+    // V8.12: lista real, sin alumnos ocultos en el navegador.
+    // Se retira el mecanismo v7.2 de ocultación; solo cuenta Google Sheets.
+    function limpiarOcultosLegadosAsistenciaV812() {
+      const docente = String(profesorActual?.id || profesorActual?.usuario || profesorActual?.email || 'docente')
         .replace(/[^a-z0-9_-]/gi, '_');
+      try { localStorage.removeItem(`edugestion_asistencia_lista_v72__docente_${docente}`); } catch (_) {}
     }
 
-    function attendanceRosterStoreKeyV72() {
-      return `edugestion_asistencia_lista_v72__docente_${attendanceRosterTeacherKeyV72()}`;
+    function aplicarListaAsistenciaV72(lista) {
+      return Array.isArray(lista) ? [...lista] : [];
     }
 
-    function repararListaAsistenciaV73UnaVez() {
-      const marker = `edugestion_asistencia_lista_v73_reparada__docente_${attendanceRosterTeacherKeyV72()}`;
-      if (localStorage.getItem(marker) === 'SI') return;
-      try {
-        // V7.3 corrige listas que quedaron con alumnos ocultos tras probar V7.2.
-        localStorage.removeItem(attendanceRosterStoreKeyV72());
-        localStorage.setItem(marker, 'SI');
-      } catch (_) {}
-    }
-
-    function attendanceRosterSectionKeyV72(ano, seccion, turno) {
-      const a = String(ano ?? selectFiltroAno?.value ?? '').trim();
-      const s = String(seccion ?? selectFiltroSeccion?.value ?? '').trim().toUpperCase();
-      const t = String(turnoAsistencia(turno ?? selectFiltroTurno?.value ?? '') || '').trim();
-      const materia = String(profesorActual?.materia || '').trim().toLowerCase();
-      return [materia, a, s, t].join('|');
-    }
-
-    function readAttendanceRosterV72() {
-      try { return JSON.parse(localStorage.getItem(attendanceRosterStoreKeyV72()) || '{}') || {}; }
-      catch (_) { return {}; }
-    }
-
-    function writeAttendanceRosterV72(store) {
-      try { localStorage.setItem(attendanceRosterStoreKeyV72(), JSON.stringify(store || {})); } catch (_) {}
-    }
-
-    function hiddenStudentIdsV72(ano, seccion, turno) {
-      const store = readAttendanceRosterV72();
-      const row = store[attendanceRosterSectionKeyV72(ano, seccion, turno)] || {};
-      return new Set(Array.isArray(row.ocultos) ? row.ocultos.map(String) : []);
-    }
-
-    function aplicarListaAsistenciaV72(lista, ano, seccion, turno) {
-      const ocultos = hiddenStudentIdsV72(ano, seccion, turno);
-      return (Array.isArray(lista) ? lista : []).filter(a => !ocultos.has(String(a.id)));
-    }
-
-    function resumenVisibilidadListaV75(lista, ano, seccion, turno) {
+    function resumenVisibilidadListaV75(lista) {
       const todos = Array.isArray(lista) ? lista : [];
-      const ocultos = hiddenStudentIdsV72(ano, seccion, turno);
-      const visibles = todos.filter(a => !ocultos.has(String(a.id)));
       return {
         registrados: todos.length,
-        visibles: visibles.length,
-        ocultos: Math.max(0, todos.length - visibles.length),
-        alumnosVisibles: visibles
+        visibles: todos.length,
+        ocultos: 0,
+        alumnosVisibles: todos
       };
     }
 
     function actualizarEstadoListaV75() {
-      const resumen = resumenVisibilidadListaV75(alumnosSeccionBase);
+      const n = alumnosSeccionBase.length;
       const box = document.getElementById('attendance-roster-status');
-      const btnOcultos = document.getElementById('btn-ver-ocultos-seccion');
-      const btnRecargar = document.getElementById('btn-recargar-lista-seccion');
-
+      const btnBorrar = document.getElementById('btn-borrar-lista-seccion');
+      const btnActualizar = document.getElementById('btn-recargar-lista-seccion');
       if (box) {
-        box.innerHTML = resumen.ocultos
-          ? `<i class="fa-solid fa-eye-slash"></i><span><b>${resumen.visibles}</b> visibles · <b>${resumen.registrados}</b> registrados · <b>${resumen.ocultos}</b> ocultos</span>`
-          : `<i class="fa-solid fa-users"></i><span><b>${resumen.visibles}</b> alumnos visibles · Todos los registrados están en la lista.</span>`;
-        box.classList.toggle('has-hidden', resumen.ocultos > 0);
+        box.innerHTML = `<i class="fa-solid fa-users"></i><span><b>${n}</b> estudiante(s) registrado(s) en tu cuenta para esta sección. No hay listas ocultas.</span>`;
+        box.classList.remove('has-hidden');
       }
-
-      if (btnOcultos) {
-        btnOcultos.classList.toggle('hidden', resumen.ocultos === 0);
-        btnOcultos.innerHTML = `<i class="fa-solid fa-eye"></i> Ver ocultos${resumen.ocultos ? ` (${resumen.ocultos})` : ''}`;
+      if (btnBorrar) {
+        btnBorrar.disabled = n === 0 || eliminacionMasivaAsistenciaV812;
+        if (!eliminacionMasivaAsistenciaV812) btnBorrar.innerHTML = `<i class="fa-solid fa-trash-can"></i> Eliminar sección (${n})`;
       }
-
-      if (btnRecargar) {
-        btnRecargar.innerHTML = resumen.ocultos
-          ? `<i class="fa-solid fa-rotate"></i> Restaurar ocultos (${resumen.ocultos})`
-          : `<i class="fa-solid fa-rotate"></i> Recargar alumnos`;
-      }
+      if (btnActualizar) btnActualizar.innerHTML = '<i class="fa-solid fa-rotate"></i> Actualizar desde Registro';
     }
 
-    function verOcultosSeccionV75() {
-      const ocultos = hiddenStudentIdsV72();
-      const lista = (alumnosSeccionBase || []).filter(a => ocultos.has(String(a.id)));
-      if (!lista.length) {
-        mostrarToast('No hay alumnos ocultos en esta sección.', 'info', 'Lista completa');
-        return;
-      }
-      const nombres = lista.map((a, i) => `${i + 1}. ${String(a.nombre || 'Estudiante')}`).join('\n');
-      const restaurar = window.confirm(
-        `Hay ${lista.length} alumno(s) oculto(s) en esta sección:\n\n${nombres}\n\n¿Deseas restaurarlos todos a la lista de asistencia?`
-      );
-      if (restaurar) recargarListaSeccionV72();
+    function quitarAlumnoDeEstadoAsistenciaV812(id) {
+      alumnosSeccionBase = alumnosSeccionBase.filter(a => String(a.id) !== String(id));
+      alumnosSeccion = aplicarListaAsistenciaV72(alumnosSeccionBase);
+      delete asistenciaTemporal[id];
+      delete estadisticasAlumnos[id];
+      alumnosRegistroCache = [];
+      agendaResumenCache?.clear?.();
+      actualizarEstadoListaV75();
+      renderAsistencia();
+      actualizarStatsSeccion();
+      llenarSelectActaRapida();
+      try { window.dispatchEvent(new CustomEvent('edugestion:students-changed', {detail:{accion:'eliminado', idAlumno:id}})); } catch (_) {}
     }
 
-    function guardarOcultosAsistenciaV72(ids) {
-      const store = readAttendanceRosterV72();
-      const key = attendanceRosterSectionKeyV72();
-      store[key] = {
-        ocultos: [...new Set((ids || []).map(String))],
-        actualizadoEn: new Date().toISOString()
-      };
-      writeAttendanceRosterV72(store);
-    }
-
-    function quitarAlumnoListaAsistenciaV72(alumno) {
-      if (!alumno?.id) return;
+    async function quitarAlumnoListaAsistenciaV72(alumno) {
+      if (!alumno?.id || eliminacionMasivaAsistenciaV812) return;
       const nombre = String(alumno.nombre || 'este estudiante').trim();
       const confirmar = window.confirm(
-        `¿Quitar a "${nombre}" de la lista de asistencia de esta sección?\n\n` +
-        'La ficha del estudiante NO se eliminará del sistema. Podrás recuperarlo con el botón "Recargar alumnos".'
+        `¿ELIMINAR DEFINITIVAMENTE a "${nombre}" de tu cuenta?\n\n` +
+        'Se borrarán su ficha y sus registros vinculados de TU cuenta (asistencia, notas, evaluaciones y actas).\n' +
+        'Otros docentes conservarán sus registros.\n\n' +
+        'No quedará oculto: ya no estará registrado en tu lista. Esta acción NO se puede deshacer.'
       );
       if (!confirmar) return;
-
-      const ocultos = hiddenStudentIdsV72();
-      ocultos.add(String(alumno.id));
-      guardarOcultosAsistenciaV72([...ocultos]);
-
-      alumnosSeccion = aplicarListaAsistenciaV72(alumnosSeccionBase);
-      actualizarEstadoListaV75();
-      delete asistenciaTemporal[alumno.id];
-      delete estadisticasAlumnos[alumno.id];
-      agendaResumenCache?.clear?.();
-      renderAsistencia();
-      actualizarStatsSeccion();
-      llenarSelectActaRapida();
-      renderAgendaAsistencia({ forzar: true }).catch(()=>{});
-      mostrarToast(`${nombre} fue quitado de la lista de asistencia.`, 'success', 'Lista actualizada');
+      const id = String(alumno.id);
+      const boton = [...document.querySelectorAll('[data-remove-student]')].find(b => b.dataset.removeStudent === id);
+      if (boton) { boton.disabled = true; boton.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Eliminando...'; }
+      try {
+        const resultado = await apiRequest('eliminarAlumno', {id, confirmar:true});
+        quitarAlumnoDeEstadoAsistenciaV812(id);
+        await renderAgendaAsistencia({forzar:true}).catch(()=>{});
+        mostrarToast(resultado.message || `${nombre} fue eliminado de tu registro.`, 'success', 'Estudiante eliminado');
+      } catch (error) {
+        if (boton) { boton.disabled = false; boton.innerHTML = '<i class="fa-solid fa-trash-can"></i> Eliminar estudiante'; }
+        mostrarToast(error?.message || 'No fue posible eliminar la ficha. No se ocultó.', 'error', 'No se eliminó');
+      }
     }
 
-    function borrarListaSeccionV72() {
-      if (!alumnosSeccionBase.length) {
-        mostrarToast('No hay alumnos cargados en esta sección.', 'info', 'Lista vacía');
+    // Destrucción múltiple explícita: cada eliminación se valida en el servidor
+    // contra el idProfesor de la sesión. No elimina registros de otros docentes.
+    async function borrarListaSeccionV72() {
+      if (eliminacionMasivaAsistenciaV812) return;
+      const ano = selectFiltroAno?.value || '';
+      const seccion = selectFiltroSeccion?.value || '';
+      const turno = turnoAsistencia(selectFiltroTurno?.value || '');
+      const boton = document.getElementById('btn-borrar-lista-seccion');
+      if (!ano || !seccion || !turno) {
+        mostrarToast('Selecciona año, sección y turno antes de eliminar.', 'warning', 'Faltan filtros');
         return;
       }
-
-      const confirmar = window.confirm(
-        `¿Borrar toda la lista de asistencia de ${selectFiltroAno?.value || ''} ${selectFiltroSeccion?.value || ''}?\n\n` +
-        'Esto NO elimina las fichas de los estudiantes. La lista quedará vacía y podrás cargarla nuevamente con "Recargar alumnos".'
+      let lista;
+      try {
+        const datos = await apiRequest('obtenerAlumnos', {ano,seccion,turno});
+        lista = Array.isArray(datos.alumnos) ? datos.alumnos : [];
+      } catch (error) {
+        mostrarToast('No se pudo comprobar la lista actual: ' + (error.message || ''), 'error', 'Sin conexión');
+        return;
+      }
+      if (!lista.length) {
+        await cargarAlumnosDeSeccion();
+        mostrarToast('No hay estudiantes registrados para esta sección.', 'info', 'Lista vacía');
+        return;
+      }
+      const cantidad = lista.length;
+      const frase = `ELIMINAR ${cantidad}`;
+      const respuesta = window.prompt(
+        `ELIMINACIÓN DEFINITIVA — ${ano} / ${seccion} / ${turno}\n\n` +
+        `Vas a borrar ${cantidad} ficha(s) y todos los datos vinculados A TU CUENTA.\n` +
+        'No se afectarán las cuentas de otros profesores.\n' +
+        'No es una acción de ocultar ni se puede deshacer.\n\n' +
+        `Para continuar, escribe exactamente: ${frase}`, ''
       );
-      if (!confirmar) return;
+      if (respuesta !== frase) {
+        if (respuesta !== null) mostrarToast(`Cancelado. Debías escribir: ${frase}`, 'warning', 'Sin cambios');
+        return;
+      }
+      if (!window.confirm(`¿Confirmas eliminar DEFINITIVAMENTE las ${cantidad} fichas de ${ano} ${seccion} (${turno}) solo de tu cuenta?`)) return;
 
-      guardarOcultosAsistenciaV72(alumnosSeccionBase.map(a => String(a.id)));
-      alumnosSeccion = [];
-      actualizarEstadoListaV75();
-      asistenciaTemporal = {};
-      estadisticasAlumnos = {};
-      agendaResumenCache?.clear?.();
-      renderAsistencia();
-      actualizarStatsSeccion();
-      llenarSelectActaRapida();
-      renderAgendaAsistencia({ forzar: true }).catch(()=>{});
-      mostrarToast('La lista de la sección quedó vacía. Usa "Recargar alumnos" para restaurarla.', 'success', 'Sección reiniciada');
+      let eliminados = 0;
+      let fallo = null;
+      eliminacionMasivaAsistenciaV812 = true;
+      if (boton) boton.disabled = true;
+      try {
+        for (const alumno of lista) {
+          if (boton) boton.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Eliminando ${eliminados + 1}/${cantidad}`;
+          try {
+            await apiRequest('eliminarAlumno', {id:alumno.id, confirmar:true});
+            eliminados++;
+            quitarAlumnoDeEstadoAsistenciaV812(alumno.id);
+          } catch (error) {
+            fallo = error;
+            break; // No fingir una eliminación completa si hubo un fallo.
+          }
+        }
+      } finally {
+        try { await cargarAlumnosDeSeccion(); } catch (_) {}
+        await renderAgendaAsistencia({forzar:true}).catch(()=>{});
+        eliminacionMasivaAsistenciaV812 = false;
+        actualizarEstadoListaV75();
+      }
+      if (fallo) {
+        mostrarToast(`Se eliminaron ${eliminados} de ${cantidad}. Se detuvo al encontrar un error: ${fallo.message || 'sin detalle'}. Revisa la lista y vuelve a intentarlo si corresponde.`, 'error', 'Proceso incompleto');
+      } else {
+        mostrarToast(`Se eliminaron definitivamente ${eliminados} estudiante(s) de tu cuenta.`, 'success', 'Sección depurada');
+      }
     }
 
     async function recargarListaSeccionV72() {
-      const store = readAttendanceRosterV72();
-      delete store[attendanceRosterSectionKeyV72()];
-      writeAttendanceRosterV72(store);
-      mostrarToast('Recargando los alumnos registrados de esta sección...', 'info', 'Recargando');
+      limpiarOcultosLegadosAsistenciaV812();
+      mostrarToast('Consultando los estudiantes realmente registrados en tu cuenta...', 'info', 'Actualizando');
       agendaResumenCache?.clear?.();
       await cargarAlumnosDeSeccion();
-      await renderAgendaAsistencia({ forzar: true });
-      mostrarToast('La lista de alumnos fue cargada nuevamente desde Estudiantes.', 'success', 'Lista restaurada');
+      await renderAgendaAsistencia({forzar:true});
+      mostrarToast('Lista actualizada desde Registro de Estudiantes.', 'success', 'Datos actualizados');
     }
 
     async function cargarAlumnosDeSeccion() {
-      repararListaAsistenciaV73UnaVez();
+      limpiarOcultosLegadosAsistenciaV812();
       const a = selectFiltroAno.value;
       const s = selectFiltroSeccion.value;
       const t = turnoAsistencia(selectFiltroTurno.value);
@@ -1590,7 +1565,7 @@ const SESSION_KEY = 'edugestion_session_v2';
     function renderAsistencia() {
       listaAlumnosAsistencia.innerHTML = '';
       if (alumnosSeccion.length === 0) {
-        listaAlumnosAsistencia.innerHTML = '<div class="py-10 text-center text-gray-400"><i class="fa-solid fa-user-slash text-3xl mb-3 text-gray-300"></i><p class="text-sm font-semibold">No hay estudiantes visibles en esta sección.</p><p class="text-xs mt-2">Si quitaste alumnos por error, usa “Recargar alumnos”.</p></div>';
+        listaAlumnosAsistencia.innerHTML = '<div class="py-10 text-center text-gray-400"><i class="fa-solid fa-user-slash text-3xl mb-3 text-gray-300"></i><p class="text-sm font-semibold">No hay estudiantes registrados en esta sección.</p><p class="text-xs mt-2">Registra un estudiante desde Registro de Estudiantes y pulsa “Actualizar desde Registro”.</p></div>';
         contadorAsistencia.textContent = '0 Alumnos';
         statPresentes.textContent = '0';
         statAusentes.textContent = '0';
@@ -1621,12 +1596,9 @@ const SESSION_KEY = 'edugestion_session_v2';
         contadorDuplicados.set(clave, posicion + 1);
       });
 
-      const visibilidadLista = resumenVisibilidadListaV75(alumnosSeccionBase);
       contadorAsistencia.textContent = termino
-        ? `${visibles.length}/${alumnosSeccion.length} visibles`
-        : (visibilidadLista.ocultos
-          ? `${visibilidadLista.visibles}/${visibilidadLista.registrados} Alumnos`
-          : `${visibilidadLista.visibles} Alumnos`);
+        ? `${visibles.length}/${alumnosSeccion.length} coincidencias`
+        : `${alumnosSeccion.length} Alumnos`;
 
       if (!visibles.length) {
         listaAlumnosAsistencia.innerHTML = '<div class="py-10 text-center text-gray-400"><i class="fa-solid fa-magnifying-glass text-3xl mb-3 text-gray-300"></i><p class="text-sm font-semibold">No hay coincidencias en esta sección.</p></div>';
@@ -1666,7 +1638,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
         const d = document.createElement('div');
         d.className = `attendance-student-row attendance-student-row--advanced${esCopiaDuplicada ? ' is-duplicate-copy' : ''}`;
-        d.innerHTML = `<div class="attendance-student-main"><div class="attendance-list-number" title="Número de lista">${numeroLista}</div><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">N° ${numeroLista}</span><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span>${esCopiaDuplicada ? '<span class="attendance-duplicate-badge"><i class="fa-solid fa-copy"></i> Duplicado</span>' : ''}</div><div class="attendance-row-tools"><button type="button" class="attendance-remove-student" data-remove-student="${escaparHTML(String(al.id))}" title="Quitar de esta lista de asistencia"><i class="fa-solid fa-user-minus"></i><span>Quitar de lista</span></button>${botonEliminarDuplicado}</div></div></div><div class="attendance-state-grid">${botones}</div>`;
+        d.innerHTML = `<div class="attendance-student-main"><div class="attendance-list-number" title="Número de lista">${numeroLista}</div><div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm flex-shrink-0">${nombre.charAt(0).toUpperCase()}</div><div class="min-w-0"><p class="text-sm font-bold text-gray-800 truncate">${nombre}</p><div class="flex flex-wrap items-center gap-2 mt-1"><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">N° ${numeroLista}</span><span class="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md font-bold">C.I: ${cedula}</span><span class="attendance-current-state attendance-current-state--${estadoInicial.toLowerCase()}">${escaparHTML(estadoInicial)}</span>${esCopiaDuplicada ? '<span class="attendance-duplicate-badge"><i class="fa-solid fa-copy"></i> Duplicado</span>' : ''}</div><div class="attendance-row-tools"><button type="button" class="attendance-remove-student" data-remove-student="${escaparHTML(String(al.id))}" title="Eliminar definitivamente esta ficha de tu cuenta"><i class="fa-solid fa-trash-can"></i><span>Eliminar estudiante</span></button>${botonEliminarDuplicado}</div></div></div><div class="attendance-state-grid">${botones}</div>`;
         d.querySelectorAll('[data-attendance-state]').forEach(boton => {
           boton.addEventListener('click', () => setA(al.id, boton.dataset.attendanceState, idDom));
         });
