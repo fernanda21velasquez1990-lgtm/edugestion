@@ -5193,13 +5193,63 @@ function probarAislamientoMultiusuario() {
  * ========================================================= */
 
 function asegurarGestionEvaluaciones_() {
-  asegurarHoja_(getDb_(), EG.SHEETS.EVALUACION_SEGUIMIENTO, EG.HEADERS.EvaluacionSeguimiento);
-  asegurarHoja_(getDb_(), EG.SHEETS.SEGUIMIENTO_ACADEMICO, EG.HEADERS.SeguimientoAcademico);
-  asegurarHoja_(getDb_(), EG.SHEETS.CALIFICACIONES, EG.HEADERS.Calificaciones);
-  asegurarHoja_(getDb_(), EG.SHEETS.RECUPERACIONES_EVALUACION, EG.HEADERS.RecuperacionesEvaluacion);
-  asegurarHoja_(getDb_(), EG.SHEETS.AUDITORIA_CALIFICACIONES, EG.HEADERS.AuditoriaCalificaciones);
-  asegurarHoja_(getDb_(), EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, EG.HEADERS.EstadoActividadesEvaluacion);
-  asegurarHoja_(getDb_(), EG.SHEETS.CIERRES_LAPSO_ACADEMICO, EG.HEADERS.CierresLapsoAcademico);
+  var cache = CacheService.getScriptCache();
+  var clave = 'eg_eval_sheets_ready_v8122';
+  if (cache.get(clave) === '1') return;
+
+  var ss = getDb_();
+  var requeridas = [
+    [EG.SHEETS.EVALUACION_SEGUIMIENTO, EG.HEADERS.EvaluacionSeguimiento],
+    [EG.SHEETS.SEGUIMIENTO_ACADEMICO, EG.HEADERS.SeguimientoAcademico],
+    [EG.SHEETS.CALIFICACIONES, EG.HEADERS.Calificaciones],
+    [EG.SHEETS.RECUPERACIONES_EVALUACION, EG.HEADERS.RecuperacionesEvaluacion],
+    [EG.SHEETS.AUDITORIA_CALIFICACIONES, EG.HEADERS.AuditoriaCalificaciones],
+    [EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, EG.HEADERS.EstadoActividadesEvaluacion],
+    [EG.SHEETS.CIERRES_LAPSO_ACADEMICO, EG.HEADERS.CierresLapsoAcademico]
+  ];
+
+  requeridas.forEach(function(item) {
+    var nombre = item[0];
+    var headers = item[1];
+    var hoja = ss.getSheetByName(nombre);
+
+    if (!hoja) {
+      hoja = ss.insertSheet(nombre);
+      hoja.getRange(1, 1, 1, headers.length).setValues([headers]);
+      hoja.setFrozenRows(1);
+      return;
+    }
+
+    var lastCol = hoja.getLastColumn();
+    if (hoja.getLastRow() === 0 || lastCol === 0) {
+      if (hoja.getMaxColumns() < headers.length) {
+        hoja.insertColumnsAfter(hoja.getMaxColumns(), headers.length - hoja.getMaxColumns());
+      }
+      hoja.getRange(1, 1, 1, headers.length).setValues([headers]);
+      hoja.setFrozenRows(1);
+      return;
+    }
+
+    var actuales = hoja.getRange(1, 1, 1, lastCol).getValues()[0].map(function(v) {
+      return String(v || '').trim();
+    });
+
+    var faltantes = headers.filter(function(h) {
+      return actuales.indexOf(h) === -1;
+    });
+
+    if (faltantes.length) {
+      var necesarias = actuales.length + faltantes.length;
+      if (hoja.getMaxColumns() < necesarias) {
+        hoja.insertColumnsAfter(hoja.getMaxColumns(), necesarias - hoja.getMaxColumns());
+      }
+      hoja.getRange(1, actuales.length + 1, 1, faltantes.length).setValues([faltantes]);
+    }
+
+    hoja.setFrozenRows(1);
+  });
+
+  cache.put(clave, '1', 21600);
 }
 
 function rangoLapsoEvaluacion_(lapso) {
@@ -12148,13 +12198,63 @@ function probarAislamientoMultiusuario() {
  * ========================================================= */
 
 function asegurarGestionEvaluaciones_() {
-  asegurarHoja_(getDb_(), EG.SHEETS.EVALUACION_SEGUIMIENTO, EG.HEADERS.EvaluacionSeguimiento);
-  asegurarHoja_(getDb_(), EG.SHEETS.SEGUIMIENTO_ACADEMICO, EG.HEADERS.SeguimientoAcademico);
-  asegurarHoja_(getDb_(), EG.SHEETS.CALIFICACIONES, EG.HEADERS.Calificaciones);
-  asegurarHoja_(getDb_(), EG.SHEETS.RECUPERACIONES_EVALUACION, EG.HEADERS.RecuperacionesEvaluacion);
-  asegurarHoja_(getDb_(), EG.SHEETS.AUDITORIA_CALIFICACIONES, EG.HEADERS.AuditoriaCalificaciones);
-  asegurarHoja_(getDb_(), EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, EG.HEADERS.EstadoActividadesEvaluacion);
-  asegurarHoja_(getDb_(), EG.SHEETS.CIERRES_LAPSO_ACADEMICO, EG.HEADERS.CierresLapsoAcademico);
+  var cache = CacheService.getScriptCache();
+  var clave = 'eg_eval_sheets_ready_v8122';
+  if (cache.get(clave) === '1') return;
+
+  var ss = getDb_();
+  var requeridas = [
+    [EG.SHEETS.EVALUACION_SEGUIMIENTO, EG.HEADERS.EvaluacionSeguimiento],
+    [EG.SHEETS.SEGUIMIENTO_ACADEMICO, EG.HEADERS.SeguimientoAcademico],
+    [EG.SHEETS.CALIFICACIONES, EG.HEADERS.Calificaciones],
+    [EG.SHEETS.RECUPERACIONES_EVALUACION, EG.HEADERS.RecuperacionesEvaluacion],
+    [EG.SHEETS.AUDITORIA_CALIFICACIONES, EG.HEADERS.AuditoriaCalificaciones],
+    [EG.SHEETS.ESTADO_ACTIVIDADES_EVALUACION, EG.HEADERS.EstadoActividadesEvaluacion],
+    [EG.SHEETS.CIERRES_LAPSO_ACADEMICO, EG.HEADERS.CierresLapsoAcademico]
+  ];
+
+  requeridas.forEach(function(item) {
+    var nombre = item[0];
+    var headers = item[1];
+    var hoja = ss.getSheetByName(nombre);
+
+    if (!hoja) {
+      hoja = ss.insertSheet(nombre);
+      hoja.getRange(1, 1, 1, headers.length).setValues([headers]);
+      hoja.setFrozenRows(1);
+      return;
+    }
+
+    var lastCol = hoja.getLastColumn();
+    if (hoja.getLastRow() === 0 || lastCol === 0) {
+      if (hoja.getMaxColumns() < headers.length) {
+        hoja.insertColumnsAfter(hoja.getMaxColumns(), headers.length - hoja.getMaxColumns());
+      }
+      hoja.getRange(1, 1, 1, headers.length).setValues([headers]);
+      hoja.setFrozenRows(1);
+      return;
+    }
+
+    var actuales = hoja.getRange(1, 1, 1, lastCol).getValues()[0].map(function(v) {
+      return String(v || '').trim();
+    });
+
+    var faltantes = headers.filter(function(h) {
+      return actuales.indexOf(h) === -1;
+    });
+
+    if (faltantes.length) {
+      var necesarias = actuales.length + faltantes.length;
+      if (hoja.getMaxColumns() < necesarias) {
+        hoja.insertColumnsAfter(hoja.getMaxColumns(), necesarias - hoja.getMaxColumns());
+      }
+      hoja.getRange(1, actuales.length + 1, 1, faltantes.length).setValues([faltantes]);
+    }
+
+    hoja.setFrozenRows(1);
+  });
+
+  cache.put(clave, '1', 21600);
 }
 
 function rangoLapsoEvaluacion_(lapso) {

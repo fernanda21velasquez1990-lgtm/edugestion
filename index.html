@@ -17,7 +17,7 @@
   <link href="https://fonts.googleapis.com" rel="preconnect">
   <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href="style.css?v=20260924-55" rel="stylesheet">
+  <link href="style.css?v=20261102-811" rel="stylesheet">
  </head>
  <body class="min-h-screen">
   <!-- PANTALLA 1: LOGIN -->
@@ -1600,8 +1600,8 @@
          <div class="student-picker-v861__head">
           <div>
            <span>Editar o completar una ficha existente</span>
-           <strong>Busca y selecciona un estudiante</strong>
-           <p>Ya no se mostrará toda la lista. Filtra la sección, elige <b>un solo estudiante</b> y pulsa <b>Cargar ficha</b>.</p>
+           <strong>Directorio de estudiantes</strong>
+           <p>Busca por nombre o cédula. Cada ficha tiene sus opciones <b>Editar</b> y <b>Eliminar</b>. Los cambios afectan solamente tu cuenta docente.</p>
           </div>
           <button type="button" id="reg-v86-refresh" class="student-picker-v861__refresh"><i class="fa-solid fa-rotate"></i> Actualizar</button>
          </div>
@@ -1618,12 +1618,13 @@
            <span>Estudiante</span>
            <select id="reg-v861-student"><option value="">-- Selecciona un estudiante --</option></select>
           </label>
-          <button type="button" id="reg-v861-load" class="student-btn student-btn--primary" disabled><i class="fa-solid fa-pen-to-square"></i><span>Cargar ficha</span></button>
+          <button type="button" id="reg-v861-load" class="student-btn student-btn--primary" disabled><i class="fa-solid fa-pen-to-square"></i><span>Editar ficha</span></button>
           <button type="button" id="reg-v861-delete" class="student-btn student-btn--danger" disabled title="Eliminar definitivamente la ficha seleccionada"><i class="fa-solid fa-trash-can"></i><span>Eliminar ficha</span></button>
           <button type="button" id="reg-v861-new" class="student-btn student-btn--ghost"><i class="fa-solid fa-file-circle-plus"></i><span>Nueva ficha</span></button>
          </div>
 
-         <div class="student-picker-v861__summary"><strong id="reg-v86-count">0 estudiantes disponibles</strong><span>Solo se mostrará el estudiante que selecciones.</span></div>
+         <div class="student-picker-v861__summary"><strong id="reg-v86-count">0 estudiantes disponibles</strong><span>Las fichas de otros docentes no se modifican.</span></div>
+         <div id="reg-v811-results" class="student-directory-v811" aria-live="polite"><p class="student-directory-v811__empty">Cargando estudiantes...</p></div>
          <div id="reg-v861-selected" class="student-picker-v861__selected hidden"></div>
          <div id="reg-v86-list" class="student-picker-v861__compat hidden"></div>
         </section>
@@ -2253,7 +2254,7 @@
   </div>
   <script src="config.js">
   </script>
-  <script src="app.js?v=20260924-55">
+  <script src="app.js?v=20261102-811">
   </script>
  
   <div aria-hidden="true" class="user-guide-modal hidden" id="user-guide-modal">

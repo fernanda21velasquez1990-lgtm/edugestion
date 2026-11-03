@@ -3033,6 +3033,7 @@ const SESSION_KEY = 'edugestion_session_v2';
 
     const formRegistroManual = document.getElementById('form-registro-manual');
     let alumnosRegistroCache = [];
+    let idEliminacionRegistroV811 = '';
 
     function valorSiNoRegistro(valor) {
       const v = String(valor || '').trim().toLowerCase();
@@ -3074,61 +3075,81 @@ const SESSION_KEY = 'edugestion_session_v2';
       return Math.min(100, Math.round(((obligatorios + resto) / valores.length) * 100));
     }
 
+    function normalizarBusquedaRegistroV811(texto) {
+      return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    function claveIdentidadRegistroV811(a) {
+      const cedula = String(a.cedula || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^[VE](?=\d)/, '');
+      const nombre = normalizarBusquedaRegistroV811(a.nombre).replace(/[^a-z0-9 ]/g, '');
+      const grupo = [String(a.ano || '').toLowerCase(), String(a.seccion || '').toUpperCase(), normalizarTurnoRegistroV86(a.turno)].join('|');
+      return { cedula, nombreGrupo: nombre + '|' + grupo };
+    }
+
     function renderListaEstudiantesRegistroV86() {
       const selector = document.getElementById('reg-v861-student');
-      const preview = document.getElementById('reg-v861-selected');
       if (!selector) return;
-
-      const q = String(document.getElementById('reg-v86-search')?.value || '').trim().toLowerCase();
+      const q = normalizarBusquedaRegistroV811(document.getElementById('reg-v86-search')?.value);
       const ano = document.getElementById('reg-v86-year')?.value || '';
       const seccion = document.getElementById('reg-v86-section')?.value || '';
       const turno = document.getElementById('reg-v86-shift')?.value || '';
       const actual = String(selector.value || '');
-
       const lista = alumnosRegistroCache.filter(a => {
         if (ano && String(a.ano || '') !== ano) return false;
         if (seccion && String(a.seccion || '').toUpperCase() !== seccion.toUpperCase()) return false;
         if (turno && normalizarTurnoRegistroV86(a.turno) !== turno) return false;
         if (!q) return true;
-        return `${a.nombre || ''} ${a.cedula || ''} ${a.representante || ''}`.toLowerCase().includes(q);
+        return normalizarBusquedaRegistroV811(`${a.nombre || ''} ${a.cedula || ''} ${a.representante || ''}`).includes(q);
       });
-
-      const claveDup = a => {
-        const ci = String(a?.cedula || '').replace(/[^0-9a-z]/gi,'').toLowerCase();
-        if (ci) return 'ci:' + ci;
-        const nom = String(a?.nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
-        return ['nom',nom,String(a?.ano||''),String(a?.seccion||'').toUpperCase(),normalizarTurnoRegistroV86(a?.turno||'')].join('|');
+      const cis = {}, nombres = {};
+      alumnosRegistroCache.forEach(a => {
+        const k = claveIdentidadRegistroV811(a);
+        if (k.cedula) cis[k.cedula] = (cis[k.cedula] || 0) + 1;
+        nombres[k.nombreGrupo] = (nombres[k.nombreGrupo] || 0) + 1;
+      });
+      const esPosibleDuplicado = a => {
+        const k = claveIdentidadRegistroV811(a);
+        return (k.cedula && cis[k.cedula] > 1) || nombres[k.nombreGrupo] > 1;
       };
-      const frecuenciaDup = {};
-      lista.forEach(a => {
-        const k = claveDup(a);
-        frecuenciaDup[k] = (frecuenciaDup[k] || 0) + 1;
-      });
-      const duplicadosDetectados = Object.values(frecuenciaDup).reduce((n,c)=>n+(c>1?c-1:0),0);
-
       const count = document.getElementById('reg-v86-count');
-      if (count) {
-        count.textContent = `${lista.length} ${lista.length === 1 ? 'estudiante disponible' : 'estudiantes disponibles'}${duplicadosDetectados ? ` · ${duplicadosDetectados} duplicado(s) detectado(s)` : ''}`;
-      }
+      const duplicados = lista.filter(esPosibleDuplicado).length;
+      if (count) count.textContent = `${lista.length} ${lista.length === 1 ? 'estudiante' : 'estudiantes'}${duplicados ? ` · ${duplicados} fichas para revisar` : ''}`;
 
       selector.innerHTML = '<option value="">-- Selecciona un estudiante --</option>';
-      const vistosDup = {};
       lista.forEach(a => {
         const op = document.createElement('option');
         op.value = String(a.id || '');
-        const curso = `${a.ano || ''} · Sección ${a.seccion || ''} · ${normalizarTurnoRegistroV86(a.turno)==='Manana'?'Mañana':'Tarde'}`;
-        const ci = String(a.cedula || '').trim();
-        const k = claveDup(a);
-        vistosDup[k] = (vistosDup[k] || 0) + 1;
-        const esDuplicado = frecuenciaDup[k] > 1 && vistosDup[k] > 1;
-        op.textContent = `${esDuplicado ? '⚠ DUPLICADO · ' : ''}${a.nombre || 'Estudiante'} — ${curso}${ci ? ` — C.I. ${ci}` : ''}`;
-        if (esDuplicado) op.dataset.duplicado = 'true';
+        op.textContent = `${a.nombre || 'Estudiante'} · ${a.ano || ''} ${a.seccion || ''}${a.cedula ? ` · C.I. ${a.cedula}` : ''}${esPosibleDuplicado(a) ? ' · REVISAR' : ''}`;
         selector.appendChild(op);
       });
-
-      if (actual && lista.some(a => String(a.id) === actual)) selector.value = actual;
-      else selector.value = '';
+      selector.value = actual && lista.some(a => String(a.id) === actual) ? actual : '';
       actualizarSeleccionRegistroV861();
+
+      const host = document.getElementById('reg-v811-results');
+      if (!host) return;
+      const totalVisibles = 80;
+      const grupo = lista.slice(0, totalVisibles);
+      const editandoId = String(document.getElementById('reg-id')?.value || '');
+      if (!grupo.length) {
+        host.innerHTML = `<div class="student-directory-v811__empty"><i class="fa-solid fa-magnifying-glass"></i><strong>Sin estudiantes en este filtro</strong><span>Prueba otra búsqueda o utiliza Nueva ficha para registrar uno.</span></div>`;
+        return;
+      }
+      host.innerHTML = grupo.map(a => {
+        const id = escaparHTML(String(a.id || ''));
+        const nombre = escaparHTML(String(a.nombre || 'Sin nombre'));
+        const curso = escaparHTML(`${a.ano || ''} · Sección ${a.seccion || ''} · ${normalizarTurnoRegistroV86(a.turno) === 'Manana' ? 'Mañana' : 'Tarde'}`);
+        const ci = a.cedula ? `C.I. ${escaparHTML(String(a.cedula))}` : 'Cédula pendiente';
+        const seleccionado = String(a.id || '') === editandoId;
+        return `<article class="student-directory-v811__item${seleccionado ? ' is-editing' : ''}">
+          <div class="student-directory-v811__initial" aria-hidden="true">${escaparHTML(String(a.nombre || 'E').slice(0, 1).toUpperCase())}</div>
+          <div class="student-directory-v811__info"><strong>${nombre}</strong><span>${curso}</span><small>${ci}${a.numeroLista ? ` · N.º ${Number(a.numeroLista)}` : ''}</small></div>
+          ${esPosibleDuplicado(a) ? '<span class="student-directory-v811__warning" title="Posible duplicado, revisa la ficha">Revisar duplicado</span>' : ''}
+          <div class="student-directory-v811__actions">
+            <button type="button" data-eg-action="edit" data-eg-id="${id}" aria-label="Editar ficha de ${nombre}"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+            <button type="button" data-eg-action="delete" data-eg-id="${id}" aria-label="Eliminar ficha de ${nombre}" class="student-directory-v811__danger"><i class="fa-solid fa-trash-can"></i> Eliminar</button>
+          </div></article>`;
+      }).join('') + (lista.length > totalVisibles ? `<p class="student-directory-v811__more">Mostrando ${totalVisibles} de ${lista.length}. Utiliza los filtros para encontrar más estudiantes.</p>` : '');
     }
 
     function actualizarSeleccionRegistroV861() {
@@ -3179,7 +3200,7 @@ const SESSION_KEY = 'edugestion_session_v2';
         return;
       }
       cargarFichaRegistro(alumno);
-      mostrarToast('Ficha cargada. Ya puedes completar o corregir los datos.', 'success', 'Editando estudiante');
+      mostrarToast('Editando la ficha existente. Guardar actualizará este mismo registro.', 'success', 'Editar estudiante');
       document.querySelector('.student-form-card--academic')?.scrollIntoView({behavior:'smooth', block:'start'});
     }
 
@@ -3246,6 +3267,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       actualizarSeleccionRegistroV861();
       actualizarRegistroInteractivo();
       actualizarModoRegistro();
+      renderListaEstudiantesRegistroV86();
       document.getElementById('reg-nombre')?.focus();
     }
 
@@ -3259,6 +3281,7 @@ const SESSION_KEY = 'edugestion_session_v2';
       actualizarSeleccionRegistroV861();
       actualizarRegistroInteractivo();
       actualizarModoRegistro();
+      renderListaEstudiantesRegistroV86();
       document.getElementById('reg-nombre')?.focus();
     }
 
@@ -3313,7 +3336,15 @@ const SESSION_KEY = 'edugestion_session_v2';
           establecerValorRegistro('reg-id', data.alumno.id);
           const select = document.getElementById('reg-estudiante-existente');
           if (select) select.value = data.alumno.id;
+          const selector = document.getElementById('reg-v861-student');
+          if (selector) selector.value = data.alumno.id;
         }
+        // Nunca dejar en modo edición datos recién tecleados que no se guardaron.
+        if (data.duplicadoEvitado && guardado) cargarFichaRegistro(guardado);
+        if (data.regenerarAccesoRepresentante) {
+          mostrarToast('La cédula cambió: genera un nuevo código para el representante desde el módulo familiar.', 'warning', 'Acceso familiar');
+        }
+        renderListaEstudiantesRegistroV86();
 
         const numero = Number(guardado?.numeroLista || data.alumno?.numeroLista || 0);
         if (data.duplicadoEvitado) {
@@ -3435,8 +3466,9 @@ const SESSION_KEY = 'edugestion_session_v2';
       if (alumno) cargarFichaRegistro(alumno);
     });
 
-    document.getElementById('btn-eliminar-estudiante')?.addEventListener('click', async () => {
-      const id = document.getElementById('reg-id')?.value || document.getElementById('reg-estudiante-existente')?.value || '';
+    async function ejecutarEliminacionEstudianteRegistroV811() {
+      const id = idEliminacionRegistroV811 || document.getElementById('reg-id')?.value || document.getElementById('reg-estudiante-existente')?.value || '';
+      idEliminacionRegistroV811 = '';
       if (!id) {
         mostrarToast('Selecciona primero un estudiante registrado.', 'warning', 'Sin estudiante');
         return;
@@ -3452,7 +3484,8 @@ const SESSION_KEY = 'edugestion_session_v2';
       const curso = [alumno.ano, alumno.seccion ? `Sección ${alumno.seccion}` : '', alumno.turno || ''].filter(Boolean).join(' · ');
       const confirmado = window.confirm(
         `¿Eliminar definitivamente a "${nombre}"${curso ? ` (${curso})` : ''}?\n\n` +
-        'También se eliminarán sus registros académicos asociados: asistencia, evaluaciones, notas, recuperaciones, seguimientos, compromisos y actas de este docente.\n\n' +
+        'También se eliminarán los registros académicos y familiares vinculados a TU cuenta: asistencia, notas, evaluaciones, actas, auditorías y solicitudes del representante.\n' +
+        'No afectará a otros docentes.\n\n' +
         'Esta acción no se puede deshacer.'
       );
       if (!confirmado) return;
@@ -3483,10 +3516,31 @@ const SESSION_KEY = 'edugestion_session_v2';
           actualizarModoRegistro();
         }
       }
-    });
+    }
+
+    document.getElementById('btn-eliminar-estudiante')?.addEventListener('click', ejecutarEliminacionEstudianteRegistroV811);
 
     document.getElementById('btn-nueva-ficha')?.addEventListener('click', nuevaFichaRegistro);
-    document.getElementById('reg-v861-student')?.addEventListener('change', actualizarSeleccionRegistroV861);
+    document.getElementById('reg-v811-results')?.addEventListener('click', event => {
+      const boton = event.target.closest('button[data-eg-action][data-eg-id]');
+      if (!boton) return;
+      const id = String(boton.dataset.egId || '');
+      const alumno = alumnosRegistroCache.find(a => String(a.id) === id);
+      if (!alumno) return mostrarToast('Actualiza la lista y vuelve a intentarlo.', 'warning', 'Ficha no disponible');
+      if (boton.dataset.egAction === 'edit') {
+        cargarFichaRegistro(alumno);
+        document.querySelector('.student-form-card--academic')?.scrollIntoView({behavior:'smooth', block:'start'});
+      } else if (boton.dataset.egAction === 'delete') {
+        idEliminacionRegistroV811 = id;
+        ejecutarEliminacionEstudianteRegistroV811();
+      }
+    });
+    document.getElementById('reg-v861-student')?.addEventListener('change', () => {
+      actualizarSeleccionRegistroV861();
+      const id = String(document.getElementById('reg-v861-student')?.value || '');
+      const alumno = alumnosRegistroCache.find(a => String(a.id) === id);
+      if (alumno) cargarFichaRegistro(alumno);
+    });
     document.getElementById('reg-v861-load')?.addEventListener('click', cargarSeleccionRegistroV861);
     document.getElementById('reg-v861-delete')?.addEventListener('click', () => {
       const id = String(document.getElementById('reg-v861-student')?.value || '');
@@ -3494,11 +3548,8 @@ const SESSION_KEY = 'edugestion_session_v2';
         mostrarToast('Selecciona primero el alumno que deseas eliminar.', 'warning', 'Sin estudiante');
         return;
       }
-      const legacy = document.getElementById('reg-estudiante-existente');
-      if (legacy) legacy.value = id;
-      const hiddenId = document.getElementById('reg-id');
-      if (hiddenId) hiddenId.value = id;
-      document.getElementById('btn-eliminar-estudiante')?.click();
+      idEliminacionRegistroV811 = id;
+      ejecutarEliminacionEstudianteRegistroV811();
     });
     document.getElementById('reg-v861-new')?.addEventListener('click', () => {
       const sel = document.getElementById('reg-v861-student');

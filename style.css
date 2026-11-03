@@ -10478,3 +10478,23 @@ body[data-edugestion-theme="dark"] .gemini-card,body[data-edugestion-theme="dark
   opacity:.45;
   cursor:not-allowed;
 }
+
+
+/* EduGestión v8.11 · Directorio accesible de estudiantes por docente */
+.student-directory-v811{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px;padding:10px 20px 18px;max-height:470px;overflow-y:auto;overscroll-behavior:contain;border-top:1px solid #e6edf4}
+.student-directory-v811__item{min-width:0;display:grid;grid-template-columns:46px minmax(0,1fr);gap:9px 12px;padding:13px;background:#fff;border:1px solid #d7e4ef;border-radius:14px;box-shadow:0 2px 8px rgba(28,70,112,.04)}
+.student-directory-v811__item.is-editing{border:2px solid #1978c7;background:#f2f9ff}
+.student-directory-v811__initial{display:grid;place-items:center;background:#dff0ff;color:#18578b;font-size:21px;font-weight:900;width:46px;height:46px;border-radius:13px}
+.student-directory-v811__info{min-width:0;display:flex;flex-direction:column;gap:3px}
+.student-directory-v811__info strong{font-weight:900;color:#183e62;font-size:15px;overflow-wrap:anywhere}
+.student-directory-v811__info span{font-size:12px;color:#56748e}.student-directory-v811__info small{font-size:11px;color:#617c92}
+.student-directory-v811__actions{grid-column:1/-1;display:flex;gap:9px;justify-content:flex-end;margin-top:4px}
+.student-directory-v811__actions button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:104px;border:1px solid #a9cbe6;border-radius:10px;padding:10px 13px;background:#e9f4ff;color:#175a8d;font-size:13px;font-weight:850;cursor:pointer}
+.student-directory-v811__actions button:hover{background:#d8ebfc}
+.student-directory-v811__actions button.student-directory-v811__danger{border-color:#f0c5c8;background:#fff5f5;color:#a51b2e}
+.student-directory-v811__actions button.student-directory-v811__danger:hover{background:#ffe3e5}
+.student-directory-v811__actions button:focus-visible{outline:3px solid #157ac5;outline-offset:2px}
+.student-directory-v811__warning{grid-column:1/-1;width:max-content;max-width:100%;font-size:11px;font-weight:900;color:#97570a;background:#fff3d9;border-radius:8px;padding:3px 9px}
+.student-directory-v811__empty{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:6px;padding:26px;text-align:center;color:#657f95}.student-directory-v811__empty strong{font-size:15px;color:#234e74}.student-directory-v811__empty i{font-size:23px}
+.student-directory-v811__more{grid-column:1/-1;text-align:center;color:#6d8295;font-size:12px;font-weight:750}
+@media(max-width:650px){.student-directory-v811{grid-template-columns:1fr;padding:10px 14px 15px;max-height:520px}}
